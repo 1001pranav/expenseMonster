@@ -1,0 +1,10 @@
+.loginForm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.labelInput {
+    display: flex;
+    justify-content: space-evenly;
+    width: 50%;
+}
