@@ -3,7 +3,11 @@ import { useRouter } from "next/router";
 
 export function VerifyLogin(isLoggedIn:boolean = false): boolean | string {
     try {
-        const accessToken: string | null = localStorage.getItem("access_token");
+        let accessToken: string | null = null;
+        if (typeof window !== "undefined") {
+            console.log(typeof window);
+            accessToken = localStorage.getItem('access_token');
+        }
         // Redirecting to login path as accessToken is not found.
         if (!isLoggedIn || !accessToken || accessToken.length === 0) {
             return false;

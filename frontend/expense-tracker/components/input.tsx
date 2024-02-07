@@ -2,16 +2,9 @@ import { INPUTS, INPUT_TYPE } from "@/constant/constant";
 import { INPUT_COMPONENT, LABLLED_INPUT, } from "@/constant/interfaces";
 
 export default function Inputs(inputProps : INPUT_COMPONENT) {
-    if (!INPUTS[inputProps.inputType]) {
-        // ASSIGNING DEFAULT VALUE IF THE INPUT TYPE IS NOT DEFINED.
-        inputProps.inputType = INPUT_TYPE.TEXT
-    }
 
-    if (inputProps.placeholders) {
-        inputProps.placeholders = ""
-    }
 
-    const required = inputProps?.required ? inputProps.required : false;
+    const required = inputProps?.required ? true : false;
     return (
         <input 
             className={inputProps.className} 
