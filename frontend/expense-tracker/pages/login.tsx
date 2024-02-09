@@ -1,23 +1,39 @@
 import Inputs, {InputLable} from "@/components/input"
-import { INPUT_TYPE } from "@/constant/constant"
-import { LOGIN } from "@/constant/interfaces"
+import {INPUT_TYPE} from "@/constant/constant"
+import {LOGIN} from "@/constant/interfaces"
 
-import { useState } from "react"
+import {useState} from "react"
 
 export default function Login() {
     try {
-        const [ userDetails, setUserDetails ] = useState<LOGIN>({
+
+        const [userDetails, setUserDetails] = useState<LOGIN>({
             userName: "",
             password: ""
         });
+
+        // Defining a function named submitingForm that handles form submission
         const submitingForm = (event: any) => {
+            // Preventing the default form submission behavior
             event.preventDefault();
             console.log(userDetails);
         }
-        
+
         return (
-            <form className="max-w-sm mx-auto bg-white shadow-md rounded px-6 py-6" onSubmit={submitingForm}>
-                <h3 className="text-xl font-semibold mb-4 text-center">Login form</h3>
+            <form 
+                // Setting the maximum width of the form to be 576px and centering it
+                className="max-w-sm mx-auto bg-white shadow-md rounded px-6 py-6"
+                // Attaching the submitingForm function as the onSubmit event handler for the form
+                onSubmit={submitingForm}
+            >
+                <h3 
+                    // Setting the text of the h3 element to be "Login form"
+                    className="text-xl font-semibold mb-4 text-center"
+                >
+                    Login form
+                </h3>
+
+                {/* Rendering an InputLable component for the username input field */}
                 <InputLable 
                     lableName="Username" 
                     inputType={INPUT_TYPE.TEXT} 
@@ -27,6 +43,8 @@ export default function Login() {
                     lableClassName="block text-sm font-medium leading-6 text-gray-900"
                     value={userDetails.userName}
                 />
+
+                {/* Rendering an InputLable component for the password input field */}
                 <InputLable 
                     lableName="Password" 
                     inputType={INPUT_TYPE.PASSWORD} 
@@ -36,6 +54,8 @@ export default function Login() {
                     lableClassName="block text-sm font-medium leading-6 text-gray-900"
                     value={userDetails.password}
                 />
+
+                {/* Rendering an Inputs component for the submit button */}
                 <Inputs 
                     inputType={INPUT_TYPE.SUBMIT} 
                     className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
@@ -44,6 +64,5 @@ export default function Login() {
         )
     } catch (error) {
         console.log("Error: Login went wrong", error);
-        throw new Error();
     }
 }

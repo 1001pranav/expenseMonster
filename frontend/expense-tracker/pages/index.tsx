@@ -1,10 +1,12 @@
-export default function Home() {
-  return (
+import Dashboard from "@/components/dashboard";
 
-      <main className={""}>
-          <div className={""}>
-              main class
-          </div>
-      </main>
-  );
+export default function Home() {
+    return (
+
+        <main className={""}>
+            <div className={""}>
+                <Dashboard />
+            </div>
+        </main>
+    );
 }

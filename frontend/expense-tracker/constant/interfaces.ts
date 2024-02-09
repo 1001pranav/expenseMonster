@@ -33,8 +33,9 @@ export interface NAV_COMPONENT {
 export interface NAV_ITEMS {
     name: string;
     title: string;
-    link: string;
+    href: string;
     active?: boolean;
+    subLinks?: NAV_ITEMS[];
 }
 
 export interface NAV_ITEMS_OBJ {
@@ -46,4 +47,28 @@ export interface SIGNUP_COMPONENTS {
     password: string;
     cPassword: string;
     email: string;
+}
+
+export interface GRAPH_INTERFACE {
+    label: string[];
+    titleText: string;
+    backgroundColor?: string[];
+    data: number[];
+    id: string;
+}
+
+export interface BAR_GRAPH_INTERFACE extends GRAPH_INTERFACE {
+    expenseData: number[];
+    incomeData: number[];
+}
+
+export interface Transaction {
+    date: string;
+    category: string;
+    amount: number;
+    type: 'income' | 'expense';
+}
+
+export interface TransactionTableProps{
+    Transactions: Transaction[];
 }

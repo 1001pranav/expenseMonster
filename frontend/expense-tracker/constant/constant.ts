@@ -22,42 +22,49 @@ export const NAV_LINKS : NAV_ITEMS_OBJ = {
     HOME: {
         name: "home",
         title: "Home",
-        link: "/"
+        href: "/"
     },
     LOGIN: {
         name: "login",
         title: "Hey user, Enter again",
-        link:"/login"
+        href:"/login"
     },
     REGISTER: {
         name: "register",
         title: "Register here",
-        link:"/signup"
+        href:"/signup"
     },
     DASHBOARD: {
         name: "dashboard",
         title: "Dashboard",
-        link:"/"
+        href:"/"
     },
     EXPENSE: {
         name: "expense",
         title: "Expenditure and Expenses",
-        link:"/expense"
+        href: "/expense"
     },
     BUDGET: {
         name: "budget",
         title: "Your budgets",
-        link:"/budget"
+        href:"/budget"
     },
     INVESTMENTS: {
         name: "investments",
         title: "Future Plans 😉 (Investments)",
-        link:"/investments"
+        href:"/investments"
     },
     REPORT: {
         name: "report",
         title: "Reports and analytics",
-        link:"/reports"
+        href:"/reports"
+    },
+    LOGOUT: {
+        name: "logout",
+        title: "Logout",
+        href:"/logout"
     }
 }
+
 export const LOGIN_PATH = "/login";
+

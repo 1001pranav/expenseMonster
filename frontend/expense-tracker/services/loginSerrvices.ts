@@ -10,7 +10,7 @@ export function VerifyLogin(isLoggedIn:boolean = false): boolean | string {
         }
         // Redirecting to login path as accessToken is not found.
         if (!isLoggedIn || !accessToken || accessToken.length === 0) {
-            return false;
+            return "false";
         }
         return accessToken;
     } catch (error) {
