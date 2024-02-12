@@ -6,7 +6,9 @@ export enum INPUT_TYPE {
     "PASSWORD",
     "SUBMIT",
     "RESET",
-    "EMAIL"
+    "EMAIL",
+    "RADIO",
+    "DTL"
 };
 
 export const INPUTS :string[] = [
@@ -15,7 +17,9 @@ export const INPUTS :string[] = [
     "password",
     "submit",
     "reset",
-    "email"
+    "email",
+    "radio",
+    "datetime-local"
 ];
 
 export const NAV_LINKS : NAV_ITEMS_OBJ = {

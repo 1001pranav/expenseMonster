@@ -1,3 +1,4 @@
+import {ReactNode} from "react";
 import { INPUT_TYPE } from "./constant";
 
 export interface INPUT_COMPONENT {
@@ -71,4 +72,24 @@ export interface Transaction {
 
 export interface TransactionTableProps{
     Transactions: Transaction[];
+}
+
+export interface IncomeExpensesProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+export interface IncomeExpenseInput {
+    amount: number;
+    category: string;
+    date: Date;
+    type: "Income" | "Expense";
+}
+
+export interface SelectInput{
+    selectName: string;
+    options: ReactNode; 
+    formName: string;
+    className: string;
+    handleInput?: (e: any) => void;
 }
