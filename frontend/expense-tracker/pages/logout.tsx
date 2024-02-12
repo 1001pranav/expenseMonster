@@ -1,7 +1,7 @@
 import { useRouter } from "next/router"
-import { useEffect } from "react";
+import { ReactNode, useEffect } from "react";
 
-export default function Logout() {
+export default function Logout(): ReactNode {
 
    // Check if the code is running in a browser environment
     if (typeof window !== "undefined") {

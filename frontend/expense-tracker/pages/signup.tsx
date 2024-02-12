@@ -1,9 +1,9 @@
 import Inputs, { InputLable } from "@/components/input";
 import { INPUT_TYPE } from "@/constant/constant";
 import { SIGNUP_COMPONENTS } from "@/constant/interfaces";
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 
-export default function Register() {
+export default function Register(): ReactNode {
     try {
         
         const [signUpDetails, setSignUpDetails] = useState<SIGNUP_COMPONENTS>({

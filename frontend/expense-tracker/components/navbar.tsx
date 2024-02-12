@@ -9,7 +9,7 @@ import { NAV_LINKS } from "@/constant/constant";
 export function Navigation(navProps: NAV_COMPONENT): ReactNode {
     try {
         const NavBarLinks: NAV_ITEMS[] = [];
-        const [isOpen, setIsOpen] = useState(false);
+        const [isOpen, setIsOpen] = useState<boolean>(false);
 
         const loginVerification: boolean | string = VerifyLogin(navProps.is_logged);
         

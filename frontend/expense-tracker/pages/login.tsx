@@ -13,7 +13,7 @@ export default function Login() {
         });
 
         // Defining a function named submitingForm that handles form submission
-        const submitingForm = (event: any) => {
+        const submittingForm: (event: any) => void = (event) => {
             // Preventing the default form submission behavior
             event.preventDefault();
             console.log(userDetails);
@@ -23,8 +23,8 @@ export default function Login() {
             <form 
                 // Setting the maximum width of the form to be 576px and centering it
                 className="max-w-sm mx-auto bg-white shadow-md rounded px-6 py-6"
-                // Attaching the submitingForm function as the onSubmit event handler for the form
-                onSubmit={submitingForm}
+                // Attaching the submittingForm function as the onSubmit event handler for the form
+                onSubmit={submittingForm}
             >
                 <h3 
                     // Setting the text of the h3 element to be "Login form"

@@ -1,7 +1,6 @@
-import { INPUTS, INPUT_TYPE } from "@/constant/constant";
-import { INPUT_COMPONENT, LABLLED_INPUT, } from "@/constant/interfaces";
+import { ReactNode } from "react";
 
-export default function Inputs(inputProps : INPUT_COMPONENT) {
+export default function Inputs(inputProps : INPUT_COMPONENT): ReactNode {
 
 
     const required = inputProps?.required ? true : false;
@@ -18,7 +17,7 @@ export default function Inputs(inputProps : INPUT_COMPONENT) {
     )
 }
 
-export function InputLable(lableInputs: LABLLED_INPUT) {
+export function InputLable(lableInputs: LABLLED_INPUT): ReactNode {
     return (
         <label className={lableInputs.lableClassName}>
             {lableInputs.lableName}

@@ -3,8 +3,9 @@ import PieChart from "./graph/pieChart";
 import BarChart from "./graph/barChart";
 import TransactionTable from "./graph/transaction";
 import { Transaction } from "@/constant/interfaces";
+import { ReactNode } from "react";
 
-export default function Dashboard() {
+export default function Dashboard(): ReactNode {
     const barChartBillsLabel: string[]= ["foods", "health", "utils","Entertainment", "bills"];
     const expenseData: number[] = [25000, 13000, 12000, 13000, 15000];
     const incomeData: number[] = [50000, 45000, 15000, 16000, 15000];
