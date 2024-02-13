@@ -60,30 +60,15 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                             ...NAV_LINKS.DASHBOARD,
                             active: true
                         },
-                        NAV_LINKS.EXPENSE,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.REPORT,
                         NAV_LINKS.LOGOUT
                     ); 
                     break;
-                case "/expenses": 
-                    NavBarLinks.push(
-                        NAV_LINKS.DASHBOARD,
-                        {
-                            ...NAV_LINKS.EXPENSE,
-                            active: true
-                        },
-                        NAV_LINKS.BUDGET,
-                        NAV_LINKS.INVESTMENTS,
-                        NAV_LINKS.REPORT,
-                        NAV_LINKS.LOGOUT
-                    );
-                    break;
                 case "/budget": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.EXPENSE,
                         {
                             ...NAV_LINKS.BUDGET,
                             active: true
@@ -96,7 +81,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/investments": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.EXPENSE,
                         NAV_LINKS.BUDGET,
                         {
                             ...NAV_LINKS.INVESTMENTS,
@@ -109,7 +93,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/reports": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.EXPENSE,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         {
@@ -122,7 +105,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/logout": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.EXPENSE,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.REPORT,
@@ -135,7 +117,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 default: 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.EXPENSE,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.REPORT,
