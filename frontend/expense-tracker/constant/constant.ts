@@ -43,11 +43,6 @@ export const NAV_LINKS : NAV_ITEMS_OBJ = {
         title: "Dashboard",
         href:"/"
     },
-    EXPENSE: {
-        name: "expense",
-        title: "Expenditure and Expenses",
-        href: "/expense"
-    },
     BUDGET: {
         name: "budget",
         title: "Your budgets",

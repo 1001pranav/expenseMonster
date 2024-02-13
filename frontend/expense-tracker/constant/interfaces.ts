@@ -74,7 +74,7 @@ export interface TransactionTableProps{
     Transactions: Transaction[];
 }
 
-export interface IncomeExpensesProps {
+export interface formsForPopUpProps {
     isOpen: boolean;
     onClose: () => void;
 }
@@ -82,7 +82,7 @@ export interface IncomeExpensesProps {
 export interface IncomeExpenseInput {
     amount: number;
     category: string;
-    date: Date;
+    date: String;
     type: "Income" | "Expense";
 }
 
@@ -92,4 +92,17 @@ export interface SelectInput{
     formName: string;
     className: string;
     handleInput?: (e: any) => void;
+}
+
+export interface PopupFormsProps {
+    isOpen: boolean;
+    onClose: () => void;
+    Forms: ReactNode;
+}
+
+export interface CategoryInput {
+    categoryID: number;
+    name: string;
+    amount: number;
+    type: "Income" | "Category";
 }
