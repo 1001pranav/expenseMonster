@@ -21,10 +21,12 @@ const BarChart = forwardRef<HTMLCanvasElement, BAR_GRAPH_INTERFACE>((props) => {
                 datasets: [{
                     label: 'Income',
                     data: props.incomeData,
+                    backgroundColor: props.incomeBGColor
                 },
                 {
                     label: 'Expenses',
                     data: props.expenseData,                    
+                    backgroundColor: props.expenseBGColor
                 }]
             },
             options: {

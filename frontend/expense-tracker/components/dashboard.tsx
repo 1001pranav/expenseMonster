@@ -40,6 +40,8 @@ export default function Dashboard(): ReactNode {
                         label={barChartBillsLabel}
                         titleText="Income and Expense Categories"
                         backgroundColor={[]}
+                        incomeBGColor={['rgba(24, 255, 19, 0.8)']}
+                        expenseBGColor={['rgba(255, 153, 154, 0.8)']}
                         data={[]}
                         expenseData={expenseData}
                         incomeData={incomeData}

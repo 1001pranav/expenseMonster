@@ -61,6 +61,8 @@ export interface GRAPH_INTERFACE {
 export interface BAR_GRAPH_INTERFACE extends GRAPH_INTERFACE {
     expenseData: number[];
     incomeData: number[];
+    incomeBGColor?: string[];
+    expenseBGColor?: string[];
 }
 
 export interface Transaction {
