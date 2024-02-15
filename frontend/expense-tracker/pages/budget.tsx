@@ -1,6 +1,6 @@
 import { CategoryTransaction } from '@/components/graph/transaction';
 import IncomeExpenseHorizontalBars from '@/components/horizontal';
-import {AddIncomeExpense, UpdateCategory} from '@/components/popupForms';
+import {AddIncomeExpense, UpdateBills, UpdateCategory} from '@/components/popupForms';
 import { CategoryPercentage } from '@/constant/interfaces';
 
 import { ReactNode, useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { ReactNode, useEffect, useState } from "react";
 export default function Expense(): ReactNode{
     const [isIncomeExpensePopupOpen, setIsAddPopupOpen] = useState(false);
     const [isCategoryUpdatePopupOpen, setIsCategoryUpdatePopupOpen] = useState(false);
+    const [isBillsUpdatePopupOpen, setIsBillsUpdatePopupOpen] = useState(false);
     
     const [categories, setIsCategory] = useState<CategoryPercentage[]>([
         {name: "Food", percentage: 25},
@@ -21,6 +22,7 @@ export default function Expense(): ReactNode{
             if (event.keyCode === 27) {
                 setIsAddPopupOpen(false);
                 setIsCategoryUpdatePopupOpen(false);
+                setIsBillsUpdatePopupOpen(false);
             }
         }
         document.addEventListener('keydown', handleKeyDown);
@@ -46,11 +48,18 @@ export default function Expense(): ReactNode{
                     Update Category
                 </button>
                 <span className='px-1 font-bold'>/</span>
-                
+                <button
+                    className="text-black rounded-md hover:font-bold"
+                    onClick={()=> setIsBillsUpdatePopupOpen(true)}
+                >
+                    Add or Update Bills
+                </button>
+                <span className='px-1 font-bold'>/</span>
             </div>
             <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } />
             <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} />
             <IncomeExpenseHorizontalBars income={100} categories={categories} />
+            <UpdateBills isOpen={isBillsUpdatePopupOpen} onClose={() => setIsBillsUpdatePopupOpen(false)}/>
             <div className="flex flex-wrap my-4">
                 <div className='flex flex-wrap'>
                     <CategoryTransaction categories={[{

@@ -1,7 +1,7 @@
-import { CategoryInput, IncomeExpenseInput, PopupFormsProps, formsForPopUpProps } from "@/constant/interfaces";
+import { Bills, CategoryInput, IncomeExpenseInput, PopupFormsProps, formsForPopUpProps } from "@/constant/interfaces";
 import React, { ReactNode, useState } from "react";
 import Inputs, {InputLable, OptionWithOptGroup, LabelSelectTag, SelectOptions} from "@/components/input";
-import { INPUT_TYPE } from "@/constant/constant";
+import { FREQUENCY_TYPE, INPUT_TYPE } from "@/constant/constant";
 
 export default function PopUpForms(popupDataProps: PopupFormsProps): React.ReactNode {
     try {
@@ -102,7 +102,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
             <Inputs 
                 inputType={INPUT_TYPE.SUBMIT} 
                 className="bg-blue-500 w-1/4 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
-                name="Login" 
+                name="" 
             />
         </div>
         
@@ -188,4 +188,73 @@ export function UpdateCategory(props: formsForPopUpProps): React.ReactNode {
         return
 
     }
+}
+
+export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
+    const [incomeExpense, setIncomeExpense] = useState<Bills>({
+        amount: 0,
+        billsID: 0,
+        name: "",
+        frequencies: "NEVER",
+        description: ""
+    });
+    const formSubmission:(e: any) => void = (e) => {
+            console.log(incomeExpense);
+            e.preventDefault();
+        };
+    const options: React.ReactNode = <SelectOptions options={Object.keys(FREQUENCY_TYPE)} />
+
+    const Form: React.ReactNode = <form 
+        className="space-y-4 flex flex-col" 
+        onSubmit={formSubmission}
+    >
+        <InputLable 
+            lableName="Bill Name" 
+            lableClassName="block text-sm font-medium leading-6 text-gray-900"
+            inputType={INPUT_TYPE.TEXT} 
+            className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
+            name="amount" 
+            handleInput={(event)=> setIncomeExpense({...incomeExpense, name: event.target.value})}
+            value={incomeExpense.name}
+        />
+        <InputLable 
+            lableName="Bill Amount" 
+            lableClassName="block text-sm font-medium leading-6 text-gray-900"
+            inputType={INPUT_TYPE.NUMBER} 
+            className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
+            name="amount" 
+            handleInput={(event)=> setIncomeExpense({...incomeExpense, amount: event.target.value})}
+            value={incomeExpense.amount}
+        />
+        <label htmlFor="frequency">Frequency 0f bills :</label>
+        <LabelSelectTag 
+            formName="frequency" 
+            className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
+            selectName="Frequency of Bill"
+            options={options}
+            handleInput={(e)=> setIncomeExpense({...incomeExpense, frequencies: e.target.value})}
+        />
+        <InputLable
+            lableClassName="block text-sm font-medium leading-6 text-gray-900"
+            lableName="Description"
+            className="resize border rounded-md w-full px-3 py-2 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            inputType={INPUT_TYPE.TEXTAREA}
+            name="description"
+            handleInput={(e)=> setIncomeExpense({...incomeExpense, description: e.target.value})}
+            value={incomeExpense.description}
+        />
+        <div className="flex items-center justify-center">
+            <Inputs 
+                inputType={INPUT_TYPE.SUBMIT} 
+                className="bg-blue-500 w-1/4 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
+                name="" 
+            />
+        </div>
+        
+    </form>
+    return (
+        <div>
+            <PopUpForms isOpen={props.isOpen} onClose={props.onClose} Forms={Form}/>
+        </div>
+    )
 }

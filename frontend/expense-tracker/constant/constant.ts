@@ -8,7 +8,8 @@ export enum INPUT_TYPE {
     "RESET",
     "EMAIL",
     "RADIO",
-    "DTL"
+    "DTL",
+    "TEXTAREA",
 };
 
 export const INPUTS :string[] = [
@@ -19,8 +20,19 @@ export const INPUTS :string[] = [
     "reset",
     "email",
     "radio",
-    "datetime-local"
+    "datetime-local",
+    "textarea",
 ];
+
+export const FREQUENCY_TYPE: {} = {
+    "NEVER": "Never",
+    "DAY": "Day",
+    "WEEK": "Week",
+    "MONTH": "Month",
+    "QUARTERLY": "Quarterly",
+    "HALF-YEARLY": "Half-Yearly",
+    "YEARLY": "Yearly",
+}
 
 export const NAV_LINKS : NAV_ITEMS_OBJ = {
     HOME: {

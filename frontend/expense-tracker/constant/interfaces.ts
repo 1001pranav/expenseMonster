@@ -128,3 +128,11 @@ export interface CategoryTransaction {
 export interface CategoryTransactionProps {
     categories: CategoryTransaction[]
 }
+
+export interface Bills {
+    billsID: number;
+    name: string;
+    frequencies: "NEVER"| "DAY" | "WEEK" | "MONTH" | "YEAR" | "HALF-YEARLY" | "YEARLY" | "QUARTERLY";
+    amount: number;
+    description: string;
+}
