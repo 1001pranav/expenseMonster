@@ -108,3 +108,23 @@ export interface CategoryInput {
     amount: number;
     type: "Income" | "Category";
 }
+
+export interface CategoryPercentage {
+    name: string;
+    percentage: number;
+}
+
+export interface HorizontalBarProps {
+    income: number;
+    categories: CategoryPercentage[];
+}
+
+export interface CategoryTransaction {
+    categoryName: string;
+    income: number;
+    expense: number;
+}
+
+export interface CategoryTransactionProps {
+    categories: CategoryTransaction[]
+}
