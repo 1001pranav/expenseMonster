@@ -62,7 +62,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                         },
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
-                        NAV_LINKS.REPORT,
                         NAV_LINKS.LOGOUT
                     ); 
                     break;
@@ -74,7 +73,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                             active: true
                         },
                         NAV_LINKS.INVESTMENTS,
-                        NAV_LINKS.REPORT,
                         NAV_LINKS.LOGOUT
                     );
                     break;
@@ -86,7 +84,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                             ...NAV_LINKS.INVESTMENTS,
                             active: true
                         },
-                        NAV_LINKS.REPORT,
                         NAV_LINKS.LOGOUT
                     );
                     break;
@@ -95,10 +92,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                         NAV_LINKS.DASHBOARD,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
-                        {
-                            ...NAV_LINKS.REPORT,
-                            active: true
-                        },
                         NAV_LINKS.LOGOUT
                     );
                     break;
@@ -107,7 +100,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                         NAV_LINKS.DASHBOARD,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
-                        NAV_LINKS.REPORT,
                         {
                             ...NAV_LINKS.LOGOUT,
                             active: true
@@ -119,7 +111,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                         NAV_LINKS.DASHBOARD,
                         NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
-                        NAV_LINKS.REPORT,
                         NAV_LINKS.LOGOUT
                     );
                     break;
