@@ -108,7 +108,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         
     </form>
     return (
-        <div>
+        <div ref={props.refObj}>
             <PopUpForms isOpen={props.isOpen} onClose={props.onClose} Forms={Form}/>
         </div>
     )

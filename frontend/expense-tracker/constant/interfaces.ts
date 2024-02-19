@@ -1,4 +1,4 @@
-import {ReactNode} from "react";
+import {ReactNode, RefObject} from "react";
 import { INPUT_TYPE } from "./constant";
 
 export interface INPUT_COMPONENT {
@@ -79,6 +79,7 @@ export interface TransactionTableProps{
 export interface formsForPopUpProps {
     isOpen: boolean;
     onClose: () => void;
+    refObj: RefObject<HTMLDivElement>
 }
 
 export interface IncomeExpenseInput {
@@ -126,7 +127,8 @@ export interface CategoryTransaction {
 }
 
 export interface CategoryTransactionProps {
-    categories: CategoryTransaction[]
+    categories: CategoryTransaction[];
+    tableHead: string;
 }
 
 export interface Bills {
@@ -135,4 +137,9 @@ export interface Bills {
     frequencies: "NEVER"| "DAY" | "WEEK" | "MONTH" | "YEAR" | "HALF-YEARLY" | "YEARLY" | "QUARTERLY";
     amount: number;
     description: string;
+}
+
+export interface TotalIncomeExpense {
+    totalIncome: number;
+    totalExpense: number;
 }
