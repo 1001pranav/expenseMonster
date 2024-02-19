@@ -1,4 +1,4 @@
-import { CategoryTransaction } from '@/components/graph/transaction';
+import {  CategoryTransaction } from '@/components/transaction';
 import IncomeExpenseHorizontalBars from '@/components/horizontal';
 import {AddIncomeExpense, UpdateBills, UpdateCategory} from '@/components/popupForms';
 import { CategoryPercentage } from '@/constant/interfaces';

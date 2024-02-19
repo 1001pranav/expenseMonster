@@ -1,7 +1,7 @@
 import { DETAILED_PIE, INCOME_EXPENSE } from "@/constant/graph.constant";
 import PieChart from "./graph/pieChart";
 import BarChart from "./graph/barChart";
-import TransactionTable from "./graph/transaction";
+import TransactionTable from "./transaction";
 import { Transaction } from "@/constant/interfaces";
 import { ReactNode } from "react";
 
