@@ -1,7 +1,7 @@
 import { CategoryPercentage, HorizontalBarProps } from "@/constant/interfaces";
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
-export default function IncomeExpenseHorizontalBars(incomeExpenseProps: HorizontalBarProps) {
+export function IncomeExpenseHorizontalBars(incomeExpenseProps: HorizontalBarProps) {
 
     // Calculate the total percentage of expenses
     const totalPercentage = incomeExpenseProps.categories.reduce((acc, category) => acc + category.percentage, 0);
@@ -39,3 +39,41 @@ export default function IncomeExpenseHorizontalBars(incomeExpenseProps: Horizont
     );
 };
         
+
+export default function HorizontalBar(props: HorizontalBarProps): ReactNode {
+    // Calculate the total percentage of expenses
+    const totalPercentage = props.categories.reduce((acc, category) => acc + category.percentage, 0);
+
+    // Calculate the remaining percentage for the green bar
+    const remainingPercentage = Math.max(100 - totalPercentage, 0);
+    
+    return (
+        <div>
+            <div className="flex flex-row bg-grey-200 p-8 m-auto h-12 w-full ">
+                
+                {
+                    props.categories.map((categories, index) => 
+                        <div 
+                            key={index} 
+                            className="flex justify-items-center justify-center bg-red-500 h-12 font-bold text-sm" 
+                            style={{width: `${categories.percentage}%`}}
+                        > 
+                            <span className="flex-wrap overflow-x-auto">
+                                {categories.name}: {categories.percentage}%
+                            </span>
+                        </div>
+                    )
+                }
+                <div 
+                    className="flex justify-items-center justify-center bg-green-500 h-12 font-bold text-sm" 
+                    style={{width: `${remainingPercentage}%`}}
+                >
+                    <span className="flex-wrap overflow-x-auto">Income: {remainingPercentage}%</span>
+                </div>
+            </div>
+            
+        </div>
+    )
+}
+
+//
