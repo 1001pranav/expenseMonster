@@ -60,7 +60,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                             ...NAV_LINKS.DASHBOARD,
                             active: true
                         },
-                        NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.LOGOUT
                     ); 
@@ -68,10 +67,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/budget": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        {
-                            ...NAV_LINKS.BUDGET,
-                            active: true
-                        },
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.LOGOUT
                     );
@@ -79,7 +74,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/investments": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.BUDGET,
                         {
                             ...NAV_LINKS.INVESTMENTS,
                             active: true
@@ -90,7 +84,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/reports": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.LOGOUT
                     );
@@ -98,7 +91,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 case "/logout": 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         {
                             ...NAV_LINKS.LOGOUT,
@@ -109,7 +101,6 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
                 default: 
                     NavBarLinks.push(
                         NAV_LINKS.DASHBOARD,
-                        NAV_LINKS.BUDGET,
                         NAV_LINKS.INVESTMENTS,
                         NAV_LINKS.LOGOUT
                     );

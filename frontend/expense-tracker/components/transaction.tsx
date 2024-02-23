@@ -76,8 +76,8 @@ export function CategoryTransaction(props: CategoryTransactionProps): ReactNode 
     // });
 
     return (
-      <div className="overflow-x-auto overflow-y-auto">
-        <table className="table-auto lg:w-1/2 md:w-full sm:w-full">
+      <div className="overflow-x-auto overflow-y-auto ">
+        <table className="table-auto lg:w-3/4 md:w-full sm:w-full">
           <caption className="bg-gray-200 text-gray-700 text-center py-2 font-bold">
             {props.tableHead}
           </caption>
