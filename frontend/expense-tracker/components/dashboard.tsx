@@ -1,23 +1,24 @@
 import { DETAILED_PIE, INCOME_EXPENSE } from "@/constant/graph.constant";
 import { BillsTransaction, CategoryTransaction } from '@/components/transaction';
-import {AddIncomeExpense, UpdateBills, UpdateCategory} from '@/components/popupForms';
+import {AddFinancialGoals, AddIncomeExpense, UpdateBills, UpdateCategory} from '@/components/popupForms';
 
 import PieChart from "./graph/pieChart";
 import BarChart from "./graph/barChart";
 import TransactionTable from "./transaction";
 import { Transaction } from "@/constant/interfaces";
 import { ReactNode, useEffect, useRef, useState, RefObject } from "react";
+import { SubNav } from "./navbar";
 
 export default function Dashboard(): ReactNode {
     const [isIncomeExpensePopupOpen, setIsAddPopupOpen] = useState(false);
     const [isCategoryUpdatePopupOpen, setIsCategoryUpdatePopupOpen] = useState(false);
     const [isBillsUpdatePopupOpen, setIsBillsUpdatePopupOpen] = useState(false);
+    const [isFinancialGoalsPopupOpen, setIsFinancialGoalsPopupOpen] = useState(false);
     
     const incomeExpenseFormRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
     const updateCategoryFormRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
     const addBillsFormRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
 
-    
     // If esc is clicked then then close all the popups
     useEffect(()=> {
         const handleKeyDown = (event: any) => {
@@ -25,6 +26,7 @@ export default function Dashboard(): ReactNode {
                 setIsAddPopupOpen(false);
                 setIsCategoryUpdatePopupOpen(false);
                 setIsBillsUpdatePopupOpen(false);
+                setIsFinancialGoalsPopupOpen(false);
             }
         }
         document.addEventListener('keydown', handleKeyDown);
@@ -40,36 +42,30 @@ export default function Dashboard(): ReactNode {
         { date: "5/12/2023", category: 'Salary', amount: 80, type: 'income' },
         { date: "9/12/2023", category: 'Transportation', amount: 900, type: 'expense' },
     ]
+
     return (
         <div >
-            <div className='max-w-7xl mx-auto'>
-            <div className="h-auto w-auto flex flex-row p-1 m-1 bg-gray-100">
-                <button
-                    className="text-black rounded-md hover:font-bold focus:font-bold focus:text-blue-700"
-                    onClick={()=> setIsAddPopupOpen(true)}
-                >
-                    Add Income or Expense
-                </button>
-                <span className='px-1 font-bold'>/</span>
-                <button
-                    className="text-black rounded-md hover:font-bold focus:font-bold focus:text-blue-700"
-                    onClick={()=> setIsCategoryUpdatePopupOpen(true)}
-                >
-                    Update Category
-                </button>
-                <span className='px-1 font-bold'>/</span>
-                <button
-                    className="text-black rounded-md hover:font-bold focus:font-bold focus:text-blue-700"
-                    onClick={()=> setIsBillsUpdatePopupOpen(true)}
-                >
-                    Add or Update Bills
-                </button>
-                <span className='px-1 font-bold'>/</span>
-            </div>
+            <SubNav 
+                navItems={
+                    [{
+                        title: "Add Income or Expenses",
+                        onCloseButton: setIsAddPopupOpen
+                    }, {
+                        title: "Update Category",
+                        onCloseButton: setIsCategoryUpdatePopupOpen
+                    },{
+                        title: "Add or Update Bills",
+                        onCloseButton: setIsBillsUpdatePopupOpen
+                    },{
+                        title: "Financial Goal",
+                        onCloseButton: setIsFinancialGoalsPopupOpen
+                    }]
+                } 
+            />
             <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } refObj={incomeExpenseFormRef}/>
             <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} refObj={updateCategoryFormRef} />
             <UpdateBills isOpen={isBillsUpdatePopupOpen} onClose={() => setIsBillsUpdatePopupOpen(false)} refObj={addBillsFormRef}/>
-        </div>
+            <AddFinancialGoals isOpen={isFinancialGoalsPopupOpen} onClose={() => setIsFinancialGoalsPopupOpen(false)} refObj={addBillsFormRef} />
             <div className="flex flex-wrap">
                 <div className="w-full sm:w-1/2 md:w-1/4 lg:w-1/4 xl:w-1/4 p-4">
                     <PieChart

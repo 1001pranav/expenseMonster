@@ -3,7 +3,7 @@ import { usePathname } from "next/navigation";
 
 import { VerifyLogin } from "@/services/loginSerrvices";
 import { Links } from "./links";
-import { NAV_COMPONENT, NAV_ITEMS } from "@/constant/interfaces";
+import { NAV_COMPONENT, NAV_ITEMS, SubNavProps } from "@/constant/interfaces";
 import { NAV_LINKS } from "@/constant/constant";
 
 export function Navigation(navProps: NAV_COMPONENT): ReactNode {
@@ -191,5 +191,27 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
     } catch (error) {
         console.log("Error: on NavBar", error);
         // throw new Error();    
+    }
+}
+
+export function SubNav({navItems}: SubNavProps): ReactNode {
+    try {
+        return <div className='max-w-7xl mx-auto'>
+            <div className="h-auto w-auto flex flex-row p-1 m-1 bg-gray-100">
+                {
+                    navItems.map(nav => <>
+                        <button
+                            className="text-black rounded-md hover:font-bold focus:font-bold focus:text-blue-700"
+                            onClick={()=> {nav.onCloseButton(true)}}
+                        >
+                            {nav.title}
+                        </button>
+                        <span className='px-1 font-bold'>/</span>
+                    </>)
+                }
+            </div>
+        </div>
+    } catch (error) {
+        console.log("Error: OnSubNav", error);
     }
 }
