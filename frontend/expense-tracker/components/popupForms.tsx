@@ -50,36 +50,35 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
     </>;
     const Form: React.ReactNode = <form 
         className="space-y-4 flex flex-col" 
-        onSubmit={formSubmission}
     >
+
+    <LabelSelectTag 
+        formName="categoryType" 
+        selectName="Select Categories"
+        options={optionsGroup}
+        handleInput={(e)=> setIncomeExpense({...incomeExpense, category: e.target.value})}        
+        className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
+    />
         <InputLable 
             lableName="Expense Amount" 
-            lableClassName="block text-sm font-medium leading-6 text-gray-900"
             inputType={INPUT_TYPE.NUMBER} 
-            className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
             name="amount" 
             handleInput={(event)=> setIncomeExpense({...incomeExpense, amount: event.target.value})}
             value={incomeExpense.amount}
+        
+        lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 "
+        className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
         />
         <InputLable
-            lableClassName="block text-sm font-medium leading-6 text-gray-900"
             lableName="Date Of Spending or Income"
             className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"
             inputType={INPUT_TYPE.DTL}
             name="date"
             handleInput={(e)=> setIncomeExpense({...incomeExpense, date: e.target.value})}
             value={incomeExpense.date}
-        />
-        <label htmlFor="categoryType"> Category of Income/Expense:</label>
-        
-        <LabelSelectTag 
-            formName="categoryType" 
-            className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
-            selectName="Select Categories"
-            options={optionsGroup}
-            handleInput={(e)=> setIncomeExpense({...incomeExpense, category: e.target.value})}
-        />
-
+        lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 "
+        className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
+    />
         <div className="flex items-center">
             <InputLable 
                 lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-2"
@@ -108,9 +107,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         
     </form>
     return (
-        <div ref={props.refObj}>
             <PopUpForms isOpen={props.isOpen} onClose={props.onClose} Forms={Form}/>
-        </div>
     )
 }
 
@@ -130,10 +127,9 @@ export function UpdateCategory(props: formsForPopUpProps): React.ReactNode {
 
         const options: ReactNode = <SelectOptions  options={["--New Category--","salary", "Food"]} />
         const Forms: ReactNode = <form
-            className="flex flex-col w-full md:w-1/2 mx-auto" 
+            className="space-y-4 flex flex-col" 
             onSubmit={formSubmission}
         >
-            
             <LabelSelectTag 
                 selectName="Category" 
                 options={options} 
@@ -177,6 +173,13 @@ export function UpdateCategory(props: formsForPopUpProps): React.ReactNode {
                     value={categoryData.type}
                     handleInput={(e)=> setCategory( { ...categoryData, type: 'Category' })}
 
+                />
+            </div>
+            <div className="flex items-center justify-center">
+                <Inputs 
+                    inputType={INPUT_TYPE.SUBMIT} 
+                    className="bg-blue-500 w-1/4 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
+                    name="" 
                 />
             </div>
         </form>
@@ -226,7 +229,6 @@ export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
             handleInput={(event)=> setIncomeExpense({...incomeExpense, amount: event.target.value})}
             value={incomeExpense.amount}
         />
-        <label htmlFor="frequency">Frequency 0f bills :</label>
         <LabelSelectTag 
             formName="frequency" 
             className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
