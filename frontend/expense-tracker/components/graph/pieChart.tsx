@@ -24,7 +24,7 @@ const PieChart = forwardRef<HTMLCanvasElement, GRAPH_INTERFACE>((props, ref) => 
 
         // Configuring the chart
         const chartConfig: ChartConfiguration = {
-            type: 'pie', // Setting the chart type to pie
+            type: props.graphType, // Setting the chart type to pie
             data: {
                 labels: props.label, // Labels for the chart slices
                 datasets: [

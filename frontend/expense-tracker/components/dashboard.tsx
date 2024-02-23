@@ -19,6 +19,7 @@ export default function Dashboard(): ReactNode {
             <div className="flex flex-wrap">
                 <div className="w-full sm:w-1/2 md:w-1/4 lg:w-1/4 xl:w-1/4 p-4">
                     <PieChart
+                        graphType="pie"
                         label={INCOME_EXPENSE.label}
                         titleText={INCOME_EXPENSE.titleText}
                         backgroundColor={INCOME_EXPENSE.backgroundColor}
@@ -28,6 +29,7 @@ export default function Dashboard(): ReactNode {
                 </div>
                 <div className="w-full sm:w-1/2 md:w-1/4 lg:w-1/4 xl:w-1/4 p-4">
                     <PieChart
+                        graphType="doughnut"
                         label={DETAILED_PIE.label}
                         titleText={DETAILED_PIE.titleText}
                         backgroundColor={DETAILED_PIE.backgroundColor}
@@ -37,6 +39,7 @@ export default function Dashboard(): ReactNode {
                 </div>
                 <div className="w-full sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2 p-4">
                     <BarChart
+                        graphType="bar"
                         label={barChartBillsLabel}
                         titleText="Income and Expense Categories"
                         backgroundColor={[]}

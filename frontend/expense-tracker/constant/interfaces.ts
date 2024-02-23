@@ -1,5 +1,6 @@
 import {ReactNode, RefObject} from "react";
 import { INPUT_TYPE } from "./constant";
+import { ChartType } from "chart.js";
 
 export interface INPUT_COMPONENT {
     inputType: INPUT_TYPE; 
@@ -51,6 +52,7 @@ export interface SIGNUP_COMPONENTS {
 }
 
 export interface GRAPH_INTERFACE {
+    graphType: ChartType
     label: string[];
     titleText: string;
     backgroundColor?: string[];

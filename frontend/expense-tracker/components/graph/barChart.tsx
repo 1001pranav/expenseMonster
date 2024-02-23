@@ -15,7 +15,7 @@ const BarChart = forwardRef<HTMLCanvasElement, BAR_GRAPH_INTERFACE>((props) => {
         }
         if (!ctx) return;
         const chartConfig : ChartConfiguration = {
-            type: 'bar',
+            type: props.graphType,
             data: {
                 labels: props.label,
                 datasets: [{
