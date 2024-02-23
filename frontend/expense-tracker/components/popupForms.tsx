@@ -60,7 +60,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
     />
         <InputLable 
-            lableName="Expense Amount" 
+        lableName="Amount" 
             inputType={INPUT_TYPE.NUMBER} 
             name="amount" 
             handleInput={(event)=> setIncomeExpense({...incomeExpense, amount: event.target.value})}
