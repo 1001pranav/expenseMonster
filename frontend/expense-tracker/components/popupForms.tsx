@@ -1,4 +1,4 @@
-import { Bills, CategoryInput, IncomeExpenseInput, PopupFormsProps, formsForPopUpProps } from "@/constant/interfaces";
+import { AddFinancialGoal, Bills, CategoryInput, IncomeExpenseInput, PopupFormsProps, formsForPopUpProps } from "@/constant/interfaces";
 import React, { ReactNode, useState } from "react";
 import Inputs, {InputLable, OptionWithOptGroup, LabelSelectTag, SelectOptions} from "@/components/input";
 import { FREQUENCY_TYPE, INPUT_TYPE } from "@/constant/constant";
@@ -48,8 +48,8 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
             OptionWithOptGroup({optName: "Expense", options: ["Food", "Travel"]})
         }
     </>;
-    const Form: React.ReactNode = <form 
-        className="space-y-4 flex flex-col" 
+const Form: React.ReactNode = <form
+    className="space-y-4 flex flex-col" 
     >
 
     <LabelSelectTag 
@@ -59,42 +59,42 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         handleInput={(e)=> setIncomeExpense({...incomeExpense, category: e.target.value})}        
         className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
     />
-        <InputLable 
+    <InputLable 
         lableName="Amount" 
-            inputType={INPUT_TYPE.NUMBER} 
-            name="amount" 
-            handleInput={(event)=> setIncomeExpense({...incomeExpense, amount: event.target.value})}
-            value={incomeExpense.amount}
+        inputType={INPUT_TYPE.NUMBER} 
+        name="amount" 
+        handleInput={(event)=> setIncomeExpense({...incomeExpense, amount: event.target.value})}
+        value={incomeExpense.amount}
         
         lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 "
         className="block appearance-none w-full bg-white border border-gray-400 hover:border-gray-500 px-4 py-2 rounded shadow leading-tight focus:outline-none focus:shadow-outline"
-        />
-        <InputLable
-            lableName="Date Of Spending or Income"
+    />
+    <InputLable 
+        lableName="Date Of Spending or Income"
         inputType={INPUT_TYPE.DL}
-            name="date"
-            handleInput={(e)=> setIncomeExpense({...incomeExpense, date: e.target.value})}
-            value={incomeExpense.date}
+        name="date"
+        handleInput={(e)=> setIncomeExpense({...incomeExpense, date: e.target.value})}
+        value={incomeExpense.date}    
         lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 "
         className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
     />
-        <div className="flex items-center">
-            <InputLable 
-                lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-2"
-                lableName="Income"
-                inputType={INPUT_TYPE.RADIO}
-                name="type"
-                className="form-radio text-indigo-600 h-5 w-5"
-                value={incomeExpense.type}
-            />
-            <InputLable 
-                lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-auto"
-                lableName="Expense"
-                inputType={INPUT_TYPE.RADIO}
-                name="type"
-                className="form-radio text-indigo-600 h-5 w-5 "
-                value={incomeExpense.type}
-            />
+    <div className="flex items-center">
+        <InputLable 
+            lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-2"
+            lableName="Income"
+            inputType={INPUT_TYPE.RADIO}
+            name="type"
+            className="form-radio text-indigo-600 h-5 w-5"
+            value={incomeExpense.type}
+        />
+        <InputLable 
+            lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-auto"
+            lableName="Expense"
+            inputType={INPUT_TYPE.RADIO}
+            name="type"
+            className="form-radio text-indigo-600 h-5 w-5 "
+            value={incomeExpense.type}
+        />
         </div>
         <div className="flex items-center justify-center">
             <Inputs 
@@ -106,7 +106,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         
     </form>
     return (
-            <PopUpForms isOpen={props.isOpen} onClose={props.onClose} Forms={Form}/>
+        <PopUpForms isOpen={props.isOpen} onClose={props.onClose} Forms={Form}/>
     )
 }
 
@@ -244,6 +244,87 @@ export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
             handleInput={(e)=> setIncomeExpense({...incomeExpense, description: e.target.value})}
             value={incomeExpense.description}
         />
+        <div className="flex items-center justify-center">
+            <Inputs 
+                inputType={INPUT_TYPE.SUBMIT} 
+                className="bg-blue-500 w-1/4 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
+                name="" 
+            />
+        </div>
+        
+    </form>
+    return (
+        <div>
+            <PopUpForms isOpen={props.isOpen} onClose={props.onClose} Forms={Form}/>
+        </div>
+    )
+}
+
+export function AddFinancialGoals(props: formsForPopUpProps): React.ReactNode {
+    const [FinancialGoal, setIncomeExpense] = useState<AddFinancialGoal>({
+        amount: 0,
+        title: "",
+        goalAchieved: 'false',
+        description: ""
+    });
+    const formSubmission:(e: any) => void = (e) => {
+            e.preventDefault();
+        };
+    const options: React.ReactNode = <SelectOptions options={Object.keys(FREQUENCY_TYPE)} />
+
+    const Form: React.ReactNode = <form 
+        className="space-y-4 flex flex-col" 
+        onSubmit={formSubmission}
+    >
+        <InputLable 
+            lableName="Financial Goal" 
+            lableClassName="block text-sm font-medium leading-6 text-gray-900"
+            inputType={INPUT_TYPE.TEXT} 
+            className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
+            name="amount" 
+            handleInput={(event)=> setIncomeExpense({...FinancialGoal, title: event.target.value})}
+            value={FinancialGoal.title}
+        />
+        <InputLable 
+            lableName="Bill Amount" 
+            lableClassName="block text-sm font-medium leading-6 text-gray-900"
+            inputType={INPUT_TYPE.NUMBER} 
+            className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
+            name="amount" 
+            handleInput={(event)=> setIncomeExpense({...FinancialGoal, amount: event.target.value})}
+            value={FinancialGoal.amount}
+        />
+        <InputLable
+            lableClassName="block text-sm font-medium leading-6 text-gray-900"
+            lableName="Description"
+            className="resize border rounded-md w-full px-3 py-2 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            inputType={INPUT_TYPE.TEXTAREA}
+            name="description"
+            handleInput={(e)=> setIncomeExpense({...FinancialGoal, description: e.target.value})}
+            value={FinancialGoal.description}
+        />
+
+        <div className="flex items-center w-full">
+            <label htmlFor="goal">Goals Achieved?</label>
+            <InputLable 
+                lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2"
+                lableName="Yes"
+                inputType={INPUT_TYPE.RADIO}
+                name="Goal"
+                className="form-radio text-indigo-600 h-5 w-5"
+                value={FinancialGoal.goalAchieved}
+                handleInput={(e)=> setIncomeExpense( { ...FinancialGoal, goalAchieved: 'true' })}
+            />
+            <InputLable 
+                lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2"
+                lableName="No"
+                inputType={INPUT_TYPE.RADIO}
+                name="Goal"
+                className="form-radio text-indigo-600 h-5 w-5 "
+                value={FinancialGoal.goalAchieved}
+                handleInput={(e)=> setIncomeExpense( { ...FinancialGoal, goalAchieved: 'false' })}
+            />
+        </div>
         <div className="flex items-center justify-center">
             <Inputs 
                 inputType={INPUT_TYPE.SUBMIT} 

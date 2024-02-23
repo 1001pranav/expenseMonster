@@ -145,3 +145,18 @@ export interface TotalIncomeExpense {
     totalIncome: number;
     totalExpense: number;
 }
+
+export interface SubNavItems {
+    onCloseButton: (isOpen: boolean) => void;
+    title: string;
+}
+export interface SubNavProps {
+    navItems: SubNavItems[]
+}
+
+export interface AddFinancialGoal {
+    title: string;
+    amount: number;
+    goalAchieved: 'true' | 'false';
+    description: string;
+}
