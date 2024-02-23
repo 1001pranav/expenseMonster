@@ -8,7 +8,7 @@ export enum INPUT_TYPE {
     "RESET",
     "EMAIL",
     "RADIO",
-    "DTL",
+    "DL",
     "TEXTAREA",
 };
 
@@ -20,7 +20,7 @@ export const INPUTS :string[] = [
     "reset",
     "email",
     "radio",
-    "datetime-local",
+    "date",
     "textarea",
 ];
 

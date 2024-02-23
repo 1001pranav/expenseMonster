@@ -71,8 +71,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         />
         <InputLable
             lableName="Date Of Spending or Income"
-            className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"
-            inputType={INPUT_TYPE.DTL}
+        inputType={INPUT_TYPE.DL}
             name="date"
             handleInput={(e)=> setIncomeExpense({...incomeExpense, date: e.target.value})}
             value={incomeExpense.date}
