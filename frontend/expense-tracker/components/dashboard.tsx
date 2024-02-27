@@ -88,7 +88,7 @@ export default function Dashboard(): ReactNode {
                     }]
                 } 
             />
-            <IncomeExpenseCard income={50000} expense={10000}/>
+            <IncomeExpenseCard income={50000} expense={10000} investment={50000}/>
             <FinancialGoals  financialGoals={financialGoals} setFinancial={setFinancialGoals}/>
             <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } refObj={incomeExpenseFormRef}/>
             <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} refObj={updateCategoryFormRef} />

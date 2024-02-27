@@ -185,4 +185,5 @@ export interface TableProps {
 export interface IncomeExpenseCard {
     income: number;
     expense: number;
+    investment: number;
 }
