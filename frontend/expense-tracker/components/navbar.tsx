@@ -201,7 +201,7 @@ export function SubNav({navItems}: SubNavProps): ReactNode {
                 {
                     navItems.map((nav, index) => <div key={index}>
                         <button
-                            className="text-black rounded-md hover:font-bold focus:font-bold focus:text-blue-700"
+                            className="text-black rounded-md hover:font-bold"
                             onClick={()=> {nav.onCloseButton(true)}}
                             key={index}
                         >
