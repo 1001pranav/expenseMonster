@@ -1,4 +1,4 @@
-import {ReactNode, RefObject} from "react";
+import {Dispatch, ReactNode, RefObject, SetStateAction} from "react";
 import { INPUT_TYPE } from "./constant";
 import { ChartType } from "chart.js";
 
@@ -160,3 +160,25 @@ export interface AddFinancialGoal {
     goalAchieved: 'true' | 'false';
     description: string;
 }
+
+export interface FinancialGoals extends AddFinancialGoal {
+    id: number;
+}
+
+export interface FinancialGoalsTableProps {
+    financialGoals: FinancialGoals[];
+    setFinancial: Dispatch<SetStateAction<FinancialGoals[]>>
+}
+
+export interface TableProps {
+    columnNames: string[];
+    caption: string;
+    tableClassName: string;
+    captionClassName: string;
+    tDRowClassName: string;
+    tHeadClassName: string;
+    tDClassName: string;
+    data: any[];
+    rowClick: ()=>void;
+}
+

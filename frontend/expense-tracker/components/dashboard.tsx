@@ -5,15 +5,39 @@ import {AddFinancialGoals, AddIncomeExpense, UpdateBills, UpdateCategory} from '
 import PieChart from "./graph/pieChart";
 import BarChart from "./graph/barChart";
 import TransactionTable from "./transaction";
-import { Transaction } from "@/constant/interfaces";
+import { FinancialGoals as financialGoalsInterface, Transaction } from "@/constant/interfaces";
 import { ReactNode, useEffect, useRef, useState, RefObject } from "react";
 import { SubNav } from "./navbar";
+import FinancialGoals from "./financialGoal";
 
 export default function Dashboard(): ReactNode {
     const [isIncomeExpensePopupOpen, setIsAddPopupOpen] = useState(false);
+
     const [isCategoryUpdatePopupOpen, setIsCategoryUpdatePopupOpen] = useState(false);
+
     const [isBillsUpdatePopupOpen, setIsBillsUpdatePopupOpen] = useState(false);
+
     const [isFinancialGoalsPopupOpen, setIsFinancialGoalsPopupOpen] = useState(false);
+
+    const [financialGoals, setFinancialGoals] = useState<financialGoalsInterface[]>([{
+        id: 1,
+        title: 'Goal 1',
+        description: 'Lorem ipsum dolor sit, amet consectetur adipisicing elit. Neque officia magnam at. Dolorum, perferendis facere rerum optio quaerat corporis accusantium quos cumque laborum nulla harum eius aliquid vel quisquam deserunt.',
+        amount: 1000,
+        goalAchieved: 'false'
+    }, {
+        id: 2,
+        title: 'Goal #2',
+        description: 'Save for learn data',
+        amount: 24000,
+        goalAchieved: 'true'
+    }, {
+        id: 3,
+        title: 'Goal #3',
+        description: 'Save for buy JBL Speakers',
+        amount: 7000,
+        goalAchieved: 'false'
+    }]);
     
     const incomeExpenseFormRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
     const updateCategoryFormRef: RefObject<HTMLDivElement> = useRef<HTMLDivElement>(null);
@@ -57,11 +81,12 @@ export default function Dashboard(): ReactNode {
                         title: "Add or Update Bills",
                         onCloseButton: setIsBillsUpdatePopupOpen
                     },{
-                        title: "Financial Goal",
+                        title: "Add Financial Goal",
                         onCloseButton: setIsFinancialGoalsPopupOpen
                     }]
                 } 
             />
+            <FinancialGoals  financialGoals={financialGoals} setFinancial={setFinancialGoals}/>
             <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } refObj={incomeExpenseFormRef}/>
             <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} refObj={updateCategoryFormRef} />
             <UpdateBills isOpen={isBillsUpdatePopupOpen} onClose={() => setIsBillsUpdatePopupOpen(false)} refObj={addBillsFormRef}/>
