@@ -9,11 +9,12 @@ import { FinancialGoals as financialGoalsInterface, Transaction } from "@/consta
 import { ReactNode, useEffect, useRef, useState, RefObject } from "react";
 import { SubNav } from "./navbar";
 import FinancialGoals from "./financialGoal";
-import incomeExpenseCard from "./incomeExpenseCard";
 import IncomeExpenseCard from "./incomeExpenseCard";
 
 export default function Dashboard(): ReactNode {
     const [isIncomeExpensePopupOpen, setIsAddPopupOpen] = useState(false);
+
+    const [isFormCompleted, setFormCompleted] = useState(false);
 
     const [isCategoryUpdatePopupOpen, setIsCategoryUpdatePopupOpen] = useState(false);
 
@@ -60,6 +61,16 @@ export default function Dashboard(): ReactNode {
         return () => document.removeEventListener('keydown', handleKeyDown)
     }, []);
     
+    useEffect(()=> {
+        if (isFormCompleted) {
+            setIsAddPopupOpen(false);
+            setIsCategoryUpdatePopupOpen(false);
+            setIsBillsUpdatePopupOpen(false);
+            setIsFinancialGoalsPopupOpen(false);    
+        }
+        setFormCompleted(false);
+    }, [isFormCompleted]);
+
     const barChartBillsLabel: string[]= ["foods", "health", "utils","Entertainment", "bills"];
     const expenseData: number[] = [25000, 13000, 12000, 13000, 15000];
     const incomeData: number[] = [50000, 45000, 15000, 16000, 15000];
@@ -90,10 +101,10 @@ export default function Dashboard(): ReactNode {
             />
             <IncomeExpenseCard income={50000} expense={10000} investment={50000}/>
             <FinancialGoals  financialGoals={financialGoals} setFinancial={setFinancialGoals}/>
-            <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } refObj={incomeExpenseFormRef}/>
-            <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} refObj={updateCategoryFormRef} />
-            <UpdateBills isOpen={isBillsUpdatePopupOpen} onClose={() => setIsBillsUpdatePopupOpen(false)} refObj={addBillsFormRef}/>
-            <AddFinancialGoals isOpen={isFinancialGoalsPopupOpen} onClose={() => setIsFinancialGoalsPopupOpen(false)} refObj={addBillsFormRef} />
+            <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } refObj={incomeExpenseFormRef} isSubmitted={setFormCompleted} />
+            <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} refObj={updateCategoryFormRef} isSubmitted={setFormCompleted} />
+            <UpdateBills isOpen={isBillsUpdatePopupOpen} onClose={() => setIsBillsUpdatePopupOpen(false)} refObj={addBillsFormRef} isSubmitted={setFormCompleted} />
+            <AddFinancialGoals isOpen={isFinancialGoalsPopupOpen} onClose={() => setIsFinancialGoalsPopupOpen(false)} refObj={addBillsFormRef} isSubmitted={setFormCompleted}  />
             <div className="flex flex-wrap">
                 <div className="w-full sm:w-1/2 md:w-1/4 lg:w-1/4 xl:w-1/4 p-4">
                     <PieChart

@@ -37,10 +37,19 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         date: new Date().toString(),
         type: "Income"
     });
+
     const formSubmission:(e: any) => void = (e) => {
-            console.log(incomeExpense);
-            e.preventDefault();
-        };
+        console.log(incomeExpense);
+        e.preventDefault();
+        setIncomeExpense({
+            amount: 0,
+            category: "",
+            date: new Date().toString(),
+            type: "Income"
+        });
+        props.isSubmitted(true);
+    };
+
     const optionsGroup: React.ReactNode = <>
         {
             OptionWithOptGroup({optName: "Income", options: ["Salary", "Others"]})
@@ -122,6 +131,14 @@ export function UpdateCategory(props: formsForPopUpProps): React.ReactNode {
         const formSubmission:(e: any) => void = (e) => {
             console.log(categoryData);
             e.preventDefault();
+            setCategory({
+                categoryID: 0,
+                name: "",
+                amount: 0,
+                type: "Income"
+            })
+            props.isSubmitted(true);
+
         };
 
         const options: ReactNode = <SelectOptions  options={["--New Category--","salary", "Food"]} />
@@ -151,7 +168,7 @@ export function UpdateCategory(props: formsForPopUpProps): React.ReactNode {
                 className="block w-1/2 rounded-md border-0 p-2 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 text-sm leading-6"  
                 value={categoryData.amount}
                 name="name"
-                handleInput={(e)=> setCategory({...categoryData, name: e.target.value})}
+                handleInput={(e)=> setCategory({...categoryData, amount: e.target.value})}
             />
             <div className="flex items-center w-full">
                 <InputLable 
@@ -199,10 +216,20 @@ export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
         frequencies: "NEVER",
         description: ""
     });
+
     const formSubmission:(e: any) => void = (e) => {
-            console.log(incomeExpense);
-            e.preventDefault();
-        };
+        console.log(incomeExpense);
+        e.preventDefault();
+        setIncomeExpense({
+            amount: 0,
+            billsID: 0,
+            name: "",
+            frequencies: "NEVER",
+            description: ""
+        });
+        props.isSubmitted(true);
+    };
+
     const options: React.ReactNode = <SelectOptions options={Object.keys(FREQUENCY_TYPE)} />
 
     const Form: React.ReactNode = <form 
@@ -267,8 +294,15 @@ export function AddFinancialGoals(props: formsForPopUpProps): React.ReactNode {
         description: ""
     });
     const formSubmission:(e: any) => void = (e) => {
-            e.preventDefault();
-        };
+        e.preventDefault();
+        setIncomeExpense({
+            amount: 0,
+            title: "",
+            goalAchieved: 'false',
+            description: ""
+        });
+        props.isSubmitted(true)
+    };
     const options: React.ReactNode = <SelectOptions options={Object.keys(FREQUENCY_TYPE)} />
 
     const Form: React.ReactNode = <form 
