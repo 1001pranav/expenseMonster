@@ -199,7 +199,7 @@ export function SubNav({navItems}: SubNavProps): ReactNode {
         return <div className='max-w-7xl m-auto shadow py-2'>
             <div className="h-auto w-auto flex flex-row p-1 m-1">
                 {
-                    navItems.map((nav, index) => <>
+                    navItems.map((nav, index) => <div key={index}>
                         <button
                             className="text-black rounded-md hover:font-bold focus:font-bold focus:text-blue-700"
                             onClick={()=> {nav.onCloseButton(true)}}
@@ -208,7 +208,7 @@ export function SubNav({navItems}: SubNavProps): ReactNode {
                             {nav.title}
                         </button>
                         <span key={index + navItems.length} className='px-1 font-bold'>/</span>
-                    </>)
+                    </div>)
                 }
             </div>
         </div>
