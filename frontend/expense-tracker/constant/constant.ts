@@ -79,3 +79,14 @@ export const NAV_LINKS : NAV_ITEMS_OBJ = {
 
 export const LOGIN_PATH = "/login";
 
+export enum FREQUENCY {
+    "NEVER",
+    "DAY", 
+    "WEEK",
+    "MONTH",
+    "YEAR",
+    "HALF-YEARLY",
+    "YEARLY",
+    "QUARTERLY",
+    "OTHERS"
+}

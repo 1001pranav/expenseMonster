@@ -10,6 +10,7 @@ import { ReactNode, useEffect, useRef, useState, RefObject } from "react";
 import { SubNav } from "./navbar";
 import FinancialGoals from "./financialGoal";
 import IncomeExpenseCard from "./incomeExpenseCard";
+import { FREQUENCY } from "@/constant/constant";
 
 export default function Dashboard(): ReactNode {
     const [isIncomeExpensePopupOpen, setIsAddPopupOpen] = useState(false);
@@ -168,14 +169,14 @@ export default function Dashboard(): ReactNode {
                             {
                                 billsID: 0,
                                 name: "Home Rent",
-                                frequencies: 'MONTH',
+                                frequencies: FREQUENCY.MONTH,
                                 amount: 10000,
                                 description: "Monthly rent"
                             },
                             {
                                 billsID: 1,
                                 name: "Electricity",
-                                frequencies: 'MONTH',
+                                frequencies: FREQUENCY.MONTH,
                                 amount: 1000,
                                 description: "Monthly electricity bills"
                             },

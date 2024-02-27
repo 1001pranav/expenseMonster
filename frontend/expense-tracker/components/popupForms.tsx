@@ -1,7 +1,7 @@
 import { AddFinancialGoal, Bills, CategoryInput, IncomeExpenseInput, PopupFormsProps, formsForPopUpProps } from "@/constant/interfaces";
 import React, { ReactNode, useState } from "react";
 import Inputs, {InputLable, OptionWithOptGroup, LabelSelectTag, SelectOptions} from "@/components/input";
-import { FREQUENCY_TYPE, INPUT_TYPE } from "@/constant/constant";
+import { FREQUENCY_TYPE, INPUT_TYPE, FREQUENCY } from "@/constant/constant";
 
 export default function PopUpForms(popupDataProps: PopupFormsProps): React.ReactNode {
     try {
@@ -213,7 +213,7 @@ export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
         amount: 0,
         billsID: 0,
         name: "",
-        frequencies: "NEVER",
+        frequencies: FREQUENCY.NEVER,
         description: ""
     });
 
@@ -224,7 +224,7 @@ export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
             amount: 0,
             billsID: 0,
             name: "",
-            frequencies: "NEVER",
+            frequencies: FREQUENCY.NEVER,
             description: ""
         });
         props.isSubmitted(true);

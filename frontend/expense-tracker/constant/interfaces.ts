@@ -1,5 +1,5 @@
 import {Dispatch, ReactNode, RefObject, SetStateAction} from "react";
-import { INPUT_TYPE } from "./constant";
+import { FREQUENCY, INPUT_TYPE } from "./constant";
 import { ChartType } from "chart.js";
 
 export interface INPUT_COMPONENT {
@@ -82,6 +82,7 @@ export interface formsForPopUpProps {
     isOpen: boolean;
     onClose: () => void;
     refObj: RefObject<HTMLDivElement>
+    isSubmitted:  Dispatch<SetStateAction<boolean>>;
 }
 
 export interface IncomeExpenseInput {
@@ -136,7 +137,7 @@ export interface CategoryTransactionProps {
 export interface Bills {
     billsID: number;
     name: string;
-    frequencies: "NEVER"| "DAY" | "WEEK" | "MONTH" | "YEAR" | "HALF-YEARLY" | "YEARLY" | "QUARTERLY";
+    frequencies: FREQUENCY;
     amount: number;
     description: string;
 }
