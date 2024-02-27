@@ -21,8 +21,11 @@ export default function Inputs(inputProps : INPUT_COMPONENT): ReactNode {
 
 export function InputLable(lableInputs: LABLLED_INPUT): ReactNode {
     return (
-        <label className={lableInputs.lableClassName}>
-            {lableInputs.lableName}
+        <>
+            <label className={lableInputs.lableClassName}>
+                {lableInputs.lableName} 
+            </label>
+            
             <Inputs 
                 className={lableInputs.className} 
                 name={lableInputs.name} 
@@ -31,7 +34,7 @@ export function InputLable(lableInputs: LABLLED_INPUT): ReactNode {
                 value={lableInputs.value}
                 handleInput={lableInputs.handleInput}
             />
-        </label>
+        </>
     )
 }
 

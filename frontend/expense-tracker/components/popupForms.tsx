@@ -88,7 +88,7 @@ const Form: React.ReactNode = <form
             value={incomeExpense.type}
         />
         <InputLable 
-            lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-auto"
+            lableClassName="block text-sm font-medium leading-6 text-gray-900 p-2 m-2"
             lableName="Expense"
             inputType={INPUT_TYPE.RADIO}
             name="type"
@@ -171,7 +171,6 @@ export function UpdateCategory(props: formsForPopUpProps): React.ReactNode {
                     className="form-radio text-indigo-600 h-5 w-5 "
                     value={categoryData.type}
                     handleInput={(e)=> setCategory( { ...categoryData, type: 'Category' })}
-
                 />
             </div>
             <div className="flex items-center justify-center">

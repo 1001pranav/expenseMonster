@@ -196,8 +196,8 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
 
 export function SubNav({navItems}: SubNavProps): ReactNode {
     try {
-        return <div className='max-w-7xl mx-auto'>
-            <div className="h-auto w-auto flex flex-row p-1 m-1 bg-gray-100">
+        return <div className='max-w-7xl m-auto shadow py-2'>
+            <div className="h-auto w-auto flex flex-row p-1 m-1">
                 {
                     navItems.map(nav => <>
                         <button
