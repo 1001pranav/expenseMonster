@@ -182,3 +182,7 @@ export interface TableProps {
     rowClick: ()=>void;
 }
 
+export interface IncomeExpenseCard {
+    income: number;
+    expense: number;
+}

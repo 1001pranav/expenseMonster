@@ -9,6 +9,8 @@ import { FinancialGoals as financialGoalsInterface, Transaction } from "@/consta
 import { ReactNode, useEffect, useRef, useState, RefObject } from "react";
 import { SubNav } from "./navbar";
 import FinancialGoals from "./financialGoal";
+import incomeExpenseCard from "./incomeExpenseCard";
+import IncomeExpenseCard from "./incomeExpenseCard";
 
 export default function Dashboard(): ReactNode {
     const [isIncomeExpensePopupOpen, setIsAddPopupOpen] = useState(false);
@@ -86,6 +88,7 @@ export default function Dashboard(): ReactNode {
                     }]
                 } 
             />
+            <IncomeExpenseCard income={50000} expense={10000}/>
             <FinancialGoals  financialGoals={financialGoals} setFinancial={setFinancialGoals}/>
             <AddIncomeExpense isOpen={isIncomeExpensePopupOpen} onClose={() => setIsAddPopupOpen(false) } refObj={incomeExpenseFormRef}/>
             <UpdateCategory isOpen={isCategoryUpdatePopupOpen} onClose={() => setIsCategoryUpdatePopupOpen(false)} refObj={updateCategoryFormRef} />
