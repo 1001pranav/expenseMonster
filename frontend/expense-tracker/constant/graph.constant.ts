@@ -1,6 +1,7 @@
 import { GRAPH_INTERFACE } from "./interfaces";
 
 export const DETAILED_PIE : GRAPH_INTERFACE  = {
+    graphType: "pie",
     // Labels for pie charts 
     label: ['Income Salary', 'Income Others', 'Expense others', 'Expense Credit Card', 'Expense Bills'],
     // Title for pie charts
@@ -18,6 +19,7 @@ export const DETAILED_PIE : GRAPH_INTERFACE  = {
 };
 
 export const INCOME_EXPENSE: GRAPH_INTERFACE = {
+    graphType: "bar",
     label: ['Income', 'Expense'],
     titleText: 'Income and Expenses details',
     backgroundColor: [
