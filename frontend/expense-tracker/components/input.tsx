@@ -4,7 +4,6 @@ import { ReactNode } from "react";
 
 export default function Inputs(inputProps : INPUT_COMPONENT): ReactNode {
 
-
     const required = inputProps?.required ? true : false;
     return (
         <input 
@@ -22,7 +21,7 @@ export default function Inputs(inputProps : INPUT_COMPONENT): ReactNode {
 export function InputLable(lableInputs: LABLLED_INPUT): ReactNode {
     return (
         <>
-            <label className={lableInputs.lableClassName}>
+            <label className={lableInputs.lableClassName} htmlFor={lableInputs.name}>
                 {lableInputs.lableName} 
             </label>
             
@@ -48,12 +47,14 @@ export function LabelSelectTag({
 ): ReactNode {
     //selectName: string, options: ReactNode): ReactNode {
     return (
-        <label className="block" onChange={handleInput}>
-            <span className="text-gray-700">{selectName}</span>
-            <select name={formName} className={className}>
+        <>
+            <label className="block" htmlFor={formName} >
+                <span className="text-gray-700">{selectName}</span>
+            </label>
+            <select name={formName} onChange={handleInput} className={className}>
                 {options}
             </select>
-        </label>
+        </>
     )
 
 }
