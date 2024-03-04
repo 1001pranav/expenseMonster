@@ -2,9 +2,10 @@
 import { GRAPH_INTERFACE } from '@/constant/interfaces';
 import Chart, { ChartConfiguration } from 'chart.js/auto';
 import React, { useRef, useEffect, LegacyRef, forwardRef } from 'react';
+import "chartjs-plugin-datalabels"
 
 const PieChart = forwardRef<HTMLCanvasElement, GRAPH_INTERFACE>((props, ref) => {
-   // Creating a reference for the canvas element
+    // Creating a reference for the canvas element
     const canvas: LegacyRef<HTMLCanvasElement> = useRef<HTMLCanvasElement>(null);
 
     // useEffect hook to create the chart when the component mounts

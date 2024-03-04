@@ -77,7 +77,7 @@ export function CategoryTransaction(props: CategoryTransactionProps): ReactNode 
 
     return (
       <div className="overflow-x-auto overflow-y-auto ">
-        <table className="table-auto lg:w-3/4 md:w-full sm:w-full">
+        <table className="table-auto lg:w-1/3 md:w-full sm:w-full">
           <caption className="bg-gray-200 text-gray-700 text-center py-2 font-bold">
             {props.tableHead}
           </caption>
@@ -138,7 +138,7 @@ export function BillsTransaction({bills, caption}: {bills: Bills[], caption: str
     let totalExpenses:number = 0;
   
     return (
-      <table className="table-auto lg:w-1/2 md:w-full sm:w-full">
+      <table className="table-auto lg:w-2/3 md:w-full sm:w-full">
           <caption className="bg-gray-200 text-gray-700 text-center py-2 font-bold">
             {caption}
           </caption>

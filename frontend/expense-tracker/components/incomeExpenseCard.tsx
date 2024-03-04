@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 export default function (props: IncomeExpenseCard): ReactNode{
     try {
 
-        return <div className="flex justify-center max-w-7xl flex-wrap p-3 rounded-lg">
+        return <div className="flex m-auto justify-between flex-wrap p-3 container rounded-lg">
             <div className="left-0  bg-green-200 p-3 mx-5 w-1/5 rounded-lg">
                 <div className="font-bold text-center text-lg">Income</div>
                 <div className=" text-center ">{props.income.toLocaleString()}</div>

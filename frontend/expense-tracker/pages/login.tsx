@@ -56,10 +56,16 @@ export default function Login() {
                 />
 
                 {/* Rendering an Inputs component for the submit button */}
-                <Inputs 
-                    inputType={INPUT_TYPE.SUBMIT} 
-                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
-                    name="Login" />
+                <div className="flex justify-between py-4">
+                    <Inputs 
+                        inputType={INPUT_TYPE.SUBMIT} 
+                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-2"
+                        name="Login" 
+                    />
+                    <button className="text-sm hover:text-sky-500">
+                        Forgot Password?
+                    </button>
+                </div>
             </form>
         )
     } catch (error) {

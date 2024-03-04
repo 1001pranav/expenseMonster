@@ -149,7 +149,7 @@ export default function Dashboard(): ReactNode {
                 <TransactionTable Transactions={transactions} />
                 </div>
             </div>
-            <div className="flex flex-wrap mx-auto container p-4">
+            <div className="flex flex-wrap mx-auto justify-between container p-4">
                 
                 <CategoryTransaction 
                         categories={[{

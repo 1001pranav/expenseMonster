@@ -110,7 +110,7 @@ export function Navigation(navProps: NAV_COMPONENT): ReactNode {
 
         return (
             <nav className="bg-gray-800 py-4 mb-8">
-                <div className="max-w-7xl mx-auto px-4 flex justify-between items-center">
+                <div className="mx-auto px-4 flex justify-between items-center">
                     <div className="flex items-center">
                         <h1 className="text-white text-lg font-semibold">Expenses Monster</h1>
                     </div>

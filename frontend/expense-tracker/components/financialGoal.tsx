@@ -74,7 +74,7 @@ export default function FinancialGoalComponent({financialGoals, setFinancial}: F
     }
 
     return (
-        <div className='max-w-7xl mx-auto py-4 mb-8 '>
+        <div className='max-w-7xl m-auto pt-4 mb-8 '>
             <div className={`flex justify-between p-4 m-4 ${isDisplayHidden? 'shadow':'shadow-lg'}`} onClick={()=>setDisplayHiddenStatus(!isDisplayHidden)}>
                 <span className='text-left font-bold text-lg'>Financial Goals</span>
                 <div className="right-0">
