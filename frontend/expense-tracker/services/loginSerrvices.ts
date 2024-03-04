@@ -1,7 +1,5 @@
-import { LOGIN_PATH } from "@/constant/constant";
-import { useRouter } from "next/router";
 
-export function VerifyLogin(isLoggedIn:boolean = false): boolean | string {
+export function VerifyLogin(): boolean | string {
     try {
         let accessToken: string | null = null;
         if (typeof window !== "undefined") {
@@ -9,7 +7,7 @@ export function VerifyLogin(isLoggedIn:boolean = false): boolean | string {
             accessToken = localStorage.getItem('access_token');
         }
         // Redirecting to login path as accessToken is not found.
-        if (!isLoggedIn || !accessToken || accessToken.length === 0) {
+        if ( !accessToken || accessToken.length === 0) {
             return "false";
         }
         return accessToken;

@@ -6,12 +6,12 @@ import { Links } from "./links";
 import { NAV_COMPONENT, NAV_ITEMS, SubNavProps } from "@/constant/interfaces";
 import { NAV_LINKS } from "@/constant/constant";
 
-export function Navigation(navProps: NAV_COMPONENT): ReactNode {
+export function Navigation(): ReactNode {
     try {
         const NavBarLinks: NAV_ITEMS[] = [];
         const [isOpen, setIsOpen] = useState<boolean>(false);
 
-        const loginVerification: boolean | string = VerifyLogin(navProps.is_logged);
+        const loginVerification: boolean | string = VerifyLogin();
         
         if (!loginVerification) {
             switch (usePathname()) {
