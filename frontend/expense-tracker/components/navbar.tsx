@@ -1,9 +1,9 @@
 import { ReactNode, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import { VerifyLogin } from "@/services/loginSerrvices";
+import { VerifyLogin } from "@/services/loginServices";
 import { Links } from "./links";
-import { NAV_COMPONENT, NAV_ITEMS, SubNavProps } from "@/constant/interfaces";
+import { NAV_ITEMS, SubNavProps } from "@/constant/interfaces";
 import { NAV_LINKS } from "@/constant/constant";
 
 export function Navigation(): ReactNode {
