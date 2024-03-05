@@ -10,6 +10,7 @@ export enum INPUT_TYPE {
     "RADIO",
     "DL",
     "TEXTAREA",
+    "CHECKBOX"
 };
 
 export const INPUTS :string[] = [
@@ -22,9 +23,10 @@ export const INPUTS :string[] = [
     "radio",
     "date",
     "textarea",
+    "checkbox"
 ];
 
-export const FREQUENCY_TYPE: {} = {
+export const FREQUENCY_TYPE: { [key: string]: string } = {
     "NEVER": "Never",
     "DAY": "Day",
     "WEEK": "Week",
@@ -77,6 +79,13 @@ export const NAV_LINKS : NAV_ITEMS_OBJ = {
     }
 }
 
+export const INVESTMENT_TYPE: { [key: string]: string } = {
+    "STOCK": "Stock",
+    "MUTUAL_FUND": "Mutual funds",
+    "FD": "FD/RD",
+    "GOLD": "Gold",
+    "OTHERS": "Others"
+} 
 export const LOGIN_PATH = "/login";
 
 export enum FREQUENCY {
@@ -84,12 +93,20 @@ export enum FREQUENCY {
     "DAY", 
     "WEEK",
     "MONTH",
-    "YEAR",
     "HALF-YEARLY",
     "YEARLY",
     "QUARTERLY",
     "OTHERS"
 }
+
+export enum INVESTMENTS {
+    STOCKS,
+    MUTUAL_FUND,
+    FD,
+    GOLD,
+    OTHERS,
+}
+
 
 export const ENV_TYPE = {
     DEV: "DEV",
