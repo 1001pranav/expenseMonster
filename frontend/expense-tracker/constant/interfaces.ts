@@ -1,6 +1,7 @@
 import {Dispatch, ReactNode, RefObject, SetStateAction} from "react";
-import { FREQUENCY, INPUT_TYPE } from "./constant";
+import { FREQUENCY, INPUT_TYPE, INVESTMENTS } from "./constant";
 import { ChartType } from "chart.js";
+import { LoginResponseData } from "./api";
 
 export interface INPUT_COMPONENT {
     inputType: INPUT_TYPE; 
@@ -45,7 +46,6 @@ export interface NAV_ITEMS_OBJ {
 }
 
 export interface SIGNUP_COMPONENTS {
-    username: string;
     password: string;
     cPassword: string;
     email: string;
@@ -187,4 +187,24 @@ export interface IncomeExpenseCard {
     income: number;
     expense: number;
     investment: number;
+}
+
+export interface AddInvestment {
+    investmentName: string | undefined;
+    investmentAmount: number;
+    autoPay: boolean;
+    frequency: FREQUENCY;
+    investmentClosed: boolean;
+    deductions: number;
+    investmentType: INVESTMENTS,
+}
+
+export interface ErrorCard {
+    message: string;
+}
+
+export interface LoginAPIResponse {
+    loginData?: LoginResponseData;
+    errorMessage?: string;
+    error: boolean
 }

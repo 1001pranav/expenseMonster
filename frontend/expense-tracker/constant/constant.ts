@@ -90,3 +90,10 @@ export enum FREQUENCY {
     "QUARTERLY",
     "OTHERS"
 }
+
+export const ENV_TYPE = {
+    DEV: "DEV",
+    PROD: "PROD"
+}
+
+export const ENV = ENV_TYPE.DEV; 
