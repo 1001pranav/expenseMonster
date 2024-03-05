@@ -8,7 +8,7 @@ export function VerifyLogin(): boolean | string {
         }
         // Redirecting to login path as accessToken is not found.
         if ( !accessToken || accessToken.length === 0) {
-            return "false";
+            return false;
         }
         return accessToken;
     } catch (error) {
