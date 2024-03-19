@@ -4,7 +4,7 @@ import {LOGIN} from "@/constant/interfaces";
 import { login } from "@/services/apiServices";
 import { addLogin } from "@/services/loginServices";
 
-import {useState} from "react";
+import {FormEvent, useState} from "react";
 import { useRouter } from "next/router";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -18,7 +18,7 @@ export default  function Login() {
         });
 
         // Defining a function named submitingForm that handles form submission
-        const submittingForm: (event: any) => void = async (event) => {
+        const submittingForm: (event: FormEvent<HTMLFormElement>) => void = async (event) => {
             // Preventing the default form submission behavior
             event.preventDefault();
 

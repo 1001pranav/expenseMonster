@@ -1,5 +1,5 @@
 import { AddFinancialGoal, Bills, CategoryInput, IncomeExpenseInput, PopupFormsProps, formsForPopUpProps } from "@/constant/interfaces";
-import React, { ReactNode, useState } from "react";
+import React, { FormEvent, ReactNode, useState } from "react";
 import Inputs, {InputLable, OptionWithOptGroup, LabelSelectTag, SelectOptions} from "@/components/input";
 import { FREQUENCY_TYPE, INPUT_TYPE, FREQUENCY } from "@/constant/constant";
 
@@ -38,7 +38,7 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         type: "Income"
     });
 
-    const formSubmission:(e: any) => void = (e) => {
+    const formSubmission:(e: FormEvent<HTMLFormElement>) => void = (e) => {
         console.log(incomeExpense);
         e.preventDefault();
         setIncomeExpense({
@@ -58,7 +58,8 @@ export function AddIncomeExpense(props:formsForPopUpProps): React.ReactNode {
         }
     </>;
 const Form: React.ReactNode = <form
-    className="space-y-4 flex flex-col" 
+        className="space-y-4 flex flex-col" 
+        onSubmit={formSubmission}
     >
 
     <LabelSelectTag 
@@ -217,7 +218,7 @@ export function UpdateBills(props: formsForPopUpProps): React.ReactNode {
         description: ""
     });
 
-    const formSubmission:(e: any) => void = (e) => {
+    const formSubmission:(e: FormEvent<HTMLFormElement>) => void = (e) => {
         console.log(incomeExpense);
         e.preventDefault();
         setIncomeExpense({
@@ -293,7 +294,7 @@ export function AddFinancialGoals(props: formsForPopUpProps): React.ReactNode {
         goalAchieved: 'false',
         description: ""
     });
-    const formSubmission:(e: any) => void = (e) => {
+    const formSubmission:(e: FormEvent<HTMLFormElement>) => void = (e) => {
         e.preventDefault();
         setIncomeExpense({
             amount: 0,

@@ -18,7 +18,7 @@ export default function Register(): ReactNode {
             email: ""
         });
 
-        const submitForm: (e: FormEvent)=> void = async (e) => {
+        const submitForm: (e: FormEvent<HTMLFormElement>)=> void = async (e) => {
             e.preventDefault();
 
             if (!signUpDetails.email || signUpDetails.email === "") {
