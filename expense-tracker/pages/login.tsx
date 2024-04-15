@@ -51,7 +51,7 @@ export default  function Login() {
         return (
             <form 
                 // Setting the maximum width of the form to be 576px and centering it
-                className="max-w-sm mx-auto bg-white shadow-md rounded px-6 py-6"
+                className="max-w-sm mx-auto bg-white shadow-md rounded px-6 py-6 t-auto"
                 // Attaching the submittingForm function as the onSubmit event handler for the form
                 onSubmit={submittingForm}
             >   
