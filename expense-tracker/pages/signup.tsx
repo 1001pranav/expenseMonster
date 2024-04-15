@@ -5,7 +5,7 @@ import { register } from "@/services/apiServices";
 import { useRouter } from "next/router";
 
 import { FormEvent, ReactNode, useState } from "react";
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 export default function Register(): ReactNode {
@@ -51,7 +51,6 @@ export default function Register(): ReactNode {
             <div className="max-w-md mx-auto bg-white shadow-md rounded px-8 py-6 ">
                 <h2 className="text-xl font-semibold mb-4 text-center">Register</h2>
                 <form onSubmit={submitForm}>
-                    <ToastContainer />
                     <div className="mb-4">
                         <InputLable 
                             lableClassName="block text-gray-700 text-sm font-bold mb-2" 

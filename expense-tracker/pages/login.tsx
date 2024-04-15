@@ -6,7 +6,7 @@ import { addLogin } from "@/services/loginServices";
 
 import {FormEvent, useState} from "react";
 import { useRouter } from "next/router";
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 export default  function Login() {
@@ -55,7 +55,6 @@ export default  function Login() {
                 // Attaching the submittingForm function as the onSubmit event handler for the form
                 onSubmit={submittingForm}
             >   
-                <ToastContainer  />
 
                 <h3 
                     // Setting the text of the h3 element to be "Login form"
