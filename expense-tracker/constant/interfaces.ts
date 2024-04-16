@@ -11,6 +11,8 @@ export interface INPUT_COMPONENT {
     handleInput?: (event: any) => any;
     placeholders?: string
     required?: boolean
+    min?: number
+    max?: number
 }
 
 export interface LABLLED_INPUT extends INPUT_COMPONENT {
@@ -49,6 +51,17 @@ export interface SIGNUP_COMPONENTS {
     password: string;
     cPassword: string;
     email: string;
+}
+
+export interface FORGOT_PASSWORD_COMPONENTS {
+    email: string;
+}
+
+export interface RESET_PASSWORD_COMPONENTS {
+    email: string;
+    otp: number;
+    password: string;
+    cPassword: string;
 }
 
 export interface GRAPH_INTERFACE {
@@ -203,8 +216,3 @@ export interface ErrorCard {
     message: string;
 }
 
-export interface LoginAPIResponse {
-    loginData?: LoginResponseData;
-    errorMessage?: string;
-    error: boolean
-}

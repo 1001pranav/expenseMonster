@@ -10,7 +10,8 @@ export enum INPUT_TYPE {
     "RADIO",
     "DL",
     "TEXTAREA",
-    "CHECKBOX"
+    "CHECKBOX",
+    "BUTTON"
 };
 
 export const INPUTS :string[] = [
@@ -23,7 +24,8 @@ export const INPUTS :string[] = [
     "radio",
     "date",
     "textarea",
-    "checkbox"
+    "checkbox",
+    "button"
 ];
 
 export const FREQUENCY_TYPE: { [key: string]: string } = {
@@ -108,9 +110,9 @@ export enum INVESTMENTS {
 }
 
 
-export const ENV_TYPE = {
+export const ENV_TYPE: {[key: string]: string} = {
     DEV: "DEV",
     PROD: "PROD"
 }
 
-export const ENV = ENV_TYPE.DEV; 
+export const ENV: string = ENV_TYPE.DEV; 

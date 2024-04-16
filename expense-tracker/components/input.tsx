@@ -14,6 +14,8 @@ export default function Inputs(inputProps : INPUT_COMPONENT): ReactNode {
             required={required}
             value={inputProps.value}
             onChange={inputProps.handleInput}
+            min={inputProps?.min}
+            max={inputProps?.max}
         />
     )
 }

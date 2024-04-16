@@ -92,7 +92,7 @@ export default  function Login() {
                         className="bg-blue-500 hover:bg-blue-700 text-white font-bold px-3 py-2 rounded focus:outline-none focus:shadow-outline mt-2"
                         name="Login" 
                     />
-                    <button className="text-sm hover:text-sky-500" onClick={() => {router.push('/forgot')}}>
+                    <button className="text-sm hover:text-sky-500" onClick={() => {router.push('/forgot-password')}}>
                         Forgot Password?
                     </button>
                 </div>
