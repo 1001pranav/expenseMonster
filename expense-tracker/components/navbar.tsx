@@ -1,18 +1,20 @@
-import { ReactNode, useState } from "react";
+
+import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { VerifyLogin } from "@/services/loginServices";
-import { Links } from "./links";
 import { NAV_ITEMS, SubNavProps } from "@/constant/interfaces";
 import { NAV_LINKS } from "@/constant/constant";
+import Link from "next/link";
+
 
 export function Navigation(): ReactNode {
     try {
         const NavBarLinks: NAV_ITEMS[] = [];
         const [isOpen, setIsOpen] = useState<boolean>(false);
+        const [isRendered, setRendered] = useState<boolean>(false);
+        let loginVerification: boolean  = VerifyLogin();
 
-        const loginVerification: boolean | string = VerifyLogin();
-        
         if (!loginVerification) {
             switch (usePathname()) {
                 case "/":
@@ -107,90 +109,73 @@ export function Navigation(): ReactNode {
                     break;
             }
         }
-
+        useEffect(()=> {
+            setRendered(true);
+        }, []);
         return (
             <nav className="bg-gray-800 py-4 mb-8">
                 <div className="mx-auto px-4 flex justify-between items-center">
                     <div className="flex items-center">
                         <h1 className="text-white text-lg font-semibold">Expenses Monster</h1>
                     </div>
-                    <div className="hidden md:block">
-                        <ul className="flex space-x-6">
-                            {NavBarLinks.map((link, index) => (
-                            <li key={index} className={link.active ? 'text-white font-bold' : ''}>
-                                <a href={link.href} className="text-white hover:text-gray-300 relative">
-                                    {link.title}
-                                    {link?.subLinks && (
-                                        <ul className="absolute top-full left-0 bg-gray-800 p-2 mt-1 rounded shadow-lg hidden">
-                                            {link.subLinks.map((subLink, subIndex) => (
-                                                <li key={subIndex}>
-                                                    <Links 
-                                                        link={subLink.href}
-                                                        className="text-white hover:text-gray-300"
-                                                        name={subLink.title}
-                                                    />
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </a>
-                            </li>
-                            ))}
-                        </ul>
-                    </div>
-                    <div className="md:hidden">
-                        <button
-                            onClick={() => setIsOpen(!isOpen)}
-                            className="text-white hover:text-gray-300 focus:outline-none"
-                        >
-                            <svg
-                            className="h-6 w-6"
-                            fill="none"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            >
-                            {isOpen ? (
-                                <path d="M6 18L18 6M6 6l12 12" />
-                            ) : (
-                                <path d="M4 6h16M4 12h16M4 18h16" />
-                            )}
-                            </svg>
-                        </button>
-                    </div>
-                    </div>
-                    {isOpen && (
-                        <div className="md:hidden bg-gray-800">
-                            <ul className="flex flex-col space-y-4">
+                    { isRendered? <div>
+                        <div className="hidden md:block">
+                            <ul className="flex space-x-6">
                                 {NavBarLinks.map((link, index) => (
                                 <li key={index} className={link.active ? 'text-white font-bold' : ''}>
                                     <a href={link.href} className="text-white hover:text-gray-300 relative">
-                                    {link.name}
-                                    {link?.subLinks && (
-                                        <ul className="absolute top-full left-0 bg-gray-800 p-2 mt-1 rounded shadow-lg hidden">
-                                        {link.subLinks.map((subLink, subIndex) => (
-                                            <li key={subIndex}>
-                                            <a href={subLink.href} className="text-white hover:text-gray-300">
-                                                {subLink.name}
-                                            </a>
-                                            </li>
-                                        ))}
-                                        </ul>
-                                    )}
+                                        {link.title}
                                     </a>
                                 </li>
                                 ))}
                             </ul>
                         </div>
-                    )}
-                </nav>
+                        <div className="md:hidden">
+                            <button
+                                onClick={() => setIsOpen(!isOpen)}
+                                className="text-white hover:text-gray-300 focus:outline-none"
+                            >
+                                <svg
+                                className="h-6 w-6"
+                                fill="none"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                >
+                                {isOpen ? (
+                                    <path d="M6 18L18 6M6 6l12 12" />
+                                ) : (
+                                    <path d="M4 6h16M4 12h16M4 18h16" />
+                                )}
+                                </svg>
+                            </button>
+                        </div>
+                        
+                    </div>: <></>}
+                    {isOpen && (
+                            <div className="md:hidden bg-gray-800">
+                                <ul className="flex flex-col space-y-4">
+                                    {NavBarLinks.map((link, index) => (
+                                    <li key={index} className={link.active ? 'text-white font-bold' : ''}>
+                                        <a href={link.href} className="text-white hover:text-gray-300 relative">
+                                            {link.name}
+                                        </a>
+                                    </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                </div>
+                    
+            </nav>
             ); 
 
     } catch (error) {
-        console.log("Error: on NavBar", error);
+        console.error("Error: on NavBar", error);
         // throw new Error();    
+        return <></>
     }
 }
 

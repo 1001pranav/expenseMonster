@@ -1,15 +1,20 @@
 import Dashboard from "@/components/dashboard";
 import { VerifyLogin } from "@/services/loginServices";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 export default function Home(): ReactNode {
-    const isUserLoggedIn =  VerifyLogin(); 
+    let isUserLoggedIn :string | boolean = false;
+    if (typeof window !== "undefined") {
+        isUserLoggedIn = VerifyLogin()
+    }
+
+    const [isRendered, setRender] = useState<boolean>(false);
+    useEffect(()=> setRender(true))
     return (
 
         <main className={""}>
             <div className={""}>
-                
-                {isUserLoggedIn? <Dashboard />: <></>}
+                {isUserLoggedIn && isRendered? <Dashboard />: <></>}
             </div>
         </main>
     );
