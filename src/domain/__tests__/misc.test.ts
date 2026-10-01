@@ -96,4 +96,15 @@ describe('dues and reminders', () => {
     expect(reminders.find((r) => r.id.startsWith('policy:') && r.date === '2026-10-08')).toBeTruthy();
     expect(reminders.every((r) => r.date >= '2026-09-20')).toBe(true);
   });
+  it('shows one due per card even with several unpaid statements', () => {
+    const c = card();
+    const t = [
+      txn({ cardId: c.id, method: 'card', amount: 1_000_00, occurredAt: at('2026-07-10') }),
+      txn({ cardId: c.id, method: 'card', amount: 2_000_00, occurredAt: at('2026-08-10') }),
+    ];
+    const dues = computeDues({ loans: [], cards: [c], cardOverrides: [], billers: [], bills: [], policies: [], incomes: [], transactions: t }, '2026-09-20');
+    expect(dues).toHaveLength(1);
+    expect(dues[0]).toMatchObject({ amount: 3_000_00, date: '2026-08-05', state: 'overdue' });
+    expect(dues[0].subtitle).toContain('2 statements unpaid');
+  });
 });

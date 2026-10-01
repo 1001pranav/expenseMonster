@@ -49,7 +49,7 @@ export default function AddSheet() {
           <View style={{ width: 60, height: 60, borderRadius: 20, backgroundColor: `${t.color}1F`, alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name={t.icon} size={28} color={t.color} />
           </View>
-          <Txt variant="small" style={{ textAlign: 'center' }} numberOfLines={1}>
+          <Txt variant="small" style={{ textAlign: 'center', paddingHorizontal: 2 }} numberOfLines={2}>
             {t.label}
           </Txt>
         </Pressable>

@@ -86,7 +86,7 @@ export default function LoanDetail() {
             <Txt variant="caption" tone="muted">
               OUTSTANDING
             </Txt>
-            <Money value={p.outstanding} variant="h1" decimals="never" />
+            <Money value={p.outstanding} variant="h1" decimals="never" fit="narrow" />
             {p.overdueCount ? <Pill label={`${p.overdueCount} EMI overdue`} tone="expense" /> : p.payoffDate ? <Txt variant="small" tone="muted">Free by {formatMonth(monthKey(p.payoffDate))}</Txt> : null}
           </View>
         </Row>

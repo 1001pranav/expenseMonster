@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { type ComponentProps, type ReactNode } from 'react';
 import {
+  useWindowDimensions,
   ActivityIndicator,
   Pressable,
   StyleSheet,
@@ -44,9 +45,22 @@ export function Money({
   tone,
   colorBySign,
   style,
+  fit,
   ...opts
-}: { value: Paise; variant?: TypeVariant; tone?: Tone; colorBySign?: boolean; style?: StyleProp<TextStyle> } & FormatOptions) {
+}: {
+  value: Paise;
+  variant?: TypeVariant;
+  tone?: Tone;
+  colorBySign?: boolean;
+  style?: StyleProp<TextStyle>;
+  /** Switch to lakh/crore notation when the full figure won't fit (narrow phones, big numbers). */
+  fit?: 'narrow' | 'tight';
+} & FormatOptions) {
   const hidden = useStore((s) => s.settings.hideAmounts);
+  const { width } = useWindowDimensions();
+  // tight: a third of the screen (stat columns); narrow: about half (hero numbers).
+  const limit = fit === 'tight' ? (width < 400 ? 1_00_000_00 : 10_00_000_00) : fit === 'narrow' ? (width < 360 ? 10_00_000_00 : 1_00_00_000_00) : Infinity;
+  if (Math.abs(value) >= limit) opts = { ...opts, compact: true };
   const t: Tone = tone ?? (colorBySign ? (value < 0 ? 'expense' : value > 0 ? 'income' : 'default') : 'default');
   return (
     <Txt
@@ -92,8 +106,11 @@ export function Button({
   size = 'md',
   style,
   haptic = true,
+  label,
 }: {
   title: string;
+  /** Screen-reader label, required when the title is empty (icon-only). */
+  label?: string;
   onPress: () => void;
   variant?: ButtonVariant;
   icon?: IconName;
@@ -110,6 +127,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label ?? title}
       accessibilityState={{ disabled: disabled || loading }}
       disabled={disabled || loading}
       onPress={() => {
@@ -124,9 +142,11 @@ export function Button({
       ]}
     >
       {loading ? <ActivityIndicator color={fg} /> : icon ? <Ionicons name={icon} size={size === 'sm' ? 16 : 19} color={fg} /> : null}
-      <Text style={[type[size === 'sm' ? 'small' : 'bodyStrong'], { color: fg }]} numberOfLines={1}>
-        {title}
-      </Text>
+      {title ? (
+        <Text style={[type[size === 'sm' ? 'small' : 'bodyStrong'], { color: fg }]} numberOfLines={1}>
+          {title}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -315,7 +335,7 @@ export function Stat({ label, value, tone, compact }: { label: string; value: Pa
       <Txt variant="caption" tone={tone === 'inverse' ? 'inverse' : 'muted'} style={tone === 'inverse' ? { opacity: 0.75 } : undefined}>
         {label.toUpperCase()}
       </Txt>
-      <Money value={value} variant="h3" tone={tone} compact={compact} decimals="never" />
+      <Money value={value} variant="h3" tone={tone} compact={compact} decimals="never" fit="tight" />
     </View>
   );
 }

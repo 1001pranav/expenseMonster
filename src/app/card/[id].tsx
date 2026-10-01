@@ -41,7 +41,8 @@ export default function CardDetail() {
   const view = cycles.find((c) => c.statementDate === selected) ?? ledger.current;
   const viewTxns = txns.filter((t) => view.transactionIds.includes(t.id)).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   const payments = txns.filter((t) => t.cardId === card.id && t.type === 'transfer' && t.linkType === 'card' && t.status === 'confirmed');
-  const unpaid = ledger.cycles.find((c) => c.status !== 'unbilled' && c.remaining > 0);
+  const unpaidCycles = ledger.cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
+  const unpaid = unpaidCycles[0] ? { ...unpaidCycles[0], remaining: unpaidCycles.reduce((a, c) => a + c.remaining, 0) } : undefined;
   const history = ledger.cycles.slice(-6).map((c) => ({ key: c.statementDate, label: shortMonth(monthKey(c.statementDate)), values: [Math.max(c.total, 0)] }));
 
   const saveActual = async () => {
@@ -77,7 +78,7 @@ export default function CardDetail() {
             <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
               OUTSTANDING
             </Txt>
-            <Money value={ledger.outstanding} variant="h2" style={{ color: '#fff' }} />
+            <Money value={ledger.outstanding} variant="h2" style={{ color: '#fff' }} fit="tight" />
           </View>
           <View style={{ flex: 1 }}>
             <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>

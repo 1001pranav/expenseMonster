@@ -113,8 +113,8 @@ export default function Sync() {
       ) : null}
 
       <Row gap={1}>
-        <Button title="Show my QR" icon="qr-code" onPress={showQr} style={{ flex: 1 }} />
-        <Button title="Scan to join" icon="scan" variant="secondary" onPress={() => router.push('/sync/scan')} style={{ flex: 1 }} />
+        <Button title="Show QR" icon="qr-code" onPress={showQr} style={{ flex: 1 }} />
+        <Button title="Scan QR" icon="scan" variant="secondary" onPress={() => router.push('/sync/scan')} style={{ flex: 1 }} />
       </Row>
 
       <Section title="Paired phones">
@@ -141,7 +141,7 @@ export default function Sync() {
 
       <Row gap={1}>
         <Button title="Send all" icon="share-outline" variant="secondary" loading={busy === 'all'} onPress={() => send(null)} style={{ flex: 1 }} />
-        <Button title="Receive file" icon="download-outline" variant="secondary" loading={busy === 'receive'} onPress={pick} style={{ flex: 1 }} />
+        <Button title="Receive" icon="download-outline" variant="secondary" loading={busy === 'receive'} onPress={pick} style={{ flex: 1 }} />
       </Row>
 
       <Section title="When both phones changed the same entry">

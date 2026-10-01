@@ -94,7 +94,7 @@ export default function Home() {
             <Txt variant="small" tone="inverse" style={{ opacity: 0.8 }}>
               Spent this month
             </Txt>
-            <Money value={totals.expense} variant="display" tone="inverse" />
+            <Money value={totals.expense} variant="display" tone="inverse" fit="narrow" />
             <Txt variant="small" tone="inverse" style={{ opacity: 0.8 }}>
               {budgetTotal ? `of ${settings.hideAmounts ? '••••' : formatINR(budgetTotal)} budget` : 'Set budgets in Household → Budgets'}
             </Txt>

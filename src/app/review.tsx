@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 import { formatDay, isoToYMD, relativeDay } from '@/domain/dates';
 import { flagsOf } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
@@ -8,7 +8,7 @@ import { remove, update } from '@/db/repo';
 import { approveCapture, rejectCapture } from '@/data/actions';
 import { useCategoryMap, usePending, useTable, useToday } from '@/data/hooks';
 import { scanSms } from '@/services/capture';
-import { Button, Card, Chip, EmptyState, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
+import { Button, Card, Chip, EmptyState, IconButton, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
@@ -24,6 +24,7 @@ export default function Review() {
   const today = useToday();
   const [scanning, setScanning] = useState(false);
   const [cardFor, setCardFor] = useState<Transaction | null>(null);
+  const narrow = useWindowDimensions().width < 360;
 
   const scan = async () => {
     setScanning(true);
@@ -112,9 +113,10 @@ export default function Review() {
                         {(t.confidence ?? 1) < 0.7 ? <Pill label="Check amount" tone="warn" /> : null}
                       </Row>
                       <Row gap={1}>
-                        <Button title="Approve" size="sm" variant="success" icon="checkmark" onPress={() => approve(t)} style={{ flex: 1 }} />
-                        <Button title="Edit" size="sm" variant="secondary" icon="create-outline" onPress={() => router.push(`/txn/${t.id}`)} style={{ flex: 1 }} />
-                        {t.type === 'expense' ? <Button title={t.method === 'card' ? 'Card ✓' : 'Card?'} size="sm" variant="secondary" icon="card-outline" onPress={() => setCardFor(t)} /> : null}
+                        <Button title={narrow ? '' : 'Approve'} label="Approve" size="sm" variant="success" icon="checkmark" onPress={() => approve(t)} style={{ flex: 1 }} />
+                        <IconButton name="create-outline" label="Edit" filled onPress={() => router.push(`/txn/${t.id}`)} />
+                        {t.type === 'expense' ? <IconButton name={t.method === 'card' ? 'card' : 'card-outline'} label="Paid with credit card?" filled color={t.method === 'card' ? colors.primary : undefined} onPress={() => setCardFor(t)} /> : null}
+                        <IconButton name="close" label="Reject" filled onPress={() => reject(t)} />
                       </Row>
                     </View>
                   </SwipeRow>

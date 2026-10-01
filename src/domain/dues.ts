@@ -95,16 +95,19 @@ export function computeDues(input: DuesInput, today: YMD, horizonDays = 45): Due
 
   for (const card of live(input.cards)) {
     const ledger = buildCardLedger(card, tx, input.cardOverrides, today);
-    for (const c of ledger.cycles) {
-      if (c.status === 'unbilled' || c.remaining <= 0) continue;
+    // One item per card: unpaid statements are summed (payments clear the oldest first anyway).
+    const unpaid = ledger.cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
+    if (unpaid.length) {
+      const first = unpaid[0];
+      const minDue = unpaid.reduce((a, c) => a + Math.min(c.minDue, c.remaining), 0);
       items.push({
-        key: `card:${card.id}:${c.statementDate}`,
+        key: `card:${card.id}:${first.statementDate}`,
         kind: 'card',
         title: `${card.name} bill`,
-        subtitle: c.status === 'partly_paid' ? `Part paid · min ${formatINR(c.minDue)}` : `Min due ${formatINR(c.minDue)}`,
-        amount: c.remaining,
-        date: c.dueDate,
-        state: stateFor(c.dueDate, today),
+        subtitle: unpaid.length > 1 ? `${unpaid.length} statements unpaid · min ${formatINR(minDue)}` : first.status === 'partly_paid' ? `Part paid · min ${formatINR(minDue)}` : `Min due ${formatINR(minDue)}`,
+        amount: unpaid.reduce((a, c) => a + c.remaining, 0),
+        date: first.dueDate,
+        state: stateFor(first.dueDate, today),
         href: `/card/${card.id}`,
         link: { type: 'card', id: card.id },
         upiId: null,

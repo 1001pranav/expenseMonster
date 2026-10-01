@@ -55,7 +55,7 @@ export function formatINR(paise: Paise, opts: FormatOptions = {}): string {
     for (const [size, suffix] of units) {
       if (rupees >= size) {
         const v = rupees / size;
-        const text = v >= 100 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, '');
+        const text = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1).replace(/\.0$/, '') : v.toFixed(2).replace(/\.?0+$/, '');
         return `${sign}${sym}${text}${suffix}`;
       }
     }

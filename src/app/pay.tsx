@@ -54,8 +54,9 @@ export default function Pay() {
     if (due?.link?.type !== 'card') return null;
     const card = cards.find((c) => c.id === due.link!.id);
     if (!card) return null;
-    const stmt = buildCardLedger(card, txns, overrides, today).cycles.find((c) => `card:${card.id}:${c.statementDate}` === dueKey);
-    return stmt ? { total: stmt.remaining, min: Math.min(stmt.minDue, stmt.remaining) } : null;
+    const unpaid = buildCardLedger(card, txns, overrides, today).cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
+    if (!unpaid.length) return null;
+    return { total: unpaid.reduce((a, c) => a + c.remaining, 0), min: unpaid.reduce((a, c) => a + Math.min(c.minDue, c.remaining), 0) };
   }, [due, cards, txns, overrides, today, dueKey]);
 
   const [amount, setAmount] = useState<Paise | null>(due?.amount ?? null);

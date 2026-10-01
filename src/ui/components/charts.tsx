@@ -56,9 +56,11 @@ export function Donut({ slices, size = 168, stroke = 22, onSelect, centerLabel }
   const gap = slices.length > 1 ? 0.03 : 0;
   let angle = -Math.PI / 2;
   const selected = slices.find((s) => s.key === active);
+  const { width: screen } = useWindowDimensions();
+  const stacked = screen < 380;
 
   return (
-    <Row gap={2} style={{ alignItems: 'center' }}>
+    <View style={stacked ? { gap: space(2), alignItems: 'center' } : { flexDirection: 'row', gap: space(2), alignItems: 'center' }}>
       <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <Svg width={size} height={size} style={{ position: 'absolute' }}>
           <Circle cx={size / 2} cy={size / 2} r={r} stroke={colors.chartTrack} strokeWidth={stroke} fill="none" />
@@ -95,7 +97,7 @@ export function Donut({ slices, size = 168, stroke = 22, onSelect, centerLabel }
           ) : null}
         </View>
       </View>
-      <View style={{ flex: 1, gap: 8 }}>
+      <View style={stacked ? { alignSelf: 'stretch', gap: 8 } : { flex: 1, gap: 8 }}>
         {slices.slice(0, 6).map((s) => (
           <Pressable
             key={s.key}
@@ -115,7 +117,7 @@ export function Donut({ slices, size = 168, stroke = 22, onSelect, centerLabel }
           </Pressable>
         ))}
       </View>
-    </Row>
+    </View>
   );
 }
 

@@ -53,7 +53,8 @@ export default function Insights() {
   const thisMonth = useMemo(() => monthTotals(txns, month, uptoDay), [txns, month, uptoDay]);
   const lastMonth = useMemo(() => monthTotals(txns, prevMonth, uptoDay), [txns, prevMonth, uptoDay]);
   const spendChange = comparableChange(thisMonth.expense, lastMonth.expense);
-  const sameDays = inProgress ? ` (1–${uptoDay} ${shortMonth(prevMonth)})` : '';
+  const sameDays = inProgress ? ` (${uptoDay === 1 ? '' : '1–'}${uptoDay} ${shortMonth(prevMonth)})` : '';
+  const changeText = (ch: number) => (Math.abs(ch) < 0.005 ? 'same as' : `${ch > 0 ? 'up' : 'down'} ${Math.abs(Math.round(ch * 100))}% vs`);
 
   const heat = useMemo(() => {
     const { y, m } = parts(`${month}-01`);
@@ -104,7 +105,7 @@ export default function Insights() {
     if (!topCat) return 'No spending recorded for this period yet.';
     if (range === 'month' && prevCatSpend) {
       const ch = (topCat.value - prevCatSpend) / prevCatSpend;
-      return `${topCat.label} is your biggest spend: ${formatINR(topCat.value, { compact: true })}, ${ch >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(ch * 100))}% vs last month${sameDays}.`;
+      return `${topCat.label} is your biggest spend: ${formatINR(topCat.value, { compact: true })}, ${changeText(ch)} last month${sameDays}.`;
     }
     return `${topCat.label} is your biggest spend at ${formatINR(topCat.value, { compact: true })}.`;
   })();
@@ -144,7 +145,7 @@ export default function Insights() {
         <Card style={{ gap: space(1) }}>
           {spendChange !== null ? (
             <Txt variant="small" tone="muted">
-              Spending {spendChange >= 0 ? 'up' : 'down'} {Math.abs(Math.round(spendChange * 100))}% vs last month{sameDays}.
+              Spending {changeText(spendChange)} last month{sameDays}.
             </Txt>
           ) : null}
           <Bars data={series.map((s) => ({ key: s.month, label: shortMonth(s.month).slice(0, 1), values: [s.income, s.expense] }))} colors={[colors.income, colors.expense]} legend={['Income', 'Expense']} height={170} />

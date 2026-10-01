@@ -13,6 +13,9 @@ describe('money', () => {
     expect(formatINR(150000_00, { compact: true })).toBe('₹1.5L');
     expect(formatINR(2_50_00_000_00, { compact: true })).toBe('₹2.5Cr');
     expect(formatINR(12_500_00, { compact: true })).toBe('₹12.5K');
+    // Two decimals below 10 so ₹1,45,000 and ₹1,42,160 don't both read "₹1.4L".
+    expect(formatINR(1_45_000_00, { compact: true })).toBe('₹1.45L');
+    expect(formatINR(1_42_160_00, { compact: true })).toBe('₹1.42L');
   });
 
   it('parses amounts from messy text', () => {
