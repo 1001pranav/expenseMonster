@@ -55,7 +55,6 @@ export interface Member extends BaseRow {
   upiId: string | null;
   phone: string | null;
   color: string;
-  isSelf: 0 | 1;
 }
 
 export type TxnType = 'expense' | 'income' | 'transfer' | 'settlement';
