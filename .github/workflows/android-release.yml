@@ -1,0 +1,98 @@
+name: Android production build
+
+# Builds the sideloadable production APK (no INTERNET permission, SMS capture included).
+# Push a tag like v1.0.0 to publish it as a GitHub Release, or run it manually from the Actions tab.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      APP_VARIANT: production
+      GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck, lint and test
+        run: |
+          npx tsc --noEmit
+          npx eslint .
+          npx jest
+
+      - name: Generate native project (production variant)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Check release manifest has no INTERNET permission
+        run: |
+          grep -q 'android.permission.INTERNET" tools:node="remove"' android/app/src/main/AndroidManifest.xml
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      # Sign with your own key when the secrets are set. Otherwise the APK keeps Expo's default
+      # debug signature, which differs on every run: installing a later build would then need
+      # an uninstall, and that deletes all on-phone data.
+      - name: Sign APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}.apk
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+            echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            "$BT/zipalign" -f -p 4 "$APK" aligned.apk
+            "$BT/apksigner" sign --ks release.keystore --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD --out "$OUT" aligned.apk
+            "$BT/apksigner" verify "$OUT"
+            rm release.keystore
+            echo "SIGNING=release key" >> "$GITHUB_ENV"
+          else
+            cp "$APK" "$OUT"
+            echo "::warning::ANDROID_KEYSTORE_BASE64 not set: APK is debug-signed. Don't keep real data in it; future builds won't install over it."
+            echo "SIGNING=debug key (temporary — see README)" >> "$GITHUB_ENV"
+          fi
+          echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
+          sha256sum "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ExpenseMonster-apk
+          path: ${{ env.APK_FILE }}
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_FILE }}
+          body: |
+            Production APK (sideload). Signed with: ${{ env.SIGNING }}.
+            - No INTERNET permission: the app cannot send data anywhere.
+            - SMS capture included (optional, asks first).
+            Install: download on the phone → open → allow "Install unknown apps" for your browser/Files app.

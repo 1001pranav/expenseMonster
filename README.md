@@ -58,6 +58,18 @@ npx eas-cli@latest build -p android --profile preview       # sideloadable APK, 
 npx eas-cli@latest build -p android --profile play          # Play Store bundle, no READ_SMS
 ```
 
+### Production APK via GitHub Actions
+
+`.github/workflows/android-release.yml` builds the production APK on GitHub. Push a tag (`git tag v1.0.1 && git push origin v1.0.1`) and the APK is attached to a GitHub Release. You can also run the workflow manually from the Actions tab (artifact only).
+
+**Set a signing key before relying on it.** Without one, each build gets a different debug signature. Android then refuses to update, and uninstalling deletes all on-phone data. One-time setup:
+
+```bash
+keytool -genkeypair -v -keystore expensemonster.keystore -alias expensemonster -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 expensemonster.keystore   # → secret ANDROID_KEYSTORE_BASE64
+```
+Add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`expensemonster`) and `ANDROID_KEY_PASSWORD`. Back up the keystore: if you lose it, you can never update the installed app.
+
 **Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. SMS capture is for the sideloaded `preview` APK. iOS cannot read SMS at all.
 
 ## Checks
