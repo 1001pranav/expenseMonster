@@ -39,6 +39,12 @@ export function Txt({ variant = 'body', tone = 'default', style, ...rest }: Text
   return <Text {...rest} maxFontSizeMultiplier={1.6} style={[type[variant], { color: toneColor(colors, tone) }, style]} />;
 }
 
+/** Formatter for amounts inside sentences and labels; honours "hide amounts" like <Money>. */
+export function useMoneyText() {
+  const hidden = useStore((s) => s.settings.hideAmounts);
+  return (paise: Paise, opts?: FormatOptions) => (hidden ? '₹ ••••' : formatINR(paise, opts));
+}
+
 export function Money({
   value,
   variant = 'bodyStrong',
@@ -151,17 +157,20 @@ export function Button({
   );
 }
 
-export function IconButton({ name, onPress, label, color, size = 22, filled }: { name: IconName; onPress: () => void; label: string; color?: string; size?: number; filled?: boolean }) {
+export function IconButton({ name, onPress, label, color, size = 22, filled, disabled }: { name: IconName; onPress: () => void; label: string; color?: string; size?: number; filled?: boolean; disabled?: boolean }) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       hitSlop={8}
       style={({ pressed }) => [
         { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: filled ? colors.surfaceAlt : 'transparent' },
         pressed && { backgroundColor: colors.surfaceAlt },
+        disabled && { opacity: 0.3 },
       ]}
     >
       <Ionicons name={name} size={size} color={color ?? colors.text} />
@@ -315,11 +324,11 @@ export function Divider({ inset = 0 }: { inset?: number }) {
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: inset }} />;
 }
 
-export function ProgressBar({ value, color, height = 8 }: { value: number; color?: string; height?: number }) {
+export function ProgressBar({ value, color, height = 8, trackColor }: { value: number; color?: string; height?: number; trackColor?: string }) {
   const { colors } = useTheme();
   const v = Math.max(0, Math.min(1, value));
   return (
-    <View style={{ height, borderRadius: height, backgroundColor: colors.chartTrack, overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(v * 100) }}>
+    <View style={{ height, borderRadius: height, backgroundColor: trackColor ?? colors.chartTrack, overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(v * 100) }}>
       <View style={{ width: `${v * 100}%`, height, borderRadius: height, backgroundColor: color ?? colors.primary }} />
     </View>
   );

@@ -6,11 +6,11 @@ import { buildCardLedger } from '@/domain/creditCard';
 import { addMonths, daysInMonth, formatMonth, fromParts, isoToYMD, monthKey, parts, shortMonth } from '@/domain/dates';
 import { loanEmisPaid } from '@/domain/dues';
 import { scheduleFor } from '@/domain/emi';
-import { formatINR, type Paise } from '@/domain/money';
+import type { Paise } from '@/domain/money';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
 import { Bars, Donut, HeatCalendar, LineChart, type Slice } from '@/ui/components/charts';
-import { Card, Chip, IconButton, ProgressBar, Row, Section, Txt } from '@/ui/components/core';
+import { Card, Chip, IconButton, ListRow, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
@@ -19,6 +19,7 @@ type Range = 'month' | 'quarter' | 'year';
 
 export default function Insights() {
   const { colors } = useTheme();
+  const money = useMoneyText();
   const today = useToday();
   const txns = useConfirmed();
   const cats = useCategoryMap();
@@ -105,9 +106,9 @@ export default function Insights() {
     if (!topCat) return 'No spending recorded for this period yet.';
     if (range === 'month' && prevCatSpend) {
       const ch = (topCat.value - prevCatSpend) / prevCatSpend;
-      return `${topCat.label} is your biggest spend: ${formatINR(topCat.value, { compact: true })}, ${changeText(ch)} last month${sameDays}.`;
+      return `${topCat.label} is your biggest spend: ${money(topCat.value, { compact: true })}, ${changeText(ch)} last month${sameDays}.`;
     }
-    return `${topCat.label} is your biggest spend at ${formatINR(topCat.value, { compact: true })}.`;
+    return `${topCat.label} is your biggest spend at ${money(topCat.value, { compact: true })}.`;
   })();
 
   return (
@@ -122,9 +123,9 @@ export default function Insights() {
         ]}
       />
       <Row style={{ justifyContent: 'space-between' }}>
-        <IconButton name="chevron-back" label="Previous month" onPress={() => setMonth(monthKey(addMonths(`${month}-01`, -1)))} />
+        <IconButton name="chevron-back" label={range === 'month' ? 'Previous month' : 'Earlier'} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, -1)))} />
         <Txt variant="h3">{range === 'month' ? formatMonth(month) : `${formatMonth(monthList[monthList.length - 1])} – ${formatMonth(month)}`}</Txt>
-        <IconButton name="chevron-forward" label="Next month" onPress={() => month < monthKey(today) && setMonth(monthKey(addMonths(`${month}-01`, 1)))} />
+        <IconButton name="chevron-forward" label="Next month" disabled={month >= monthKey(today)} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, 1)))} />
       </Row>
 
       <Section title="Spending by category">
@@ -135,7 +136,7 @@ export default function Insights() {
           {slices.length ? <Donut slices={slices.slice(0, 6)} onSelect={(k) => k !== 'others' && router.push({ pathname: '/activity', params: { category: k } })} /> : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {slices.slice(6).map((s) => (
-              <Chip key={s.key} compact label={`${s.label} ${formatINR(s.value, { compact: true })}`} onPress={() => router.push({ pathname: '/activity', params: { category: s.key } })} />
+              <Chip key={s.key} compact label={`${s.label} ${money(s.value, { compact: true })}`} onPress={() => router.push({ pathname: '/activity', params: { category: s.key } })} />
             ))}
           </View>
         </Card>
@@ -172,7 +173,7 @@ export default function Insights() {
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Txt variant="bodyStrong">{cats.get(b.categoryId)?.name ?? 'Category'}</Txt>
                   <Txt variant="small" tone={b.level === 'over' ? 'expense' : b.level === 'warn' ? 'warn' : 'muted'}>
-                    {formatINR(b.spent, { compact: true })} / {formatINR(b.limit, { compact: true })}
+                    {money(b.spent, { compact: true })} / {money(b.limit, { compact: true })}
                   </Txt>
                 </Row>
                 <ProgressBar value={b.ratio} color={b.level === 'over' ? colors.expense : b.level === 'warn' ? colors.warn : colors.income} />
@@ -200,6 +201,9 @@ export default function Insights() {
           </Card>
         </Section>
       ) : null}
+      <Card padded={false} style={{ overflow: 'hidden' }}>
+        <ListRow icon="receipt" iconColor={colors.income} title="Tax saver" subtitle="80C, 80D and home-loan deductions this year" chevron onPress={() => router.push('/tax')} />
+      </Card>
     </Screen>
   );
 }

@@ -15,6 +15,7 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   syncConflictPolicy: ConflictPolicy;
   smsPromptDismissed: boolean;
+  setupDismissed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   syncConflictPolicy: 'ask',
   smsPromptDismissed: false,
+  setupDismissed: false,
 };
 
 export interface Identity {

@@ -5,7 +5,7 @@ import { billerMeta, viewBill } from '@/domain/bills';
 import { formatDay, isoToYMD, toISO, type YMD } from '@/domain/dates';
 import { formatINR, type Paise } from '@/domain/money';
 import { parseIds } from '@/domain/settle';
-import { flagsOf } from '@/domain/transactions';
+import { flagsOf, suggestCategory } from '@/domain/transactions';
 import type { PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { restore } from '@/db/repo';
 import { approveCapture, deleteTransaction, learnRule, rejectCapture, saveTransaction } from '@/data/actions';
@@ -39,6 +39,7 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
   const billers = useTable('billers');
   const bills = useTable('bills');
   const txns = useTable('transactions');
+  const rules = useTable('rules');
   const members = useMembers();
   const selfId = useSelfId();
   const pending = existing?.status === 'pending';
@@ -59,12 +60,44 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
   const [splitWith, setSplitWith] = useState<string[]>(parseIds(existing?.splitWith ?? null));
   const [link, setLink] = useState<{ type: Transaction['linkType']; id: string | null }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });
   const [showAllCats, setShowAllCats] = useState(false);
+  /** True while the category was filled in from the payee, so typing more can still change it. */
+  const [autoCat, setAutoCat] = useState(false);
   const [more, setMore] = useState(Boolean(existing && (existing.splitWith || existing.note)));
   const [saving, setSaving] = useState(false);
 
   const catKind = type === 'income' ? 'income' : 'expense';
   const categories = useSortedCategories(catKind);
-  const shownCats = showAllCats ? categories : categories.slice(0, 8);
+  const topCats = categories.slice(0, 8);
+  // Keep a selected category visible even when it isn't one of the most-used eight.
+  const shownCats = showAllCats ? categories : [...topCats, ...categories.filter((c) => c.id === categoryId && !topCats.includes(c))];
+
+  // Payees used before for this type, newest first, with the category they were filed under.
+  const knownPayees = useMemo(() => {
+    const seen = new Map<string, { name: string; categoryId: string | null }>();
+    for (const t of txns) {
+      if (!t.payee || t.type !== type || t.status === 'rejected') continue;
+      const k = t.payee.trim().toLowerCase();
+      if (!seen.has(k)) seen.set(k, { name: t.payee.trim(), categoryId: t.categoryId });
+      if (seen.size >= 300) break;
+    }
+    return [...seen.values()];
+  }, [txns, type]);
+  const payeeQuery = payee.trim().toLowerCase();
+  const payeeSuggestions = payeeQuery && !existing ? knownPayees.filter((p) => p.name.toLowerCase().includes(payeeQuery) && p.name.toLowerCase() !== payeeQuery).slice(0, 4) : [];
+
+  const onPayee = (v: string, picked?: { categoryId: string | null }) => {
+    setPayee(v);
+    if (type === 'transfer' || (categoryId && !autoCat)) return;
+    const exact = picked ?? knownPayees.find((p) => p.name.toLowerCase() === v.trim().toLowerCase());
+    const suggestion = exact?.categoryId ?? (v.trim().length >= 3 ? suggestCategory(v, rules) : null);
+    if (suggestion && categories.some((c) => c.id === suggestion)) {
+      setCategoryId(suggestion);
+      setAutoCat(true);
+    } else if (autoCat) {
+      setCategoryId(null);
+      setAutoCat(false);
+    }
+  };
   const amount = Math.round(Number(amountStr || '0') * 100);
   const cardHint = flags.find((f) => f.startsWith('card-hint:'))?.split(':')[1];
 
@@ -183,6 +216,7 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
         onChange={(v) => {
           setType(v);
           setCategoryId(null);
+          setAutoCat(false);
           if (v !== 'transfer' && link.type === 'card') setLink({ type: null, id: null });
         }}
         options={[
@@ -237,7 +271,17 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
         <Field label="Category">
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {shownCats.map((c) => (
-              <Chip key={c.id} label={c.name} icon={c.icon as IconName} color={c.color} selected={categoryId === c.id} onPress={() => setCategoryId(categoryId === c.id ? null : c.id)} />
+              <Chip
+                key={c.id}
+                label={c.name}
+                icon={c.icon as IconName}
+                color={c.color}
+                selected={categoryId === c.id}
+                onPress={() => {
+                  setCategoryId(categoryId === c.id ? null : c.id);
+                  setAutoCat(false);
+                }}
+              />
             ))}
             {categories.length > 8 ? <Chip label={showAllCats ? 'Less' : `+${categories.length - 8} more`} onPress={() => setShowAllCats((v) => !v)} /> : null}
           </View>
@@ -278,7 +322,21 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
       ) : null}
 
       <DateField label="Date" value={date} onChange={setDate} />
-      <TextField label={type === 'income' ? 'From' : 'Paid to'} value={payee} onChangeText={setPayee} placeholder={type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…'} icon="storefront-outline" />
+      <View style={{ gap: space(1) }}>
+        <TextField label={type === 'income' ? 'From' : 'Paid to'} value={payee} onChangeText={(v) => onPayee(v)} placeholder={type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…'} icon="storefront-outline" />
+        {payeeSuggestions.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {payeeSuggestions.map((p) => (
+              <Chip key={p.name} compact icon="time-outline" label={p.name} onPress={() => onPayee(p.name, p)} />
+            ))}
+          </View>
+        ) : null}
+        {autoCat && categoryId ? (
+          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 2 }}>
+            Filed under {categories.find((c) => c.id === categoryId)?.name} like your past entries — tap a category to change it.
+          </Txt>
+        ) : null}
+      </View>
 
       <Pressable onPress={() => setMore((m) => !m)} accessibilityRole="button" style={{ paddingVertical: 4 }}>
         <Txt variant="small" tone="primary">

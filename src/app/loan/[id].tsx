@@ -8,7 +8,7 @@ import { formatINR, type Paise } from '@/domain/money';
 import { remove, restore, update } from '@/db/repo';
 import { useDues, useTable, useToday } from '@/data/hooks';
 import { Bars, ProgressRing } from '@/ui/components/charts';
-import { Button, Card, Divider, EmptyState, IconButton, Money, Pill, Row, Section, Stat, Txt } from '@/ui/components/core';
+import { Button, Card, Divider, EmptyState, IconButton, Money, Pill, Row, Section, Stat, Txt, useMoneyText } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { AmountField, Segmented } from '@/ui/components/forms';
 import { TxnRow, openPay } from '@/ui/components/rows';
@@ -17,6 +17,7 @@ import { space, useTheme } from '@/ui/theme';
 
 export default function LoanDetail() {
   const { colors } = useTheme();
+  const money = useMoneyText();
   const { id } = useLocalSearchParams<{ id: string }>();
   const loan = useTable('loans').find((l) => l.id === id);
   const txns = useTable('transactions');
@@ -133,7 +134,7 @@ export default function LoanDetail() {
                 ) : (
                   <Row style={{ justifyContent: 'space-between' }}>
                     <Txt tone="muted">New EMI</Txt>
-                    <Txt variant="bodyStrong">{formatINR(sim.newEmi)}</Txt>
+                    <Txt variant="bodyStrong">{money(sim.newEmi)}</Txt>
                   </Row>
                 )}
                 <Txt variant="small" tone="faint">
@@ -164,13 +165,13 @@ export default function LoanDetail() {
                 {formatDay(r.date)} {r.date.slice(2, 4)}
               </Txt>
               <Txt variant="small" style={{ flex: 1, textAlign: 'right' }}>
-                {formatINR(r.principal, { decimals: 'never' })}
+                {money(r.principal, { decimals: 'never' })}
               </Txt>
               <Txt variant="small" style={{ flex: 1, textAlign: 'right' }}>
-                {formatINR(r.interest, { decimals: 'never' })}
+                {money(r.interest, { decimals: 'never' })}
               </Txt>
               <Txt variant="small" style={{ flex: 1, textAlign: 'right' }}>
-                {formatINR(r.balance, { compact: true })}
+                {money(r.balance, { compact: true })}
               </Txt>
             </Row>
           ))}
