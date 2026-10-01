@@ -10,13 +10,14 @@ import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { useCategoryMap, useConfirmed, useDues, useMembers, usePending, useSelfId, useTable, useToday } from '@/data/hooks';
 import { scanSms } from '@/services/capture';
+import { GradientTile } from '@/ui/components/Aurora';
 import { Avatar } from '@/ui/components/Avatar';
 import { Bars, Donut, type Slice } from '@/ui/components/charts';
 import { Button, Card, EmptyState, IconButton, Money, Pill, ProgressBar, Row, Section, Stat, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { DueCard, TxnRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
-import { radius, space, useTheme } from '@/ui/theme';
+import { radius, space, useTheme, type GradientName } from '@/ui/theme';
 
 const WEEKDAY = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -132,9 +133,7 @@ export default function Home() {
         </Row>
       }
     >
-      <Card tone="primary" style={{ gap: space(2), overflow: 'hidden' }} onPress={() => router.push('/insights')}>
-        <View pointerEvents="none" style={{ position: 'absolute', right: -60, top: -70, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.08)' }} />
-        <View pointerEvents="none" style={{ position: 'absolute', right: 40, bottom: -90, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+      <Card tone="primary" style={{ gap: space(2) }} onPress={() => router.push('/insights')}>
         <View style={{ gap: 2 }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="small" tone="inverse" style={{ opacity: 0.85 }}>
@@ -185,10 +184,10 @@ export default function Home() {
       </Card>
 
       <Row gap={1} style={{ justifyContent: 'space-between' }}>
-        <QuickAction icon="bar-chart" label="Insights" color={colors.primary} onPress={() => router.push('/insights')} />
-        <QuickAction icon="pie-chart" label="Budgets" color={colors.warn} onPress={() => router.push('/budgets')} />
-        <QuickAction icon="receipt" label="Tax saver" color={colors.income} onPress={() => router.push('/tax')} />
-        <QuickAction icon="scan" label="Scan" color={colors.info} onPress={() => router.push('/scan')} />
+        <QuickAction icon="bar-chart" label="Insights" gradient="violet" onPress={() => router.push('/insights')} />
+        <QuickAction icon="pie-chart" label="Budgets" gradient="sunset" onPress={() => router.push('/budgets')} />
+        <QuickAction icon="receipt" label="Tax saver" gradient="mint" onPress={() => router.push('/tax')} />
+        <QuickAction icon="scan" label="Scan" gradient="ocean" onPress={() => router.push('/scan')} />
       </Row>
 
       {reviewCount > 0 ? (
@@ -352,16 +351,13 @@ function ChangePill({ change, label }: { change: number; label: string }) {
   );
 }
 
-function QuickAction({ icon, label, color, onPress }: { icon: IconName; label: string; color: string; onPress: () => void }) {
+function QuickAction({ icon, label, gradient, onPress }: { icon: IconName; label: string; gradient: GradientName; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => ({ flex: 1, alignItems: 'center', gap: 6, opacity: pressed ? 0.6 : 1 })}>
-      <View style={{ width: 52, height: 52, borderRadius: 18, backgroundColor: `${color}1F`, alignItems: 'center', justifyContent: 'center' }}>
-        <Ionicons name={icon} size={24} color={color} />
-      </View>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => ({ flex: 1, alignItems: 'center', gap: 8, opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
+      <GradientTile icon={icon} gradient={gradient} size={54} />
       <Txt variant="small" numberOfLines={1}>
         {label}
       </Txt>
     </Pressable>
   );
 }
-

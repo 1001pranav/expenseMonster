@@ -3,54 +3,76 @@ import { useStore } from '@/db/store';
 
 const palette = {
   light: {
-    bg: '#F6F6FB',
+    bg: '#F6F5FB',
     surface: '#FFFFFF',
-    surfaceAlt: '#EEEEF7',
+    surfaceAlt: '#EFEDF8',
     elevated: '#FFFFFF',
-    border: '#E3E3EE',
-    text: '#14142B',
-    textMuted: '#5E5E7A',
-    textFaint: '#9A9AB0',
-    primary: '#4F46E5',
+    border: '#E5E2F0',
+    text: '#17123A',
+    textMuted: '#5E5980',
+    textFaint: '#9A96B4',
+    primary: '#5B3DF5',
     primaryText: '#FFFFFF',
-    primarySoft: '#E8E7FD',
-    income: '#0F9D58',
-    incomeSoft: '#DDF5E8',
-    expense: '#E5484D',
-    expenseSoft: '#FDE4E4',
+    primarySoft: '#ECE8FF',
+    income: '#0B9F6E',
+    incomeSoft: '#DCF6EC',
+    expense: '#EE3F5B',
+    expenseSoft: '#FFE6EA',
     warn: '#D97706',
     warnSoft: '#FEF0D7',
     info: '#0284C7',
     infoSoft: '#DCEFFB',
-    overlay: 'rgba(20,20,43,0.45)',
-    chartTrack: '#ECECF4',
-    tabBar: 'rgba(255,255,255,0.96)',
+    overlay: 'rgba(23,18,58,0.5)',
+    chartTrack: '#ECEAF5',
+    tabBar: 'rgba(255,255,255,0.97)',
+    /** Aurora hero: deep ink lit by violet, rose and marigold glows. */
+    heroBase: '#1B1448',
+    heroGlowA: '#7B5CFF',
+    heroGlowB: '#FF4F8B',
+    heroGlowC: '#FFB23F',
   },
   dark: {
-    bg: '#0B0B14',
-    surface: '#161624',
-    surfaceAlt: '#1F1F31',
-    elevated: '#1C1C2C',
-    border: '#2A2A40',
-    text: '#F2F2FA',
-    textMuted: '#A5A5BF',
-    textFaint: '#6C6C88',
-    primary: '#8B85FF',
-    primaryText: '#0B0B14',
-    primarySoft: '#26244D',
-    income: '#3DD68C',
-    incomeSoft: '#12301F',
-    expense: '#FF6B6F',
-    expenseSoft: '#3A1719',
+    bg: '#0B0920',
+    surface: '#15122E',
+    surfaceAlt: '#1F1B3E',
+    elevated: '#1B1838',
+    border: '#2A2551',
+    text: '#F4F2FF',
+    textMuted: '#A9A4CB',
+    textFaint: '#6D6894',
+    primary: '#7A68FF',
+    primaryText: '#FFFFFF',
+    primarySoft: '#272061',
+    income: '#34D399',
+    incomeSoft: '#0F2E25',
+    expense: '#FF6A82',
+    expenseSoft: '#3A1622',
     warn: '#FBBF24',
     warnSoft: '#3A2C0C',
     info: '#38BDF8',
     infoSoft: '#0E2A3A',
-    overlay: 'rgba(0,0,0,0.6)',
-    chartTrack: '#24243A',
-    tabBar: 'rgba(22,22,36,0.97)',
+    overlay: 'rgba(0,0,0,0.62)',
+    chartTrack: '#24204A',
+    tabBar: 'rgba(21,18,46,0.98)',
+    heroBase: '#1C1550',
+    heroGlowA: '#7B5CFF',
+    heroGlowB: '#FF4F8B',
+    heroGlowC: '#FFB23F',
   },
 };
+
+/** Two-stop gradients for tiles and buttons. Same in both themes: they sit on white icons. */
+export const gradients = {
+  brand: ['#7B5CFF', '#5B3DF5'],
+  violet: ['#9B7BFF', '#5B3DF5'],
+  sunset: ['#FFB23F', '#FF5C6C'],
+  rose: ['#FF7EB3', '#E8337A'],
+  mint: ['#34E0B4', '#0B9F6E'],
+  ocean: ['#4CC9FF', '#4F5BEF'],
+  marigold: ['#FFD24A', '#F08C00'],
+  ink: ['#4B4470', '#221C4A'],
+} as const;
+export type GradientName = keyof typeof gradients;
 
 export type Colors = typeof palette.light;
 
@@ -62,13 +84,16 @@ export const fonts = {
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
+  /** Sora: geometric display face for headings and hero figures. */
+  display: 'Sora_700Bold',
+  displaySemi: 'Sora_600SemiBold',
 };
 
 export const type = {
-  display: { fontFamily: fonts.bold, fontSize: 34, lineHeight: 40, letterSpacing: -0.8 },
-  h1: { fontFamily: fonts.bold, fontSize: 26, lineHeight: 32, letterSpacing: -0.5 },
-  h2: { fontFamily: fonts.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -0.3 },
-  h3: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22 },
+  display: { fontFamily: fonts.display, fontSize: 34, lineHeight: 42, letterSpacing: -1 },
+  h1: { fontFamily: fonts.display, fontSize: 26, lineHeight: 34, letterSpacing: -0.6 },
+  h2: { fontFamily: fonts.displaySemi, fontSize: 20, lineHeight: 27, letterSpacing: -0.3 },
+  h3: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22, letterSpacing: -0.1 },
   body: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 21 },
   bodyStrong: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 21 },
   small: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18 },
@@ -87,4 +112,12 @@ export function useTheme() {
 export const shadow = (dark: boolean) =>
   dark
     ? { borderWidth: 1, borderColor: palette.dark.border }
-    : { shadowColor: '#14142B', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 2 };
+    : { shadowColor: '#2A1F7A', shadowOpacity: 0.07, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 2 };
+
+/** Mix a #RRGGBB colour towards white (amount > 0) or black (amount < 0). */
+export function shade(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const mix = (c: number) => Math.round(amount >= 0 ? c + (255 - c) * amount : c * (1 + amount));
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(mix);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}

@@ -14,7 +14,7 @@ import { Button, Card, Chip, Pill, Row, Txt, type IconName } from '../components
 import { Keypad, toast } from '../components/feedback';
 import { ChipSelect, DateField, Field, Segmented, SwitchRow, TextField } from '../components/forms';
 import { Screen } from '../components/Screen';
-import { radius, space, useTheme } from '../theme';
+import { fonts, radius, space, useTheme } from '../theme';
 
 const METHODS: { value: PayMethod; label: string; icon: IconName }[] = [
   { value: 'upi', label: 'UPI', icon: 'qr-code' },
@@ -177,6 +177,7 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
   };
 
   const color = type === 'income' ? colors.income : type === 'expense' ? colors.expense : colors.info;
+  const soft = type === 'income' ? colors.incomeSoft : type === 'expense' ? colors.expenseSoft : colors.infoSoft;
 
   return (
     <Screen
@@ -226,12 +227,12 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
         ]}
       />
 
-      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(1) }}>
+      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(2.5), borderRadius: radius.xl, backgroundColor: soft }}>
         <Row gap={0.5} style={{ alignItems: 'flex-start' }}>
           <Txt variant="h1" style={{ color, marginTop: 6 }}>
             ₹
           </Txt>
-          <Txt style={{ fontFamily: 'Inter_700Bold', fontSize: 52, lineHeight: 60, color: amountStr ? colors.text : colors.textFaint, fontVariant: ['tabular-nums'] }}>
+          <Txt style={{ fontFamily: fonts.display, fontSize: 52, lineHeight: 64, letterSpacing: -1.5, color: amountStr ? colors.text : colors.textFaint, fontVariant: ['tabular-nums'] }}>
             {amountStr ? formatINR(Number(amountStr.split('.')[0]) * 100, { symbol: false, decimals: 'never' }) + (amountStr.includes('.') ? `.${amountStr.split('.')[1]}` : '') : '0'}
           </Txt>
         </Row>

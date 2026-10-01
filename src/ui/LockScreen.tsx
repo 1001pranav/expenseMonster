@@ -2,15 +2,16 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '@/db/store';
 import { verifyPin } from '@/services/secure';
 import { eraseEverything } from '@/services/wipe';
-import { Button, Txt } from './components/core';
+import { Aurora, BrandMark } from './components/Aurora';
+import { Txt } from './components/core';
 import { Keypad } from './components/feedback';
-import { space, useTheme } from './theme';
+import { radius, space, useTheme } from './theme';
 
 const MAX_FAILURES = 10;
 
@@ -72,28 +73,40 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top + space(8), paddingBottom: insets.bottom + space(3), paddingHorizontal: space(4), justifyContent: 'space-between' }}>
+    <View style={{ flex: 1, backgroundColor: colors.heroBase, paddingTop: insets.top + space(8), paddingBottom: insets.bottom + space(3), paddingHorizontal: space(4), justifyContent: 'space-between' }}>
+      <Aurora variant="calm" />
       <View style={{ alignItems: 'center', gap: space(2) }}>
-        <View style={{ width: 72, height: 72, borderRadius: 24, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="lock-closed" size={32} color={colors.primaryText} />
-        </View>
+        <BrandMark size={96} />
         <View style={{ alignItems: 'center', gap: 4 }}>
-          <Txt variant="h2">{name ? `Welcome back, ${name.split(' ')[0]}` : 'Welcome back'}</Txt>
-          <Txt tone="muted">{hasPin ? 'Enter your 6-digit PIN' : 'Unlock to continue'}</Txt>
+          <Txt variant="h1" style={{ color: '#FFFFFF' }}>
+            {name ? `Welcome back, ${name.split(' ')[0]}` : 'Welcome back'}
+          </Txt>
+          <Txt style={{ color: 'rgba(255,255,255,0.7)' }}>{hasPin ? 'Enter your 6-digit PIN' : 'Unlock to continue'}</Txt>
         </View>
         {hasPin ? (
           <Animated.View style={[{ flexDirection: 'row', gap: 14, marginTop: space(1) }, dotsStyle]} accessibilityLabel={`${pin.length} of 6 digits entered`}>
             {Array.from({ length: 6 }, (_, i) => (
-              <View key={i} style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: error ? colors.expense : i < pin.length ? colors.primary : 'transparent', borderWidth: 1.5, borderColor: error ? colors.expense : i < pin.length ? colors.primary : colors.textFaint }} />
+              <View key={i} style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: error ? colors.heroGlowB : i < pin.length ? '#FFFFFF' : 'transparent', borderWidth: 1.5, borderColor: error ? colors.heroGlowB : i < pin.length ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }} />
             ))}
           </Animated.View>
         ) : null}
-        <Txt variant="small" tone="expense" style={{ minHeight: 18 }}>
+        <Txt variant="small" style={{ minHeight: 18, color: '#FFB3C7' }}>
           {error ?? ''}
         </Txt>
       </View>
-      {hasPin ? <Keypad onKey={onKey} /> : null}
-      {settings.biometric ? <Button title="Use fingerprint / face" icon="finger-print" variant="ghost" onPress={tryBiometric} /> : null}
+      {hasPin ? <Keypad onKey={onKey} onDark /> : null}
+      {settings.biometric ? (
+        <Pressable
+          onPress={tryBiometric}
+          accessibilityRole="button"
+          style={({ pressed }) => ({ height: 52, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: pressed ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' })}
+        >
+          <Ionicons name="finger-print" size={20} color="#FFFFFF" />
+          <Txt variant="bodyStrong" style={{ color: '#FFFFFF' }}>
+            Use fingerprint / face
+          </Txt>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
