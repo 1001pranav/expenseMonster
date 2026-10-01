@@ -1,6 +1,8 @@
 name: Android production build
 
-# Builds the sideloadable production APK (no INTERNET permission, SMS capture included).
+# Builds the sideloadable production APK (no INTERNET permission, no SMS permission).
+# Play Protect blocks sideloaded installs of apps that request READ_SMS, so SMS reach the app via
+# the share sheet. Run the workflow manually with "sms" ticked for an ADB-only build with SMS reading.
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
@@ -8,6 +10,11 @@ on:
     # Every push to the app branch also builds (artifact only, no release) as a native-build check.
     branches: [mobile]
   workflow_dispatch:
+    inputs:
+      sms:
+        description: 'Include READ_SMS (install over ADB only: Play Protect blocks it when sideloaded)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -23,6 +30,7 @@ jobs:
     timeout-minutes: 60
     env:
       APP_VARIANT: production
+      SMS: ${{ inputs.sms && '1' || '' }}
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +63,11 @@ jobs:
         run: |
           grep -q 'android.permission.INTERNET" tools:node="remove"' android/app/src/main/AndroidManifest.xml
 
+      - name: Check READ_SMS is removed unless asked for
+        if: env.SMS != '1'
+        run: |
+          grep -q 'android.permission.READ_SMS" tools:node="remove"' android/app/src/main/AndroidManifest.xml
+
       - name: Build release APK
         working-directory: android
         # Real phones are ARM; leaving out the x86 emulator ABIs roughly halves the APK.
@@ -71,7 +84,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
-          OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}.apk
+          OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}${SMS:+-sms-adb}.apk
           if [ -n "$KEYSTORE_BASE64" ]; then
             BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
             echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
@@ -102,5 +115,5 @@ jobs:
           body: |
             Production APK (sideload). Signed with: ${{ env.SIGNING }}.
             - No INTERNET permission: the app cannot send data anywhere.
-            - SMS capture included (optional, asks first).
+            - No SMS permission, so Play Protect lets it install. Share a bank SMS from Messages to add it.
             Install: download on the phone → open → allow "Install unknown apps" for your browser/Files app.

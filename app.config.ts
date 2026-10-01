@@ -4,11 +4,16 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  * Build variants (set in eas.json or the shell):
  * - APP_VARIANT=production  → release build with the INTERNET permission removed, so the app
  *   physically cannot send data anywhere.
- * - STORE=play              → Play Store flavour without READ_SMS (Google restricts it to
- *   default SMS apps). Screenshot capture still works.
+ * - SMS=1                   → include READ_SMS for automatic bank-SMS capture. Off by default:
+ *   Play Protect's enhanced fraud protection (India) blocks sideloaded installs of any app that
+ *   asks for SMS access, so only use this for builds installed over ADB. Without it, bank SMS
+ *   reach the app through the share sheet or by pasting.
+ * - STORE=play              → Play Store flavour. Never includes READ_SMS (Google restricts it to
+ *   default SMS apps).
  */
 const production = process.env.APP_VARIANT === 'production';
 const playStore = process.env.STORE === 'play';
+const withSms = process.env.SMS === '1' && !playStore;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -39,7 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     predictiveBackGestureEnabled: false,
     // Nothing is backed up to Google's cloud: the DB key lives in the Keystore and wouldn't restore anyway.
     allowBackup: false,
-    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA', ...(playStore ? [] : ['android.permission.READ_SMS'])],
+    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA', ...(withSms ? ['android.permission.READ_SMS'] : [])],
     blockedPermissions: [
       'android.permission.RECORD_AUDIO',
       'android.permission.SYSTEM_ALERT_WINDOW',
@@ -47,7 +52,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
       ...(production ? ['android.permission.INTERNET'] : []),
-      ...(playStore ? ['android.permission.READ_SMS'] : []),
+      ...(withSms ? [] : ['android.permission.READ_SMS']),
     ],
   },
   plugins: [
@@ -61,10 +66,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-local-authentication', { faceIDPermission: 'Unlock ExpenseMonster with Face ID.' }],
     ['expo-camera', { cameraPermission: 'Used only to scan the pairing QR code of a family member’s phone.', recordAudioAndroid: false }],
     ['expo-image-picker', { photosPermission: 'Used to read payment screenshots you choose. Images stay on this phone.', cameraPermission: 'Used only to scan the pairing QR code.', microphonePermission: false }],
-    ['expo-share-intent', { androidIntentFilters: ['image/*'], disableIOS: true }],
+    ['expo-share-intent', { androidIntentFilters: ['image/*', 'text/*'], disableIOS: true }],
     '@react-native-community/datetimepicker',
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
   ],
   experiments: { typedRoutes: false },
-  extra: { smsEnabled: !playStore },
+  extra: { smsEnabled: withSms },
 });

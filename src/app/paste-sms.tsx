@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { captureText } from '@/services/capture';
 import { Button, Card, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
@@ -8,9 +8,10 @@ import { TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
 
-/** Manual path when SMS access isn't granted: long-press a bank SMS → Copy → paste here. */
+/** SMS capture without the SMS permission: share a bank SMS to the app, or copy and paste it here. */
 export default function PasteSms() {
-  const [text, setText] = useState('');
+  const params = useLocalSearchParams<{ text?: string }>();
+  const [text, setText] = useState(params.text ?? '');
   const [unrecognised, setUnrecognised] = useState(false);
 
   const read = async () => {
@@ -23,9 +24,21 @@ export default function PasteSms() {
     } else toast(r.duplicates ? 'Already recorded' : 'Nothing to record in this message');
   };
 
+  // Shared from Messages: read it straight away so sharing is the whole job.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (params.text) read();
+    // Only for the text this screen was opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.text]);
+
   return (
     <Screen title="Paste a bank SMS" subtitle="No SMS permission needed" back footer={<Button title="Read message" icon="sparkles" size="lg" onPress={read} disabled={!text.trim()} />}>
-      <Txt tone="muted">In your Messages app, long-press the bank SMS, tap Copy, then paste it here. The message is read on this phone and not saved.</Txt>
+      <Txt tone="muted">
+        {params.text
+          ? "Shared from another app. If it wasn't picked up, check it's the bank message and tap Read message. It's read on this phone and not saved."
+          : 'Fastest: in Messages, long-press the bank SMS → Share → ExpenseMonster. Or copy it and paste it here. The message is read on this phone and not saved.'}
+      </Txt>
       <Button
         title="Paste from clipboard"
         icon="clipboard-outline"
