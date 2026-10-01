@@ -1,10 +1,12 @@
 name: Android production build
 
 # Builds the sideloadable production APK (no INTERNET permission, SMS capture included).
-# Push a tag like v1.0.0 to publish it as a GitHub Release, or run it manually from the Actions tab.
+# Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
     tags: ['v*']
+    # Every push to the app branch also builds (artifact only, no release) as a native-build check.
+    branches: [mobile]
   workflow_dispatch:
 
 permissions:
