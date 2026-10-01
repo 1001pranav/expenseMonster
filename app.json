@@ -1,0 +1,12 @@
+{
+  "plugins": [
+    "expo-router",
+    "expo-sqlite",
+    "expo-secure-store",
+    "expo-sharing",
+    "expo-font",
+    "expo-splash-screen",
+    "expo-build-properties",
+    "@react-native-community/datetimepicker"
+  ]
+}
