@@ -101,8 +101,9 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
 }
 
 /** Numeric keypad for the fast "amount first" entry. */
-export function Keypad({ onKey }: { onKey: (k: string) => void }) {
+export function Keypad({ onKey, onDark }: { onKey: (k: string) => void; /** White keys on the Aurora surface. */ onDark?: boolean }) {
   const { colors } = useTheme();
+  const fg = onDark ? '#FFFFFF' : colors.text;
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'];
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 6 }}>
@@ -116,9 +117,9 @@ export function Keypad({ onKey }: { onKey: (k: string) => void }) {
           onLongPress={k === 'del' ? () => onKey('clear') : undefined}
           accessibilityRole="button"
           accessibilityLabel={k === 'del' ? 'Delete' : k}
-          style={({ pressed }) => ({ width: '33.33%', height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}
+          style={({ pressed }) => ({ width: '33.33%', height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: pressed ? (onDark ? 'rgba(255,255,255,0.14)' : colors.surfaceAlt) : 'transparent' })}
         >
-          {k === 'del' ? <Ionicons name="backspace-outline" size={26} color={colors.text} /> : <Txt variant="h1">{k}</Txt>}
+          {k === 'del' ? <Ionicons name="backspace-outline" size={26} color={fg} /> : <Txt variant="h1" style={{ color: fg }}>{k}</Txt>}
         </Pressable>
       ))}
     </View>

@@ -9,7 +9,7 @@ import { FREQUENCY_LABEL } from '@/domain/recurrence';
 import { remove, restore, update } from '@/db/repo';
 import { useDues, useTable, useToday } from '@/data/hooks';
 import { Bars, LineChart } from '@/ui/components/charts';
-import { Button, Card, EmptyState, IconButton, IconCircle, ListRow, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
+import { Button, Card, EmptyState, IconButton, IconCircle, ListRow, Money, Pill, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
@@ -19,6 +19,7 @@ const STATE_LABEL = { draft: 'Draft', upcoming: 'Upcoming', due: 'Due', part_pai
 
 export default function BillerDetail() {
   const { colors } = useTheme();
+  const money = useMoneyText();
   const { id } = useLocalSearchParams<{ id: string }>();
   const biller = useTable('billers').find((b) => b.id === id);
   const allBills = useTable('bills');
@@ -137,7 +138,7 @@ export default function BillerDetail() {
         {insight.changeVsAverage !== null && Math.abs(insight.changeVsAverage) >= 0.15 ? (
           <Card tone="alt">
             <Txt variant="small" tone={insight.changeVsAverage > 0 ? 'warn' : 'income'}>
-              Latest bill is {Math.round(Math.abs(insight.changeVsAverage) * 100)}% {insight.changeVsAverage > 0 ? 'higher' : 'lower'} than your recent average ({formatINR(insight.averageAmount)}).
+              Latest bill is {Math.round(Math.abs(insight.changeVsAverage) * 100)}% {insight.changeVsAverage > 0 ? 'higher' : 'lower'} than your recent average ({money(insight.averageAmount)}).
             </Txt>
           </Card>
         ) : null}

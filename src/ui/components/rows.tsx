@@ -5,8 +5,9 @@ import { formatDay, isoToYMD, relativeDay, type YMD } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
-import { radius, space, useTheme } from '../theme';
-import { Card, IconCircle, ListRow, Money, Pill, Row, Txt, type IconName } from './core';
+import { fonts, gradients, radius, space, useTheme, type GradientName } from '../theme';
+import { GradientFill, GradientTile } from './Aurora';
+import { Card, ListRow, Money, Pill, Row, Txt, type IconName } from './core';
 
 const METHOD_LABEL: Record<Transaction['method'], string> = { upi: 'UPI', bank: 'Bank', cash: 'Cash', card: 'Card', wallet: 'Wallet' };
 
@@ -46,27 +47,54 @@ export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Catego
 
 export const stateTone = (d: DueItem) => (d.state === 'overdue' ? 'expense' : d.state === 'due' ? 'warn' : 'muted');
 
+const DUE_GRADIENT: Record<DueItem['kind'], GradientName> = {
+  emi: 'violet',
+  lent: 'mint',
+  card: 'rose',
+  bill: 'marigold',
+  enter_bill: 'marigold',
+  prepaid: 'ocean',
+  lpg: 'sunset',
+  policy: 'mint',
+  income: 'mint',
+  autopay_check: 'ink',
+};
+
 export function DueCard({ d, today, onPay }: { d: DueItem; today: YMD; onPay: () => void }) {
   const { colors } = useTheme();
-  const accent = d.state === 'overdue' ? colors.expense : d.state === 'due' ? colors.warn : colors.primary;
+  const urgent = d.state === 'overdue' || d.state === 'due';
   return (
-    <Card style={{ width: 200, gap: space(1) }} onPress={() => router.push(d.href as never)}>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <IconCircle name={d.icon as IconName} color={accent} size={36} />
+    <Card style={{ width: 200, gap: space(1), borderWidth: d.state === 'overdue' ? 1.5 : 0, borderColor: colors.expense }} onPress={() => router.push(d.href as never)}>
+      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <GradientTile icon={d.icon as IconName} gradient={DUE_GRADIENT[d.kind] ?? 'brand'} size={40} iconSize={19} />
         <Pill label={d.state === 'overdue' ? 'Overdue' : relativeDay(d.date, today)} tone={stateTone(d)} />
       </Row>
-      <Txt variant="bodyStrong" numberOfLines={1}>
-        {d.title}
-      </Txt>
-      {d.amount ? <Money value={d.amount} variant="h3" /> : <Txt tone="muted">Enter amount</Txt>}
+      <View>
+        <Txt variant="bodyStrong" numberOfLines={1}>
+          {d.title}
+        </Txt>
+        <Txt variant="small" tone="muted" numberOfLines={1}>
+          {formatDay(d.date)} · {d.subtitle}
+        </Txt>
+      </View>
+      {d.amount ? <Money value={d.amount} variant="h2" tone={d.incoming ? 'income' : 'default'} /> : <Txt tone="muted">Enter amount</Txt>}
       <Pressable
         onPress={onPay}
         accessibilityRole="button"
         accessibilityLabel={d.incoming ? `Mark ${d.title} received` : `Pay ${d.title}`}
-        style={({ pressed }) => ({ height: 36, borderRadius: radius.pill, backgroundColor: pressed ? colors.primary : colors.primarySoft, alignItems: 'center', justifyContent: 'center' })}
+        style={({ pressed }) => ({
+          height: 38,
+          borderRadius: radius.pill,
+          overflow: 'hidden',
+          backgroundColor: urgent ? colors.primary : colors.primarySoft,
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: pressed ? 0.8 : 1,
+        })}
       >
-        <Txt variant="small" tone="primary">
-          {d.kind === 'enter_bill' ? 'Enter bill' : d.incoming ? 'Mark received' : 'Pay'}
+        {urgent ? <GradientFill from={gradients.brand[0]} to={gradients.brand[1]} /> : null}
+        <Txt variant="small" style={{ color: urgent ? '#FFFFFF' : colors.primary, fontFamily: fonts.semibold }}>
+          {d.kind === 'enter_bill' ? 'Enter bill' : d.incoming ? 'Mark received' : 'Pay now'}
         </Txt>
       </Pressable>
     </Card>

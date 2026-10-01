@@ -8,7 +8,7 @@ import { loanEmisPaid } from '@/domain/dues';
 import { loanProgress, scheduleFor } from '@/domain/emi';
 import { FREQUENCY_LABEL } from '@/domain/recurrence';
 import { useDues, useTable, useToday } from '@/data/hooks';
-import { Button, Card, Chip, EmptyState, IconCircle, ListRow, Money, Pill, ProgressBar, Row, Section, Txt, type IconName } from '@/ui/components/core';
+import { Button, Card, Chip, EmptyState, IconCircle, ListRow, Money, Pill, ProgressBar, Row, Section, Stat, Txt, type IconName } from '@/ui/components/core';
 import { CardFace } from '@/ui/components/CardFace';
 import { DueRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
@@ -62,26 +62,33 @@ function AllDues() {
     ) : null;
   return (
     <>
-      <Row gap={1.5}>
-        <Card style={{ flex: 1, gap: 4 }}>
-          <Txt variant="caption" tone="muted">
-            DUE NOW
+      <Card tone="primary" style={{ gap: space(1.5) }}>
+        <View style={{ gap: 2 }}>
+          <Txt variant="small" tone="inverse" style={{ opacity: 0.85 }}>
+            Due in the next 7 days
           </Txt>
-          <Money value={owed} variant="h2" tone={overdue.length ? 'expense' : 'default'} />
-          <Txt variant="small" tone="muted">
-            {overdue.length ? `${overdue.length} overdue` : 'next 7 days'}
-          </Txt>
-        </Card>
-        <Card style={{ flex: 1, gap: 4 }}>
-          <Txt variant="caption" tone="muted">
-            NEXT 45 DAYS
-          </Txt>
-          <Money value={month} variant="h2" />
-          <Txt variant="small" tone="muted">
-            {dues.length} items
-          </Txt>
-        </Card>
-      </Row>
+          <Money value={owed} variant="display" tone="inverse" decimals="never" fit="narrow" />
+        </View>
+        {overdue.length ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,79,139,0.3)' }}>
+            <Txt variant="small" tone="inverse">
+              {overdue.length} overdue — pay these first
+            </Txt>
+          </View>
+        ) : null}
+        <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.16)' }} />
+        <Row gap={2}>
+          <Stat label="Next 45 days" value={month} tone="inverse" />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt variant="caption" tone="inverse" style={{ opacity: 0.75 }}>
+              ITEMS
+            </Txt>
+            <Txt variant="h3" tone="inverse">
+              {dues.length}
+            </Txt>
+          </View>
+        </Row>
+      </Card>
       {group('Overdue', overdue)}
       {group('This week', week)}
       {group('Coming up', later)}
