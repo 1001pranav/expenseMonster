@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+# A newer push to the same ref supersedes an in-progress build.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   apk:
     runs-on: ubuntu-latest

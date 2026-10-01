@@ -57,7 +57,7 @@ export default function Pay() {
     const unpaid = buildCardLedger(card, txns, overrides, today).cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
     if (!unpaid.length) return null;
     return { total: unpaid.reduce((a, c) => a + c.remaining, 0), min: unpaid.reduce((a, c) => a + Math.min(c.minDue, c.remaining), 0) };
-  }, [due, cards, txns, overrides, today, dueKey]);
+  }, [due, cards, txns, overrides, today]);
 
   const [amount, setAmount] = useState<Paise | null>(due?.amount ?? null);
   const [method, setMethod] = useState<PayMethod>(due?.link?.type === 'card' ? 'bank' : 'upi');
