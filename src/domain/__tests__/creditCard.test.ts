@@ -47,6 +47,22 @@ describe('credit card cycle', () => {
     expect(ledger.utilisation).toBeCloseTo(0.05);
   });
 
+  it('treats statements already due before the card was added as paid', () => {
+    const c = card({ createdAt: '2026-09-20T10:00:00.000Z' });
+    const txns = [
+      txn({ cardId: c.id, method: 'card', amount: 2_000_00, occurredAt: at('2026-08-01') }),
+      txn({ cardId: c.id, method: 'card', amount: 1_000_00, occurredAt: at('2026-09-01') }),
+      txn({ cardId: c.id, method: 'card', amount: 500_00, occurredAt: at('2026-09-21') }),
+    ];
+    const ledger = buildCardLedger(c, txns, [], '2026-10-20');
+    expect(ledger.cycles.find((x) => x.statementDate === '2026-08-15')!.status).toBe('paid');
+    // Generated before the card was added but due after: still payable.
+    expect(ledger.cycles.find((x) => x.statementDate === '2026-09-15')!.status).toBe('overdue');
+    const oct = ledger.cycles.find((x) => x.statementDate === '2026-10-15')!;
+    expect(oct.status).toBe('due');
+    expect(ledger.outstanding).toBe(1_500_00);
+  });
+
   it('uses the bank statement amount when overridden and flags overdue', () => {
     const c = card();
     const txns = [txn({ cardId: c.id, method: 'card', amount: 1_000_00, occurredAt: at('2026-09-01') })];

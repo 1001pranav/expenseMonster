@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { generateFixedBills } from '@/data/actions';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { scanSms } from '@/services/capture';
@@ -57,7 +58,8 @@ function App() {
         setPinSet(pin);
         const st = useStore.getState();
         setLocked(st.identity.onboarded && (pin || st.settings.biometric));
-        await configureNotifications();
+        // Reminders are important but must never stop the app from opening.
+        await configureNotifications().catch(() => {});
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -77,6 +79,8 @@ function App() {
         backgroundedAt.current = null;
         if ((pinSet || settings.biometric) && away > settings.autoLockMinutes * 60_000) setLocked(true);
         if (useStore.getState().settings.smsEnabled) scanSms().catch(() => {});
+        // A new month may have started while the app was in the background.
+        generateFixedBills().catch(() => {});
       }
     });
     return () => sub.remove();

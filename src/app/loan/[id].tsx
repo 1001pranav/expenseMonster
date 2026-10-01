@@ -38,7 +38,7 @@ export default function LoanDetail() {
       v.interest += r.interest;
       map.set(y, v);
     }
-    return [...map.entries()].map(([y, v]) => ({ key: y, label: `'${y.slice(2)}`, values: [v.principal, v.interest] }));
+    return [...map.entries()].map(([y, v]) => ({ key: y, label: y, values: [v.principal, v.interest] }));
   }, [schedule]);
   const sim = useMemo(() => (loan && p && prepay ? simulatePrepayment(loan.principal, loan.ratePa, loan.tenureMonths, loan.emi, p.emisPaid, prepay, mode) : null), [loan, p, prepay, mode]);
 
@@ -86,14 +86,14 @@ export default function LoanDetail() {
             <Txt variant="caption" tone="muted">
               OUTSTANDING
             </Txt>
-            <Money value={p.outstanding} variant="h1" />
+            <Money value={p.outstanding} variant="h1" decimals="never" />
             {p.overdueCount ? <Pill label={`${p.overdueCount} EMI overdue`} tone="expense" /> : p.payoffDate ? <Txt variant="small" tone="muted">Free by {formatMonth(monthKey(p.payoffDate))}</Txt> : null}
           </View>
         </Row>
         <Row gap={2}>
           <Stat label="EMI" value={loan.emi} />
-          <Stat label="Interest paid" value={p.interestPaid} />
-          <Stat label="Interest left" value={p.interestLeft} tone="expense" />
+          <Stat label="Interest paid" value={p.interestPaid} compact />
+          <Stat label="Interest left" value={p.interestLeft} tone="expense" compact />
         </Row>
       </Card>
 

@@ -12,11 +12,12 @@ export interface BudgetUsage {
 }
 
 /** Spend per category for a month, honouring category splits. Card bill payments are transfers, so never counted. */
-export function spendByCategory(transactions: Transaction[], month: string): Map<string, Paise> {
+export function spendByCategory(transactions: Transaction[], month: string, uptoDay = 31): Map<string, Paise> {
   const out = new Map<string, Paise>();
   for (const t of transactions) {
     if (t.deletedAt || t.status !== 'confirmed' || t.type !== 'expense') continue;
-    if (monthKey(isoToYMD(t.occurredAt)) !== month) continue;
+    const d = isoToYMD(t.occurredAt);
+    if (monthKey(d) !== month || Number(d.slice(8)) > uptoDay) continue;
     const splits = parseSplits(t.splits);
     const parts = splits.length ? splits : [{ categoryId: t.categoryId ?? 'uncategorised', amount: t.amount }];
     for (const p of parts) out.set(p.categoryId, (out.get(p.categoryId) ?? 0) + p.amount);

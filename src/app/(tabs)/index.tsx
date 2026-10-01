@@ -82,7 +82,7 @@ export default function Home() {
     >
       <Card tone="primary" style={{ gap: space(2) }} onPress={() => router.push('/insights')}>
         <Row gap={2}>
-          <ProgressRing value={budgetTotal ? spentRatio : 0} size={96} stroke={10} color={spentRatio >= 1 ? '#FFB4B4' : '#FFFFFF'}>
+          <ProgressRing value={budgetTotal ? spentRatio : 0} size={96} stroke={10} color={spentRatio >= 1 ? colors.expense : colors.primaryText} trackColor={`${colors.primaryText}38`}>
             <Txt variant="caption" tone="inverse">
               {budgetTotal ? `${Math.round(spentRatio * 100)}%` : 'SPENT'}
             </Txt>

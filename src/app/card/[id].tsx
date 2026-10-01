@@ -96,7 +96,7 @@ export default function CardDetail() {
       {history.length > 1 ? (
         <Section title="Bill history">
           <Card>
-            <Bars data={history} colors={[card.color ?? colors.primary]} height={120} highlightLast />
+            <Bars data={history} colors={[colors.primary]} height={120} highlightLast />
           </Card>
         </Section>
       ) : null}
@@ -113,7 +113,7 @@ export default function CardDetail() {
                 <Row gap={0.75}>
                   <Pill label={STATUS_LABEL[c.status]} tone={statusTone(c.status)} />
                   <Txt variant="small" tone="muted" numberOfLines={1}>
-                    {c.status === 'unbilled' ? `${formatDay(c.start)} – ${formatDay(c.statementDate)}` : `due ${relativeDay(c.dueDate, today)}`}
+                    {c.status === 'unbilled' ? `${formatDay(c.start)} – ${formatDay(c.statementDate)}` : c.status === 'paid' || c.status === 'nil' ? `was due ${formatDay(c.dueDate)}` : `due ${relativeDay(c.dueDate, today)}`}
                     {c.overridden ? ' · bank figure' : ''}
                   </Txt>
                 </Row>

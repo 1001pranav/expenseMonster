@@ -31,12 +31,13 @@ export interface MonthTotals {
  * settlements are excluded: they move money between your own pockets / people.
  * Card refunds (income on a card) reduce expense instead of counting as income.
  */
-export function monthTotals(transactions: Transaction[], month: string): MonthTotals {
+export function monthTotals(transactions: Transaction[], month: string, uptoDay = 31): MonthTotals {
   let income = 0;
   let expense = 0;
   let cardSpend = 0;
   for (const t of transactions) {
-    if (!isLive(t) || monthKey(isoToYMD(t.occurredAt)) !== month) continue;
+    const d = isoToYMD(t.occurredAt);
+    if (!isLive(t) || monthKey(d) !== month || Number(d.slice(8)) > uptoDay) continue;
     if (t.type === 'expense') {
       expense += t.amount;
       if (t.method === 'card') cardSpend += t.amount;
@@ -94,3 +95,12 @@ export function ruleKey(payee: string | null, vpa: string | null): string | null
 }
 
 export const flagsOf = (t: Pick<Transaction, 'flags'>): string[] => (t.flags ? t.flags.split(',').filter(Boolean) : []);
+
+/**
+ * Fair month-over-month change: a month in progress is compared with the same number of
+ * days of the previous month (1–10 Oct vs 1–10 Sep), not with all of September.
+ */
+export function comparableChange(current: Paise, previous: Paise): number | null {
+  if (!previous) return null;
+  return (current - previous) / previous;
+}

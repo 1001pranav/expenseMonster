@@ -309,13 +309,13 @@ export function Row({ children, gap = 1, style, wrap }: { children: ReactNode; g
   return <View style={[{ flexDirection: 'row', alignItems: 'center', gap: space(gap), flexWrap: wrap ? 'wrap' : 'nowrap' }, style]}>{children}</View>;
 }
 
-export function Stat({ label, value, tone }: { label: string; value: Paise; tone?: Tone }) {
+export function Stat({ label, value, tone, compact }: { label: string; value: Paise; tone?: Tone; compact?: boolean }) {
   return (
     <View style={{ flex: 1, gap: 2 }}>
-      <Txt variant="caption" tone="muted">
+      <Txt variant="caption" tone={tone === 'inverse' ? 'inverse' : 'muted'} style={tone === 'inverse' ? { opacity: 0.75 } : undefined}>
         {label.toUpperCase()}
       </Txt>
-      <Money value={value} variant="h3" tone={tone} />
+      <Money value={value} variant="h3" tone={tone} compact={compact} decimals="never" />
     </View>
   );
 }

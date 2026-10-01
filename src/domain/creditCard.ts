@@ -85,6 +85,7 @@ export function buildCardLedger(
   transactions: Transaction[],
   overrides: CardStatementOverride[],
   today: YMD,
+  trackingStart: YMD | null = card.createdAt ? card.createdAt.slice(0, 10) : null,
 ): CardLedger {
   const byStatement = new Map<YMD, { purchases: Paise; refunds: Paise; ids: string[] }>();
   const currentCycle = cycleFor(today, card);
@@ -113,10 +114,14 @@ export function buildCardLedger(
     const override = overrideFor.get(statementDate);
     const total = override ? override.total : computedTotal;
     const billed = statementDate < today;
+    // Statements that were already due before tracking started were paid outside the app: treat
+    // them as settled (unless the bank's figure was entered), otherwise every new card starts
+    // "overdue". A statement generated just before tracking but due later stays payable.
+    const preTracking = trackingStart !== null && c.dueDate < trackingStart && !override;
     let paid = 0;
     if (billed && total > 0) {
-      paid = Math.min(paymentPool, total);
-      paymentPool -= paid;
+      paid = preTracking ? total : Math.min(paymentPool, total);
+      if (!preTracking) paymentPool -= paid;
     }
     const remaining = Math.max(total - paid, 0);
     let status: StatementStatus;

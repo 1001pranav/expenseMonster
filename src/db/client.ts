@@ -30,8 +30,9 @@ async function migrate(conn: SQLite.SQLiteDatabase) {
   let version = row?.user_version ?? 0;
   while (version < MIGRATIONS.length) {
     const sql = MIGRATIONS[version];
-    await conn.withExclusiveTransactionAsync(async (txn) => {
-      await txn.execAsync(sql);
+    // Runs before any other query, so a plain transaction is enough.
+    await conn.withTransactionAsync(async () => {
+      await conn.execAsync(sql);
     });
     version += 1;
     await conn.execAsync(`PRAGMA user_version = ${version};`);

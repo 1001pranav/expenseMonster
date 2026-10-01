@@ -7,7 +7,7 @@ import { addMonths, daysInMonth, formatMonth, fromParts, isoToYMD, monthKey, par
 import { loanEmisPaid } from '@/domain/dues';
 import { scheduleFor } from '@/domain/emi';
 import { formatINR, type Paise } from '@/domain/money';
-import { monthlySeries } from '@/domain/transactions';
+import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
 import { Bars, Donut, HeatCalendar, LineChart, type Slice } from '@/ui/components/charts';
 import { Card, Chip, IconButton, ProgressBar, Row, Section, Txt } from '@/ui/components/core';
@@ -46,8 +46,14 @@ export default function Insights() {
   }, [txns, month, months, cats, fallbackColor]);
 
   const series = useMemo(() => monthlySeries(txns, month, 12), [txns, month]);
-  const thisMonth = series[series.length - 1];
-  const lastMonth = series[series.length - 2];
+  // A month in progress is compared with the same days of the previous month.
+  const inProgress = month === monthKey(today);
+  const uptoDay = inProgress ? Number(today.slice(8)) : 31;
+  const prevMonth = monthKey(addMonths(`${month}-01`, -1));
+  const thisMonth = useMemo(() => monthTotals(txns, month, uptoDay), [txns, month, uptoDay]);
+  const lastMonth = useMemo(() => monthTotals(txns, prevMonth, uptoDay), [txns, prevMonth, uptoDay]);
+  const spendChange = comparableChange(thisMonth.expense, lastMonth.expense);
+  const sameDays = inProgress ? ` (1–${uptoDay} ${shortMonth(prevMonth)})` : '';
 
   const heat = useMemo(() => {
     const { y, m } = parts(`${month}-01`);
@@ -93,12 +99,12 @@ export default function Insights() {
 
   const savings = series.map((s) => s.net);
   const topCat = slices[0];
-  const prevCatSpend = topCat && range === 'month' ? (spendByCategory(txns, monthKey(addMonths(`${month}-01`, -1))).get(topCat.key) ?? 0) : 0;
+  const prevCatSpend = topCat && range === 'month' ? (spendByCategory(txns, prevMonth, uptoDay).get(topCat.key) ?? 0) : 0;
   const takeaway = (() => {
     if (!topCat) return 'No spending recorded for this period yet.';
     if (range === 'month' && prevCatSpend) {
       const ch = (topCat.value - prevCatSpend) / prevCatSpend;
-      return `${topCat.label} is your biggest spend: ${formatINR(topCat.value, { compact: true })}, ${ch >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(ch * 100))}% vs last month.`;
+      return `${topCat.label} is your biggest spend: ${formatINR(topCat.value, { compact: true })}, ${ch >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(ch * 100))}% vs last month${sameDays}.`;
     }
     return `${topCat.label} is your biggest spend at ${formatINR(topCat.value, { compact: true })}.`;
   })();
@@ -136,9 +142,9 @@ export default function Insights() {
 
       <Section title="Income vs expense · 12 months">
         <Card style={{ gap: space(1) }}>
-          {thisMonth && lastMonth && lastMonth.expense ? (
+          {spendChange !== null ? (
             <Txt variant="small" tone="muted">
-              Spending {thisMonth.expense >= lastMonth.expense ? 'up' : 'down'} {Math.abs(Math.round(((thisMonth.expense - lastMonth.expense) / lastMonth.expense) * 100))}% vs last month.
+              Spending {spendChange >= 0 ? 'up' : 'down'} {Math.abs(Math.round(spendChange * 100))}% vs last month{sameDays}.
             </Txt>
           ) : null}
           <Bars data={series.map((s) => ({ key: s.month, label: shortMonth(s.month).slice(0, 1), values: [s.income, s.expense] }))} colors={[colors.income, colors.expense]} legend={['Income', 'Expense']} height={170} />

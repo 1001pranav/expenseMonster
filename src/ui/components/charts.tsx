@@ -8,7 +8,7 @@ import { Money, Row, Txt } from './core';
 
 /** Hand-rolled SVG charts: small, themeable, no extra native dependency. */
 
-export function ProgressRing({ value, size = 120, stroke = 12, color, children }: { value: number; size?: number; stroke?: number; color?: string; children?: React.ReactNode }) {
+export function ProgressRing({ value, size = 120, stroke = 12, color, trackColor, children }: { value: number; size?: number; stroke?: number; color?: string; trackColor?: string; children?: React.ReactNode }) {
   const { colors } = useTheme();
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -16,7 +16,7 @@ export function ProgressRing({ value, size = 120, stroke = 12, color, children }
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(v * 100) }}>
       <Svg width={size} height={size} style={{ position: 'absolute' }}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={colors.chartTrack} strokeWidth={stroke} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={trackColor ?? colors.chartTrack} strokeWidth={stroke} fill="none" />
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -137,6 +137,8 @@ export function Bars({ data, colors: seriesColors, height = 160, legend, highlig
   const series = data[0]?.values.length ?? 1;
   const barW = Math.min(18, (groupW * 0.7) / series);
   const chartH = height - 22;
+  // Keep axis labels readable: at most ~8 across the chart.
+  const labelStep = Math.max(1, Math.ceil(data.length / 8));
 
   return (
     <View style={{ gap: 8 }}>
@@ -182,12 +184,14 @@ export function Bars({ data, colors: seriesColors, height = 160, legend, highlig
           );
         })}
       </Svg>
-      <View style={{ flexDirection: 'row', width, marginTop: -20 }}>
-        {data.map((d, i) => (
-          <Txt key={d.key} variant="caption" tone={active === i ? 'default' : 'faint'} style={{ width: groupW, textAlign: 'center' }} numberOfLines={1}>
-            {data.length > 14 && i % 2 ? '' : d.label}
-          </Txt>
-        ))}
+      <View style={{ width, height: 16, marginTop: -20 }}>
+        {data.map((d, i) =>
+          i % labelStep === 0 || active === i ? (
+            <Txt key={d.key} variant="caption" tone={active === i ? 'default' : 'faint'} style={{ position: 'absolute', left: i * groupW + groupW / 2 - 24, width: 48, textAlign: 'center' }} numberOfLines={1}>
+              {d.label}
+            </Txt>
+          ) : null,
+        )}
       </View>
     </View>
   );

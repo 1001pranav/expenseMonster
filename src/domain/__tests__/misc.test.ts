@@ -47,6 +47,12 @@ describe('totals', () => {
     expect(monthTotals(t, '2026-09')).toEqual({ income: 50_000_00, expense: 1_300_00, net: 48_700_00, cardSpend: 1_000_00 });
   });
 
+  it('can total a month only up to a given day (for fair comparisons)', () => {
+    const t = [txn({ amount: 100_00, occurredAt: at('2026-09-03') }), txn({ amount: 900_00, occurredAt: at('2026-09-25') })];
+    expect(monthTotals(t, '2026-09', 10).expense).toBe(100_00);
+    expect(monthTotals(t, '2026-09').expense).toBe(1_000_00);
+  });
+
   it('learns categories from merchants', () => {
     expect(ruleKey('Swiggy', 'swiggy.stores@axb')).toBe('swiggy');
     expect(ruleKey(null, 'paytm-12345@paytm')).toBeNull();
