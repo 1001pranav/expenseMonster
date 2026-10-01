@@ -7,14 +7,14 @@ import { formatDay, isoToYMD } from '@/domain/dates';
 import { encodePair } from '@/domain/sync/bundle';
 import { fingerprint } from '@/domain/sync/crypto';
 import type { Peer } from '@/domain/types';
-import { listPeers, saveIdentity } from '@/db/repo';
+import { listPeers, saveIdentity, saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { getHouseholdKey } from '@/services/secure';
-import { importChanges, sendChanges } from '@/services/sync';
+import { importChanges, loadConflicts, sendChanges } from '@/services/sync';
 import { Avatar } from '@/ui/components/Avatar';
 import { Button, Card, Divider, ListRow, Row, Section, Txt } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
-import { TextField } from '@/ui/components/forms';
+import { Segmented, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -28,7 +28,12 @@ export default function Sync() {
   const [deviceName, setDeviceName] = useState(identity.deviceName);
   const [householdName, setHouseholdName] = useState(identity.householdName);
 
-  const refresh = useCallback(() => listPeers().then(setPeers), []);
+  const policy = useStore((s) => s.settings.syncConflictPolicy);
+  const [conflictCount, setConflictCount] = useState(0);
+  const refresh = useCallback(() => {
+    listPeers().then(setPeers);
+    loadConflicts().then((c) => setConflictCount(c.length));
+  }, []);
   useEffect(() => {
     refresh();
   }, [refresh]);
@@ -38,8 +43,13 @@ export default function Sync() {
       setBusy('receive');
       try {
         const r = await importChanges(uri);
-        toast(`From ${r.from}: ${r.inserted} new, ${r.updated} updated${r.conflicts ? `, ${r.conflicts} conflicts (kept newer)` : ''}`, { tone: 'success' });
+        if (r.clockAheadMinutes > 5) {
+          toast(`${r.from}'s phone clock is ${r.clockAheadMinutes} min ahead. Fix it in Android settings, or "newest edit" may pick the wrong version.`, { tone: 'error' });
+        } else {
+          toast(`From ${r.from}: ${r.inserted} new, ${r.updated} updated${r.autoResolved ? `, ${r.autoResolved} conflicts settled` : ''}`, { tone: 'success' });
+        }
         refresh();
+        if (r.pendingConflicts) router.push('/sync/conflicts');
       } catch (e) {
         toast((e as Error).message, { tone: 'error' });
       } finally {
@@ -93,6 +103,15 @@ export default function Sync() {
         </Txt>
       </Card>
 
+      {conflictCount ? (
+        <Card onPress={() => router.push('/sync/conflicts')} style={{ borderWidth: 1.5, borderColor: colors.warn, gap: 4 }}>
+          <Txt variant="bodyStrong">{conflictCount} conflicting {conflictCount === 1 ? 'entry' : 'entries'} to resolve</Txt>
+          <Txt variant="small" tone="muted">
+            Changed on both phones. Tap to pick which version to keep.
+          </Txt>
+        </Card>
+      ) : null}
+
       <Row gap={1}>
         <Button title="Show my QR" icon="qr-code" onPress={showQr} style={{ flex: 1 }} />
         <Button title="Scan to join" icon="scan" variant="secondary" onPress={() => router.push('/sync/scan')} style={{ flex: 1 }} />
@@ -121,9 +140,30 @@ export default function Sync() {
       </Section>
 
       <Row gap={1}>
-        <Button title="Send everything" icon="share-outline" variant="secondary" loading={busy === 'all'} onPress={() => send(null)} style={{ flex: 1 }} />
+        <Button title="Send all" icon="share-outline" variant="secondary" loading={busy === 'all'} onPress={() => send(null)} style={{ flex: 1 }} />
         <Button title="Receive file" icon="download-outline" variant="secondary" loading={busy === 'receive'} onPress={pick} style={{ flex: 1 }} />
       </Row>
+
+      <Section title="When both phones changed the same entry">
+        <Card style={{ gap: space(1.25) }}>
+          <Segmented
+            value={policy}
+            onChange={(v) => saveSettings({ syncConflictPolicy: v })}
+            options={[
+              { value: 'ask', label: 'Ask me' },
+              { value: 'newest', label: 'Newest edit' },
+              { value: 'incoming', label: 'File wins' },
+            ]}
+          />
+          <Txt variant="small" tone="muted">
+            {policy === 'ask'
+              ? "You see both versions side by side and pick one. Nothing is overwritten until you choose."
+              : policy === 'newest'
+                ? 'The edit made later wins, by UTC time. Both phones need the correct time set.'
+                : 'Whatever is in the file you open overwrites this phone. Careful: opening an old file undoes newer edits here.'}
+          </Txt>
+        </Card>
+      </Section>
 
       <Section title="Names">
         <Card style={{ gap: space(1.5) }}>

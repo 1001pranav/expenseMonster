@@ -225,6 +225,19 @@ export interface CategoryRule extends BaseRow {
   categoryId: string;
 }
 
+/** A bank SMS format taught by the user from one sample message (see parsers/custom.ts). */
+export interface SmsFormat extends BaseRow {
+  name: string;
+  /** Substring of the sender id, e.g. "MYBANK" for "VM-MYBANK". Null = any sender. */
+  sender: string | null;
+  pattern: string;
+  /** JSON array of TokenRole, one per capture group. */
+  roles: string;
+  direction: 'debit' | 'credit';
+  isCard: 0 | 1;
+  active: 0 | 1;
+}
+
 export interface Peer {
   deviceId: string;
   name: string;
@@ -247,6 +260,7 @@ export interface TableMap {
   incomes: RecurringIncome;
   budgets: Budget;
   rules: CategoryRule;
+  sms_formats: SmsFormat;
 }
 export type TableName = keyof TableMap;
 export const SYNC_TABLES: TableName[] = [
@@ -262,5 +276,6 @@ export const SYNC_TABLES: TableName[] = [
   'incomes',
   'budgets',
   'rules',
+  'sms_formats',
   'transactions',
 ];

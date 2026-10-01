@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ConflictPolicy } from '@/domain/sync/merge';
 import type { Scope, TableMap, TableName } from '@/domain/types';
 
 export interface Settings {
@@ -12,6 +13,8 @@ export interface Settings {
   defaultTxnScope: Scope;
   smsEnabled: boolean;
   theme: 'system' | 'light' | 'dark';
+  syncConflictPolicy: ConflictPolicy;
+  smsPromptDismissed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -25,6 +28,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultTxnScope: 'household',
   smsEnabled: false,
   theme: 'system',
+  syncConflictPolicy: 'ask',
+  smsPromptDismissed: false,
 };
 
 export interface Identity {
@@ -52,6 +57,7 @@ export const EMPTY_TABLES: Tables = {
   incomes: [],
   budgets: [],
   rules: [],
+  sms_formats: [],
 };
 
 interface State {

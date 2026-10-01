@@ -24,7 +24,7 @@ export default function AddSheet() {
     { label: 'Expense', icon: 'remove-circle', color: colors.expense, href: { pathname: '/txn/new', params: { type: 'expense' } } },
     { label: 'Income', icon: 'add-circle', color: colors.income, href: { pathname: '/txn/new', params: { type: 'income' } } },
     { label: 'Scan screenshot', icon: 'scan', color: colors.primary, href: '/scan' },
-    { label: sms ? 'Check SMS' : 'SMS capture', icon: 'chatbubble-ellipses', color: colors.info, href: sms ? '/review?scan=1' : '/settings/sms' },
+    { label: sms ? 'Check SMS' : 'Paste SMS', icon: 'chatbubble-ellipses', color: colors.info, href: sms ? '/review?scan=1' : '/paste-sms' },
     { label: 'Transfer', icon: 'swap-horizontal', color: '#0D9488', href: { pathname: '/txn/new', params: { type: 'transfer' } } },
     { label: 'Settle up', icon: 'people', color: '#7C3AED', href: '/settle' },
   ];

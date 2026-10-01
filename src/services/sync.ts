@@ -3,9 +3,9 @@ import { File } from 'expo-file-system';
 import { randomBytes } from '@/domain/ids';
 import { buildBundle, bundleSize, validateBundle, type Bundle } from '@/domain/sync/bundle';
 import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sync/crypto';
-import { planMerge } from '@/domain/sync/merge';
+import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
-import { allRows, applyRemote, listPeers, loadTables, saveIdentity, upsertPeer } from '@/db/repo';
+import { allRows, applyRemote, getMeta, listPeers, loadTables, saveIdentity, setMeta, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
 import { writeCacheFile } from './files';
 import { getHouseholdKey, setHouseholdKey } from './secure';
@@ -50,25 +50,71 @@ export interface ImportResult {
   inserted: number;
   updated: number;
   skipped: number;
-  conflicts: number;
+  /** Settled automatically by the chosen policy. */
+  autoResolved: number;
+  /** Waiting for the user to pick (policy "ask"). */
+  pendingConflicts: number;
+  /** Minutes the sender's clock appeared to be ahead of ours (timestamps are UTC). */
+  clockAheadMinutes: number;
 }
 
-async function mergeBundle(bundle: Bundle): Promise<Omit<ImportResult, 'from'>> {
+export interface PendingConflict {
+  table: TableName;
+  from: string;
+  local: BaseRow;
+  incoming: BaseRow;
+}
+
+const CONFLICTS_KEY = 'pendingConflicts';
+
+export async function loadConflicts(): Promise<PendingConflict[]> {
+  try {
+    return JSON.parse((await getMeta(CONFLICTS_KEY)) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+const saveConflicts = (list: PendingConflict[]) => setMeta(CONFLICTS_KEY, JSON.stringify(list));
+
+async function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
   const peers = await listPeers();
   const lastSync = peers.find((p) => p.deviceId === bundle.fromDeviceId)?.lastReceivedAt ?? null;
-  const totals = { inserted: 0, updated: 0, skipped: 0, conflicts: 0 };
+  const totals = { inserted: 0, updated: 0, skipped: 0, autoResolved: 0, pendingConflicts: 0 };
+  // Conflicts are kept (not applied) until the user picks; newer files replace older pending ones.
+  const pending = new Map((await loadConflicts()).map((c) => [`${c.table}:${c.local.id}`, c]));
   for (const table of SYNC_TABLES) {
     const incoming = bundle.tables[table];
     if (!incoming?.length) continue;
     const local = new Map((await allRows(table)).map((r) => [r.id, r as BaseRow]));
-    const plan = planMerge(local, incoming, lastSync);
+    const plan = planMerge(local, incoming, lastSync, policy);
     await applyRemote(table, [...plan.inserts, ...plan.updates] as never[]);
     totals.inserted += plan.inserts.length;
     totals.updated += plan.updates.length;
     totals.skipped += plan.skipped;
-    totals.conflicts += plan.conflicts;
+    totals.autoResolved += plan.autoResolved;
+    for (const c of plan.conflicts) pending.set(`${table}:${c.local.id}`, { table, from: bundle.fromName, local: c.local, incoming: c.incoming });
   }
+  totals.pendingConflicts = pending.size;
+  await saveConflicts([...pending.values()]);
   return totals;
+}
+
+/** Keep my version (re-stamped now, so it wins on the other phone after the next send) or take theirs. */
+export async function resolveConflicts(keys: string[], choice: 'mine' | 'theirs'): Promise<number> {
+  const list = await loadConflicts();
+  const chosen = new Set(keys);
+  const rest: PendingConflict[] = [];
+  for (const c of list) {
+    if (!chosen.has(`${c.table}:${c.local.id}`)) {
+      rest.push(c);
+      continue;
+    }
+    if (choice === 'theirs') await applyRemote(c.table, [c.incoming] as never[]);
+    else await update(c.table, c.local.id, {} as never);
+  }
+  await saveConflicts(rest);
+  return rest.length;
 }
 
 /** Import a .emx file received from another phone in this household. */
@@ -80,9 +126,11 @@ export async function importChanges(uri: string): Promise<ImportResult> {
   const bundle = validateBundle(open<Bundle>(text, key, identity.householdId));
   if (bundle.kind !== 'delta') throw new Error('This is a backup file. Use Restore backup instead.');
   if (bundle.fromDeviceId === identity.deviceId) throw new Error('This file was sent from this phone');
-  const result = await mergeBundle(bundle);
+  const result = await mergeBundle(bundle, getState().settings.syncConflictPolicy);
   await upsertPeer({ deviceId: bundle.fromDeviceId, name: bundle.fromName, lastReceivedAt: bundle.createdAt });
-  return { from: bundle.fromName, ...result };
+  // All timestamps are UTC, so only a wrong phone clock can make "newest" pick the wrong edit.
+  const clockAheadMinutes = Math.max(0, Math.round((Date.parse(bundle.createdAt) - Date.now()) / 60_000));
+  return { from: bundle.fromName, ...result, clockAheadMinutes };
 }
 
 /** Join another phone's household (after scanning its pairing QR). */
@@ -131,9 +179,9 @@ export async function restoreBackup(uri: string, passphrase: string): Promise<Im
   if (env.t !== 'emx-backup') throw new Error('Not an ExpenseMonster backup');
   const key = await keyFromPassphrase(passphrase, fromBase64(env.salt));
   const bundle = validateBundle(open<Bundle>(env.data, key, BACKUP_AAD));
-  const result = await mergeBundle(bundle);
+  const result = await mergeBundle(bundle, 'newest');
   getState().setAll(await loadTables(), getState().identity, getState().settings);
-  return { from: bundle.fromName, ...result };
+  return { from: bundle.fromName, ...result, clockAheadMinutes: 0 };
 }
 
 /** CSV export of confirmed transactions for spreadsheets / CA. */

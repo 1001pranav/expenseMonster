@@ -7,7 +7,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 | Area | What it does |
 |---|---|
 | Transactions | Expense, income, transfer and settlement. Category splits, equal split with family members, private entries |
-| Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Bank SMS** (Android): bank, card and biller messages are parsed. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
+| Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Bank SMS is optional**: the app asks once and reads nothing unless you allow it (and stops if the permission is revoked). Without it, **paste a bank SMS** or add entries manually. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
 | Loans & EMIs | Borrowed and lent loans, reducing or flat interest, amortisation schedule, prepayment simulator, overdue EMIs |
 | Credit cards | Statement day and due day per card. Purchases on or before the statement day go on this bill; anything after goes on the next one. Refunds reduce the cycle. Bill payments are **transfers, not expenses**, so spending is never counted twice. Bank statement amounts can override the computed total |
 | Bills | Variable bills (electricity/water/gas, with units), fixed bills (rent/internet, created each cycle automatically), prepaid recharges (validity tracking), LPG (predicts the next booking), autopay (warns if no debit shows up) |
@@ -29,7 +29,11 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 1. **Pair once:** Household → Sync → *Show my QR* on one phone, *Scan to join* on the other. The QR carries a household AES key, and both phones show the same fingerprint.
 2. **Send:** builds the household rows changed since the last send to that phone, gzips them, encrypts them with **AES-256-GCM** (household id as associated data) and opens the share sheet (WhatsApp, Nearby Share, Bluetooth…).
 3. **Receive:** *Receive file*, then pick the `.emx` file.
-4. **Merge:** last-write-wins per row (`updatedAt`, then `deviceId` as tie-break). Tombstones carry deletions and re-importing the same file is a no-op. If both phones edit the same row before syncing, the older edit loses; the import summary shows how many conflicts there were.
+4. **Merge:** rows changed on only one side are applied, and tombstones carry deletions. Re-importing the same file is a no-op. All timestamps are UTC ISO-8601.
+5. **Conflicts** (the same entry changed on both phones since the last sync). You choose the policy in Sync:
+   - **Ask me** (default): both versions are shown side by side and you keep mine or use theirs, per entry or for all. *Keep mine* re-stamps the entry so it wins on the other phone after your next send.
+   - **Newest edit:** the later UTC timestamp wins, with `deviceId` as tie-break. The import warns if the sender's clock looks ahead.
+   - **File wins:** the opened file overwrites this phone. Opening an *old* file undoes newer edits.
 
 Rows marked **private** never leave the phone.
 

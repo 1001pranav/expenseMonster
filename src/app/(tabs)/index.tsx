@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Platform, ScrollView, View } from 'react-native';
+import { isSmsAvailable } from '../../../modules/sms-reader';
 import { budgetUsage, spendByCategory } from '@/domain/budget';
 import { addDays, formatMonth, monthKey, shortMonth } from '@/domain/dates';
 import { formatINR } from '@/domain/money';
@@ -10,7 +12,7 @@ import { useStore } from '@/db/store';
 import { useCategoryMap, useConfirmed, useDues, usePending, useTable, useToday } from '@/data/hooks';
 import { scanSms } from '@/services/capture';
 import { Bars, Donut, ProgressRing, type Slice } from '@/ui/components/charts';
-import { Card, EmptyState, IconButton, Money, Pill, Row, Section, Stat, Txt } from '@/ui/components/core';
+import { Button, Card, EmptyState, IconButton, Money, Pill, Row, Section, Stat, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { DueCard, TxnRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
@@ -59,6 +61,7 @@ export default function Home() {
   };
 
   const spentRatio = budgetTotal ? totals.expense / budgetTotal : 0;
+  const showSmsPrompt = Platform.OS === 'android' && isSmsAvailable() && !settings.smsEnabled && !settings.smsPromptDismissed;
 
   return (
     <Screen
@@ -118,6 +121,26 @@ export default function Home() {
             </Txt>
           </View>
           <Pill label="Open" tone="warn" />
+        </Card>
+      ) : null}
+
+      {showSmsPrompt ? (
+        <Card style={{ gap: space(1.25) }}>
+          <Row gap={1.5}>
+            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.infoSoft, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="chatbubble-ellipses" size={22} color={colors.info} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt variant="bodyStrong">Read bank SMS automatically?</Txt>
+              <Txt variant="small" tone="muted">
+                Optional. Payments are suggested for you to approve. Say no and everything stays manual.
+              </Txt>
+            </View>
+          </Row>
+          <Row gap={1}>
+            <Button title="Allow" size="sm" onPress={() => router.push('/settings/sms')} style={{ flex: 1 }} />
+            <Button title="No, keep manual" size="sm" variant="secondary" onPress={() => saveSettings({ smsPromptDismissed: true })} style={{ flex: 1 }} />
+          </Row>
         </Card>
       ) : null}
 

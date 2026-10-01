@@ -115,6 +115,7 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   incomes: { name: TN, amount: IN0, frequency: TN, nextDate: TN, accountId: T, categoryId: T, active: 'INTEGER NOT NULL DEFAULT 1' },
   budgets: { categoryId: TN, month: TN, amount: IN0 },
   rules: { pattern: TN, categoryId: TN },
+  sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
 };
 
 export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table])];
@@ -130,7 +131,8 @@ function createTable(name: TableName): string {
 /** Append-only. Each entry runs once, tracked with PRAGMA user_version. */
 export const MIGRATIONS: string[] = [
   [
-    ...(Object.keys(TABLES) as TableName[]).map(createTable),
+    // v1 tables (later tables get their own migration below).
+    ...(Object.keys(TABLES) as TableName[]).filter((t) => t !== 'sms_formats').map(createTable),
     'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT);',
     'CREATE TABLE IF NOT EXISTS peers (deviceId TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, lastSentAt TEXT, lastReceivedAt TEXT, pairedAt TEXT NOT NULL);',
     'CREATE INDEX IF NOT EXISTS txn_when ON transactions(occurredAt);',
@@ -139,4 +141,6 @@ export const MIGRATIONS: string[] = [
     'CREATE INDEX IF NOT EXISTS txn_hash ON transactions(sourceHash);',
     'CREATE INDEX IF NOT EXISTS bills_biller ON bills(billerId);',
   ].join('\n'),
+  // v2: user-taught SMS formats.
+  createTable('sms_formats'),
 ];

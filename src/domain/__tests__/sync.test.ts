@@ -63,7 +63,7 @@ describe('bundle + merge', () => {
     ]);
     const incoming = [
       base({ id: 'a', updatedAt: '2026-09-03T00:00:00Z', deviceId: 'peer', deletedAt: '2026-09-03T00:00:00Z' }),
-      base({ id: 'b', updatedAt: '2026-09-04T00:00:00Z', deviceId: 'peer' }),
+      base({ id: 'b', updatedAt: '2026-09-04T00:00:00Z', deviceId: 'peer', scope: 'personal' }),
       base({ id: 'c', updatedAt: '2026-09-04T00:00:00Z', deviceId: 'peer' }),
     ];
     const plan = planMerge(local, incoming, '2026-09-02T00:00:00Z');
@@ -71,7 +71,8 @@ describe('bundle + merge', () => {
     expect(plan.updates.map((r) => r.id)).toEqual(['a']);
     expect(plan.updates[0].deletedAt).not.toBeNull();
     expect(plan.skipped).toBe(1);
-    expect(plan.conflicts).toBe(1); // b edited on both phones since last sync; newer local kept
+    expect(plan.autoResolved).toBe(1); // b edited on both phones since last sync; newer local kept
+    expect(plan.conflicts).toHaveLength(0);
 
     for (const r of [...plan.inserts, ...plan.updates]) local.set(r.id, r);
     const again = planMerge(local, incoming, '2026-09-02T00:00:00Z');
@@ -79,9 +80,29 @@ describe('bundle + merge', () => {
     expect(again.updates).toHaveLength(0);
   });
 
+  it('lets the user choose how conflicts are resolved', () => {
+    const local = new Map([['b', base({ id: 'b', updatedAt: '2026-09-05T00:00:00Z', deviceId: 'me', scope: 'personal' })]]);
+    const incoming = [base({ id: 'b', updatedAt: '2026-09-04T00:00:00Z', deviceId: 'peer' })];
+    const since = '2026-09-02T00:00:00Z';
+
+    const ask = planMerge(local, incoming, since, 'ask');
+    expect(ask.conflicts).toHaveLength(1);
+    expect(ask.updates).toHaveLength(0);
+
+    expect(planMerge(local, incoming, since, 'newest').updates).toHaveLength(0);
+    expect(planMerge(local, incoming, since, 'incoming').updates).toHaveLength(1);
+  });
+
+  it('does not treat identical content as a conflict', () => {
+    const row = base({ id: 'x', updatedAt: '2026-09-05T00:00:00Z', deviceId: 'me' });
+    const plan = planMerge(new Map([['x', row]]), [{ ...row, updatedAt: '2026-09-06T00:00:00Z', deviceId: 'peer' }], '2026-09-01T00:00:00Z', 'ask');
+    expect(plan.conflicts).toHaveLength(0);
+    expect(plan.skipped).toBe(1);
+  });
+
   it('breaks timestamp ties deterministically by device id', () => {
     const local = new Map([['x', base({ id: 'x', updatedAt: '2026-09-01T00:00:00Z', deviceId: 'aaa' })]]);
-    const plan = planMerge(local, [base({ id: 'x', updatedAt: '2026-09-01T00:00:00Z', deviceId: 'bbb' })], null);
+    const plan = planMerge(local, [base({ id: 'x', updatedAt: '2026-09-01T00:00:00Z', deviceId: 'bbb', scope: 'personal' })], null);
     expect(plan.updates).toHaveLength(1);
   });
 });
