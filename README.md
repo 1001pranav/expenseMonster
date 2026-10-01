@@ -54,7 +54,8 @@ npm install
 npx expo run:android            # dev build on a connected phone / emulator
 # or with EAS (cloud build):
 npx eas-cli@latest build -p android --profile development   # dev client
-npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no INTERNET permission
+npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no INTERNET or SMS permission
+npx eas-cli@latest build -p android --profile preview-sms   # adds READ_SMS — install over ADB only (see below)
 npx eas-cli@latest build -p android --profile play          # Play Store bundle, no READ_SMS
 ```
 
@@ -69,6 +70,8 @@ keytool -genkeypair -v -keystore expensemonster.keystore -alias expensemonster -
 base64 -w0 expensemonster.keystore   # → secret ANDROID_KEYSTORE_BASE64
 ```
 Add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`expensemonster`) and `ANDROID_KEY_PASSWORD`. Back up the keystore: if you lose it, you can never update the installed app.
+
+**"Blocked to protect your device… can request access to sensitive data":** in India, Play Protect's enhanced fraud protection refuses to install a sideloaded app (from a browser, WhatsApp, a file manager) that requests `READ_SMS`. That's why the default APK leaves it out: bank SMS reach the app through the share sheet instead (Messages → long-press → Share → ExpenseMonster), and are read immediately. If you want automatic SMS reading on your own phone, build with `SMS=1` (the `preview-sms` profile, or the workflow's manual run with "sms" ticked) and install it with `adb install`; ADB installs aren't covered by that block.
 
 **Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. SMS capture is for the sideloaded `preview` APK. iOS cannot read SMS at all.
 

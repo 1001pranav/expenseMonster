@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Linking, PermissionsAndroid, Platform } from 'react-native';
+import { Linking, PermissionsAndroid, Platform, View } from 'react-native';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { useTable } from '@/data/hooks';
@@ -59,8 +59,27 @@ export default function SmsSettings() {
       </Card>
 
       {!canRead ? (
-        <Card>
-          <Txt>{Platform.OS !== 'android' ? "iOS doesn't let apps read SMS." : 'This build was made without SMS access (Play Store version).'} You can still paste messages.</Txt>
+        <Card style={{ gap: space(1.25) }}>
+          <Txt variant="bodyStrong">{Platform.OS !== 'android' ? "iOS doesn't let apps read SMS" : 'Share bank SMS to the app instead'}</Txt>
+          <Txt variant="small" tone="muted">
+            {Platform.OS !== 'android'
+              ? 'Copy a bank message and paste it below.'
+              : "This version doesn't ask for SMS access, because Android blocks installing apps that do outside the Play Store. It takes two taps instead:"}
+          </Txt>
+          {Platform.OS === 'android'
+            ? ['Open the bank SMS in Messages', 'Long-press it → Share', 'Pick ExpenseMonster — it lands in Review'].map((step, i) => (
+                <Row key={step} gap={1.25}>
+                  <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+                    <Txt variant="caption" tone="primary">
+                      {i + 1}
+                    </Txt>
+                  </View>
+                  <Txt variant="small" style={{ flex: 1 }}>
+                    {step}
+                  </Txt>
+                </Row>
+              ))
+            : null}
         </Card>
       ) : enabled ? (
         <Row gap={1}>
@@ -93,7 +112,7 @@ export default function SmsSettings() {
 
       <Section title="Paste a message" style={{ marginTop: space(1) }}>
         <Card padded={false} style={{ overflow: 'hidden' }}>
-          <ListRow icon="clipboard-outline" iconColor={colors.info} title="Paste a bank SMS" subtitle="Works without any permission" chevron onPress={() => router.push('/paste-sms')} />
+          <ListRow icon="clipboard-outline" iconColor={colors.info} title="Paste a bank SMS" subtitle="Or share it from Messages · no permission needed" chevron onPress={() => router.push('/paste-sms')} />
         </Card>
       </Section>
 

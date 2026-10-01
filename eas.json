@@ -7,16 +7,37 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "APP_VARIANT": "production" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "production"
+      }
     },
     "play": {
-      "android": { "buildType": "app-bundle" },
-      "env": { "APP_VARIANT": "production", "STORE": "play" }
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "APP_VARIANT": "production",
+        "STORE": "play"
+      }
+    },
+    "preview-sms": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "production",
+        "SMS": "1"
+      }
     }
   }
 }

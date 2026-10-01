@@ -82,7 +82,7 @@ export default function Settings() {
             icon="chatbubble-ellipses"
             iconColor={colors.info}
             title="Bank SMS capture"
-            subtitle={Platform.OS !== 'android' ? 'Not possible on iOS' : !isSmsAvailable() ? 'Not included in this build' : settings.smsEnabled ? 'On' : 'Off'}
+            subtitle={Platform.OS !== 'android' ? 'Not possible on iOS' : !isSmsAvailable() ? 'Share or paste bank SMS instead' : settings.smsEnabled ? 'On' : 'Off'}
             chevron
             onPress={() => router.push('/settings/sms')}
           />

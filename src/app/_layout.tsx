@@ -162,7 +162,7 @@ function OnboardingRedirect() {
   return null;
 }
 
-/** Deep links from notifications and the Android share sheet (screenshots shared from GPay/PhonePe). */
+/** Deep links from notifications and the Android share sheet (payment screenshots, bank SMS text). */
 function Router() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastResponse = Notifications.useLastNotificationResponse();
@@ -174,6 +174,9 @@ function Router() {
       const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
       if (file.fileName?.endsWith('.emx')) router.push({ pathname: '/sync', params: { file: uri } });
       else if (file.mimeType?.startsWith('image/')) router.push({ pathname: '/scan', params: { uri } });
+    } else if (shareIntent.text) {
+      // A bank SMS shared from the Messages app: no SMS permission needed.
+      router.push({ pathname: '/paste-sms', params: { text: shareIntent.text } });
     }
     resetShareIntent();
   }, [hasShareIntent, shareIntent, resetShareIntent]);
