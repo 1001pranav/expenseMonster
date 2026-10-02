@@ -82,7 +82,7 @@ export default function Onboarding() {
     >
       {step === 0 ? (
         <>
-          <Hero icon="wallet" title="Your household's money, on your phone only" body="Expenses, loans, EMIs, credit cards, bills and insurance. No account, no server, no ads." />
+          <Hero icon="wallet" title="Your household's money, on your phone only" body="Expenses, loans, EMIs, credit cards, bills and insurance. No account, no ads. Cloud sync is optional and end-to-end encrypted." />
           <TextField label="Your name" value={name} onChangeText={setName} placeholder="Pranav" autoCapitalize="words" autoFocus />
           <TextField label="Household name" value={household} onChangeText={setHousehold} placeholder="The Sharmas" autoCapitalize="words" />
         </>

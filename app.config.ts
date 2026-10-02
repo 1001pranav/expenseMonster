@@ -1,13 +1,14 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
+ * INTERNET is kept only for the optional Supabase cloud sync (EXPO_PUBLIC_SUPABASE_URL /
+ * EXPO_PUBLIC_SUPABASE_ANON_KEY at build time). It is off until the user turns it on, and the
+ * server only receives end-to-end encrypted bundles.
+ *
  * Build variants (set in eas.json or the shell):
- * - APP_VARIANT=production  → release build with the INTERNET permission removed, so the app
- *   physically cannot send data anywhere.
  * - STORE=play              → Play Store flavour without READ_SMS (Google restricts it to
  *   default SMS apps). Screenshot capture still works.
  */
-const production = process.env.APP_VARIANT === 'production';
 const playStore = process.env.STORE === 'play';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
@@ -46,7 +47,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
-      ...(production ? ['android.permission.INTERNET'] : []),
       ...(playStore ? ['android.permission.READ_SMS'] : []),
     ],
   },

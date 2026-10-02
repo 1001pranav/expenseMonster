@@ -24,7 +24,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 - Every row has `id` (UUID v7), `createdAt`, `updatedAt`, `deletedAt` (soft delete, so deletions sync), `deviceId` and `scope` (`personal` | `household`).
 - Schema lives in `src/db/schema.ts` and migrations are append-only (`PRAGMA user_version`).
 
-## Phone-to-phone sharing (no server)
+## Phone-to-phone sharing
 
 1. **Pair once:** Household → Sync → *Show my QR* on one phone, *Scan to join* on the other. The QR carries a household AES key, and both phones show the same fingerprint.
 2. **Send:** builds the household rows changed since the last send to that phone, gzips them, encrypts them with **AES-256-GCM** (household id as associated data) and opens the share sheet (WhatsApp, Nearby Share, Bluetooth…).
@@ -37,11 +37,28 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 
 Rows marked **private** never leave the phone.
 
+## Optional cloud sync (Supabase)
+
+Off by default. When a phone turns it on (Sync → *Sync through the cloud*), it swaps the same encrypted bundles automatically instead of you sending files:
+
+- **The server can't read your data.** Each upload is a sealed `EMX1.` bundle, exactly like a `.emx` file. The household key never leaves the paired phones.
+- **Mailbox:** bundles are stored under `HKDF-SHA256(household key, household id)`, so only paired phones can address them. The table is closed to clients; the only way in is two `SECURITY DEFINER` functions (`emx_push`, `emx_pull`), so mailboxes can't be listed.
+- **When it syncs:** when the app opens or returns to the foreground, about 10 s after an edit, and when you tap *Sync now*. Each run downloads new bundles from other phones, merges them with your chosen conflict policy, then uploads changes made since this phone's last upload.
+- **Retention:** bundles older than 90 days are deleted. Every phone re-uploads all household rows every 30 days, so a phone that joins later still gets old entries. A phone that has been offline for more than 90 days should use *Send all* / *Receive* once.
+- **What the server can see:** the mailbox id, device ids, bundle sizes and timestamps (when your household is active), but not amounts, payees or names.
+
+Setup:
+
+1. Create a Supabase project and run `supabase/migrations/20261002000000_emx_cloud_sync.sql` (SQL editor, or `supabase db push`).
+2. Build with `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` set (a `.env.local` file locally, or the `SUPABASE_URL` / `SUPABASE_ANON_KEY` repository secrets for the GitHub Actions APK). Without them, the cloud option is hidden.
+
+The anon key ships inside the APK, so anyone can call the two functions. They can't read anything they don't hold the key for, junk uploads fail to decrypt and are skipped, and `emx_push` caps uploads per mailbox per hour.
+
 ## Security
 
 - App lock: biometrics and/or a 6-digit PIN. The PIN is stored as a salted PBKDF2 hash in the Keystore. Auto-lock timeout is configurable, and you can opt in to an erase after 10 wrong PINs.
 - `FLAG_SECURE` blocks screenshots and the recent-apps preview. You can turn it off.
-- The release build (`APP_VARIANT=production`) **removes the INTERNET permission**. ML Kit's bundled model works offline.
+- Nothing is sent over the network unless you turn on cloud sync, and then only end-to-end encrypted household rows. ML Kit's bundled model works offline.
 - Raw SMS text is never stored, only the parsed fields plus a hash. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
 - Backups are encrypted with your passphrase (PBKDF2-SHA256 → AES-GCM). CSV export escapes formula characters.
 
@@ -54,7 +71,7 @@ npm install
 npx expo run:android            # dev build on a connected phone / emulator
 # or with EAS (cloud build):
 npx eas-cli@latest build -p android --profile development   # dev client
-npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no INTERNET permission
+npx eas-cli@latest build -p android --profile preview       # sideloadable APK
 npx eas-cli@latest build -p android --profile play          # Play Store bundle, no READ_SMS
 ```
 

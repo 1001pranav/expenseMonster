@@ -1,6 +1,7 @@
 name: Android production build
 
-# Builds the sideloadable production APK (no INTERNET permission, SMS capture included).
+# Builds the sideloadable production APK (SMS capture included; cloud sync available when the
+# SUPABASE_URL / SUPABASE_ANON_KEY secrets are set, off until the user enables it).
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
@@ -22,7 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      APP_VARIANT: production
+      # Inlined into the JS bundle. Unset → the app hides the cloud sync option.
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v4
@@ -48,12 +51,8 @@ jobs:
           npx eslint .
           npx jest
 
-      - name: Generate native project (production variant)
+      - name: Generate native project
         run: npx expo prebuild --platform android --no-install --clean
-
-      - name: Check release manifest has no INTERNET permission
-        run: |
-          grep -q 'android.permission.INTERNET" tools:node="remove"' android/app/src/main/AndroidManifest.xml
 
       - name: Build release APK
         working-directory: android
@@ -101,6 +100,6 @@ jobs:
           files: ${{ env.APK_FILE }}
           body: |
             Production APK (sideload). Signed with: ${{ env.SIGNING }}.
-            - No INTERNET permission: the app cannot send data anywhere.
+            - Data stays on the phone unless you turn on cloud sync, which uploads only end-to-end encrypted household changes.
             - SMS capture included (optional, asks first).
             Install: download on the phone → open → allow "Install unknown apps" for your browser/Files app.

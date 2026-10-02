@@ -9,12 +9,13 @@ import { fingerprint } from '@/domain/sync/crypto';
 import type { Peer } from '@/domain/types';
 import { listPeers, saveIdentity, saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
+import { cloudConfigured, cloudSyncNow, loadCloudStatus, type CloudStatus } from '@/services/cloud';
 import { getHouseholdKey } from '@/services/secure';
 import { importChanges, loadConflicts, sendChanges } from '@/services/sync';
 import { Avatar } from '@/ui/components/Avatar';
 import { Button, Card, Divider, ListRow, Row, Section, Txt } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
-import { Segmented, TextField } from '@/ui/components/forms';
+import { Segmented, SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -29,10 +30,13 @@ export default function Sync() {
   const [householdName, setHouseholdName] = useState(identity.householdName);
 
   const policy = useStore((s) => s.settings.syncConflictPolicy);
+  const cloudOn = useStore((s) => s.settings.cloudSync);
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [conflictCount, setConflictCount] = useState(0);
   const refresh = useCallback(() => {
     listPeers().then(setPeers);
     loadConflicts().then((c) => setConflictCount(c.length));
+    loadCloudStatus().then(setCloudStatus);
   }, []);
   useEffect(() => {
     refresh();
@@ -84,6 +88,25 @@ export default function Sync() {
     }
   };
 
+  const syncCloud = async () => {
+    setBusy('cloud');
+    try {
+      const r = await cloudSyncNow();
+      toast(`Cloud: ${r.received} received, ${r.sent} sent${r.unreadable ? ` · ${r.unreadable} unreadable skipped` : ''}`, { tone: 'success' });
+      if (r.pendingConflicts) router.push('/sync/conflicts');
+    } catch (e) {
+      toast((e as Error).message, { tone: 'error' });
+    } finally {
+      setBusy(null);
+      refresh();
+    }
+  };
+
+  const toggleCloud = async (on: boolean) => {
+    await saveSettings({ cloudSync: on });
+    if (on) syncCloud();
+  };
+
   const pick = async () => {
     const res = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, type: '*/*' });
     if (!res.canceled && res.assets[0]) receive(res.assets[0].uri);
@@ -95,7 +118,7 @@ export default function Sync() {
   };
 
   return (
-    <Screen title="Sync with family" subtitle="Phone to phone · no server · end-to-end encrypted" back>
+    <Screen title="Sync with family" subtitle={cloudOn ? "End-to-end encrypted · cloud sync on" : "Phone to phone · end-to-end encrypted"} back>
       <Card tone="alt" style={{ gap: 6 }}>
         <Txt variant="bodyStrong">How it works</Txt>
         <Txt variant="small" tone="muted">
@@ -143,6 +166,30 @@ export default function Sync() {
         <Button title="Send all" icon="share-outline" variant="secondary" loading={busy === 'all'} onPress={() => send(null)} style={{ flex: 1 }} />
         <Button title="Receive" icon="download-outline" variant="secondary" loading={busy === 'receive'} onPress={pick} style={{ flex: 1 }} />
       </Row>
+
+      {cloudConfigured ? (
+        <Section title="Cloud sync (optional)">
+          <Card style={{ gap: space(1.25) }}>
+            <SwitchRow
+              icon="cloud-upload-outline"
+              label="Sync through the cloud"
+              description="Off: nothing leaves this phone except files you send. On: household changes are encrypted here and exchanged with family phones automatically. The server only stores data it cannot read; private entries are never uploaded."
+              value={cloudOn}
+              onChange={toggleCloud}
+            />
+            {cloudOn ? (
+              <>
+                <Button title="Sync now" icon="sync" size="sm" variant="secondary" loading={busy === 'cloud'} onPress={syncCloud} />
+                {cloudStatus ? (
+                  <Txt variant="small" tone={cloudStatus.ok ? 'muted' : 'expense'}>
+                    {formatDay(isoToYMD(cloudStatus.at))} {new Date(cloudStatus.at).toTimeString().slice(0, 5)} · {cloudStatus.message}
+                  </Txt>
+                ) : null}
+              </>
+            ) : null}
+          </Card>
+        </Section>
+      ) : null}
 
       <Section title="When both phones changed the same entry">
         <Card style={{ gap: space(1.25) }}>

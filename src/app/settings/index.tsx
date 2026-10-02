@@ -121,7 +121,7 @@ export default function Settings() {
       <Section title="Privacy">
         <Card tone="alt" style={{ gap: 6 }}>
           <Txt variant="small" tone="muted">
-            • Everything is stored on this phone in an encrypted database.{'\n'}• The release app has no internet permission, so it cannot upload anything.{'\n'}• Screenshots and SMS are read on the phone; raw SMS text is never saved.{'\n'}• Sync files are encrypted with your household key.
+            • Everything is stored on this phone in an encrypted database.{'\n'}• Nothing is uploaded unless you turn on cloud sync, and then only encrypted household entries the server cannot read.{'\n'}• Screenshots and SMS are read on the phone; raw SMS text is never saved.{'\n'}• Sync files are encrypted with your household key.
           </Txt>
         </Card>
         <Button title="Erase all data on this phone" variant="danger" icon="warning" onPress={() => setEraseSheet(true)} />
