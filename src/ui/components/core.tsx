@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { formatINR, spokenINR, type FormatOptions, type Paise } from '@/domain/money';
 import { useStore } from '@/db/store';
-import { radius, shadow, space, type, useTheme, type Colors, type TypeVariant } from '../theme';
+import { fonts, gradients, radius, shadow, space, type, useTheme, type Colors, type TypeVariant } from '../theme';
+import { Aurora, GradientFill, GradientTile } from './Aurora';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 type Tone = 'default' | 'muted' | 'faint' | 'primary' | 'income' | 'expense' | 'warn' | 'info' | 'inverse';
@@ -37,6 +38,12 @@ const toneColor = (c: Colors, tone: Tone) =>
 export function Txt({ variant = 'body', tone = 'default', style, ...rest }: TextProps & { variant?: TypeVariant; tone?: Tone }) {
   const { colors } = useTheme();
   return <Text {...rest} maxFontSizeMultiplier={1.6} style={[type[variant], { color: toneColor(colors, tone) }, style]} />;
+}
+
+/** Formatter for amounts inside sentences and labels; honours "hide amounts" like <Money>. */
+export function useMoneyText() {
+  const hidden = useStore((s) => s.settings.hideAmounts);
+  return (paise: Paise, opts?: FormatOptions) => (hidden ? '₹ ••••' : formatINR(paise, opts));
 }
 
 export function Money({
@@ -77,12 +84,25 @@ export function Money({
 
 export function Card({ children, style, onPress, padded = true, tone }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; padded?: boolean; tone?: 'primary' | 'alt' }) {
   const { colors, dark } = useTheme();
-  const bg = tone === 'primary' ? colors.primary : tone === 'alt' ? colors.surfaceAlt : colors.surface;
-  const body = [{ backgroundColor: bg, borderRadius: radius.lg, padding: padded ? space(2) : 0 }, tone ? null : shadow(dark), style];
-  if (!onPress) return <View style={body}>{children}</View>;
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [body, pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }]} accessibilityRole="button">
+  const hero = tone === 'primary';
+  const bg = hero ? colors.heroBase : tone === 'alt' ? colors.surfaceAlt : colors.surface;
+  const body = [
+    { backgroundColor: bg, borderRadius: radius.lg, padding: padded ? space(2) : 0 },
+    hero ? { overflow: 'hidden' as const, padding: padded ? space(2.5) : 0 } : tone ? null : shadow(dark),
+    style,
+  ];
+  const content = hero ? (
+    <>
+      <Aurora />
       {children}
+    </>
+  ) : (
+    children
+  );
+  if (!onPress) return <View style={body}>{content}</View>;
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [body, pressed && { opacity: 0.9, transform: [{ scale: 0.985 }] }]} accessibilityRole="button">
+      {content}
     </Pressable>
   );
 }
@@ -136,11 +156,13 @@ export function Button({
       }}
       style={({ pressed }) => [
         { height: h, borderRadius: radius.pill, backgroundColor: bg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: space(size === 'sm' ? 1.75 : 2.5), gap: 8 },
+        variant === 'primary' && { overflow: 'hidden' },
         (disabled || loading) && { opacity: 0.45 },
-        pressed && { opacity: 0.8 },
+        pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
         style,
       ]}
     >
+      {variant === 'primary' ? <GradientFill from={gradients.brand[0]} to={gradients.brand[1]} /> : null}
       {loading ? <ActivityIndicator color={fg} /> : icon ? <Ionicons name={icon} size={size === 'sm' ? 16 : 19} color={fg} /> : null}
       {title ? (
         <Text style={[type[size === 'sm' ? 'small' : 'bodyStrong'], { color: fg }]} numberOfLines={1}>
@@ -151,17 +173,20 @@ export function Button({
   );
 }
 
-export function IconButton({ name, onPress, label, color, size = 22, filled }: { name: IconName; onPress: () => void; label: string; color?: string; size?: number; filled?: boolean }) {
+export function IconButton({ name, onPress, label, color, size = 22, filled, disabled }: { name: IconName; onPress: () => void; label: string; color?: string; size?: number; filled?: boolean; disabled?: boolean }) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       hitSlop={8}
       style={({ pressed }) => [
         { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: filled ? colors.surfaceAlt : 'transparent' },
         pressed && { backgroundColor: colors.surfaceAlt },
+        disabled && { opacity: 0.3 },
       ]}
     >
       <Ionicons name={name} size={size} color={color ?? colors.text} />
@@ -275,7 +300,9 @@ export function Section({ title, action, onAction, children, style }: { title?: 
     <View style={[{ gap: space(1.25) }, style]}>
       {title ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-          <Txt variant="h3">{title}</Txt>
+          <Txt variant="h3" style={{ fontFamily: fonts.displaySemi, fontSize: 17 }}>
+            {title}
+          </Txt>
           {action ? (
             <Pressable onPress={onAction} hitSlop={10} accessibilityRole="button">
               <Txt variant="small" tone="primary">
@@ -294,8 +321,11 @@ export function EmptyState({ icon, title, body, action, onAction }: { icon: Icon
   const { colors } = useTheme();
   return (
     <View style={{ alignItems: 'center', paddingVertical: space(5), paddingHorizontal: space(3), gap: space(1.25) }}>
-      <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
-        <Ionicons name={icon} size={32} color={colors.primary} />
+      <View style={{ width: 112, height: 96, alignItems: 'center', justifyContent: 'center', marginBottom: space(0.5) }}>
+        <View style={{ position: 'absolute', width: 96, height: 96, borderRadius: 48, backgroundColor: colors.primarySoft }} />
+        <View style={{ position: 'absolute', top: 6, right: 4, width: 14, height: 14, borderRadius: 7, backgroundColor: gradients.sunset[0] }} />
+        <View style={{ position: 'absolute', bottom: 10, left: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: gradients.mint[0] }} />
+        <GradientTile icon={icon} size={60} />
       </View>
       <Txt variant="h3" style={{ textAlign: 'center' }}>
         {title}
@@ -315,11 +345,11 @@ export function Divider({ inset = 0 }: { inset?: number }) {
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: inset }} />;
 }
 
-export function ProgressBar({ value, color, height = 8 }: { value: number; color?: string; height?: number }) {
+export function ProgressBar({ value, color, height = 8, trackColor }: { value: number; color?: string; height?: number; trackColor?: string }) {
   const { colors } = useTheme();
   const v = Math.max(0, Math.min(1, value));
   return (
-    <View style={{ height, borderRadius: height, backgroundColor: colors.chartTrack, overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(v * 100) }}>
+    <View style={{ height, borderRadius: height, backgroundColor: trackColor ?? colors.chartTrack, overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round(v * 100) }}>
       <View style={{ width: `${v * 100}%`, height, borderRadius: height, backgroundColor: color ?? colors.primary }} />
     </View>
   );

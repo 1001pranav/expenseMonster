@@ -2,17 +2,17 @@ import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addDays, formatDay, isoToYMD, monthKey, relativeDay } from '@/domain/dates';
+import { addDays, addMonths, formatDay, formatMonth, isoToYMD, monthKey, relativeDay } from '@/domain/dates';
 import { restore } from '@/db/repo';
 import { deleteTransaction } from '@/data/actions';
 import { useCategoryMap, useTable, useToday } from '@/data/hooks';
-import { Chip, EmptyState, Money, Row, Txt } from '@/ui/components/core';
+import { Card, Chip, EmptyState, IconButton, Money, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { TextField } from '@/ui/components/forms';
 import { TxnRow, groupByDay } from '@/ui/components/rows';
 import { Header, TAB_BAR_SPACE } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
-import { space, useTheme } from '@/ui/theme';
+import { radius, space, useTheme } from '@/ui/theme';
 
 type Filter = 'month' | 'last30' | 'card' | 'upi' | 'income' | 'pending' | 'shared' | 'all';
 const FILTERS: { key: Filter; label: string }[] = [
@@ -36,17 +36,18 @@ export default function Activity() {
   const cards = useTable('cards');
   const [filter, setFilter] = useState<Filter>(params.card ? 'all' : 'month');
   const [query, setQuery] = useState('');
+  const [monthOffset, setMonthOffset] = useState(0);
+  const shownMonth = monthKey(addMonths(today, -monthOffset));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const month = monthKey(today);
     const since30 = addDays(today, -30);
     return txns.filter((t) => {
       if (t.status === 'rejected') return false;
       if (params.category && t.categoryId !== params.category) return false;
       if (params.card && t.cardId !== params.card) return false;
       const d = isoToYMD(t.occurredAt);
-      if (filter === 'month' && monthKey(d) !== month) return false;
+      if (filter === 'month' && monthKey(d) !== shownMonth) return false;
       if (filter === 'last30' && d < since30) return false;
       if (filter === 'card' && t.method !== 'card') return false;
       if (filter === 'upi' && t.method !== 'upi') return false;
@@ -59,7 +60,7 @@ export default function Activity() {
       }
       return true;
     });
-  }, [txns, filter, query, today, cats, params.category, params.card]);
+  }, [txns, filter, query, today, cats, params.category, params.card, shownMonth]);
 
   const sections = useMemo(
     () =>
@@ -88,26 +89,49 @@ export default function Activity() {
         <TextField value={query} onChangeText={setQuery} placeholder="Search payee, note, amount…" icon="search" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           {FILTERS.map((f) => (
-            <Chip key={f.key} label={f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} compact />
+            <Chip
+              key={f.key}
+              label={f.label}
+              selected={filter === f.key}
+              onPress={() => {
+                setFilter(f.key);
+                setMonthOffset(0);
+              }}
+              compact
+            />
           ))}
         </ScrollView>
-        <Row gap={2}>
-          <Txt variant="small" tone="muted">
-            {filtered.length} transactions
-          </Txt>
-          <Row gap={0.5}>
-            <Txt variant="small" tone="muted">
-              Out
-            </Txt>
-            <Money value={totalOut} variant="small" />
+        <Card padded={false} style={{ paddingVertical: space(1), paddingHorizontal: space(1.5), borderRadius: radius.md }}>
+          <Row gap={1}>
+            {filter === 'month' ? (
+              <Row gap={0} style={{ marginLeft: -space(1) }}>
+                <IconButton name="chevron-back" label="Previous month" size={18} onPress={() => setMonthOffset((o) => o + 1)} />
+                <Txt variant="bodyStrong" style={{ minWidth: 72, textAlign: 'center' }}>
+                  {monthOffset === 0 ? 'This month' : formatMonth(shownMonth)}
+                </Txt>
+                <IconButton name="chevron-forward" label="Next month" size={18} disabled={monthOffset === 0} onPress={() => setMonthOffset((o) => Math.max(0, o - 1))} />
+              </Row>
+            ) : (
+              <Txt variant="small" tone="muted" style={{ flex: 1 }}>
+                {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+              </Txt>
+            )}
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              <Row gap={0.5}>
+                <Txt variant="caption" tone="muted">
+                  OUT
+                </Txt>
+                <Money value={totalOut} variant="bodyStrong" decimals="never" />
+              </Row>
+              <Row gap={0.5}>
+                <Txt variant="caption" tone="muted">
+                  IN
+                </Txt>
+                <Money value={totalIn} variant="small" tone="income" decimals="never" />
+              </Row>
+            </View>
           </Row>
-          <Row gap={0.5}>
-            <Txt variant="small" tone="muted">
-              In
-            </Txt>
-            <Money value={totalIn} variant="small" tone="income" />
-          </Row>
-        </Row>
+        </Card>
       </View>
       <SectionList
         sections={sections}
@@ -128,7 +152,15 @@ export default function Activity() {
             <TxnRow t={item} cat={cats.get(item.categoryId ?? '')} card={cards.find((c) => c.id === item.cardId)} />
           </SwipeRow>
         )}
-        ListEmptyComponent={<EmptyState icon="search" title="Nothing here" body={query ? 'Try a different search or filter.' : 'No transactions for this filter yet.'} />}
+        ListEmptyComponent={
+          <EmptyState
+            icon={query ? 'search' : 'receipt-outline'}
+            title={query ? `No results for "${query.trim()}"` : 'Nothing here yet'}
+            body={query ? 'Try a payee, category, note or amount.' : filter === 'month' ? `No entries in ${formatMonth(shownMonth)}.` : 'No transactions for this filter yet.'}
+            action={query ? 'Clear search' : undefined}
+            onAction={query ? () => setQuery('') : undefined}
+          />
+        }
       />
     </View>
   );

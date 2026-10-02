@@ -42,8 +42,9 @@ export function monthlyEmi(loans: Loan[]): Paise {
 /**
  * Rule-based financial health. Plain arithmetic with conventional thresholds, so it is exact,
  * instant and works on every phone. The on-device assistant only explains these numbers.
+ * `money` formats amounts in the reasons; screens pass useMoneyText() so "Hide amounts" masks them.
  */
-export function financialHealth(input: HealthInput, today: YMD): HealthMetric[] {
+export function financialHealth(input: HealthInput, today: YMD, money: (p: Paise) => string = formatINR): HealthMetric[] {
   const months = lastCompleteMonths(today, HEALTH_MONTHS);
   const totals = months.map((m) => monthTotals(input.transactions, m));
   const income = totals.reduce((a, t) => a + t.income, 0);
@@ -62,7 +63,7 @@ export function financialHealth(input: HealthInput, today: YMD): HealthMetric[] 
       label: 'Savings rate',
       value: pct(rate),
       status: rate >= 0.2 ? 'good' : rate >= 0 ? 'watch' : 'risk',
-      reason: `Income ${formatINR(income)} and spending ${formatINR(expense)} over ${span}. ${rate >= 0.2 ? 'Saving at least 20% is healthy.' : rate >= 0 ? 'Below the 20% many planners aim for.' : 'Spending more than you earn.'}`,
+      reason: `Income ${money(income)} and spending ${money(expense)} over ${span}. ${rate >= 0.2 ? 'Saving at least 20% is healthy.' : rate >= 0 ? 'Below the 20% many planners aim for.' : 'Spending more than you earn.'}`,
     });
   }
 
@@ -71,7 +72,7 @@ export function financialHealth(input: HealthInput, today: YMD): HealthMetric[] 
   if (!emi) {
     out.push({ key: 'emi_to_income', label: 'EMIs vs income', value: '0%', status: 'good', reason: 'No open loan EMIs.' });
   } else if (avgIncome <= 0) {
-    out.push({ key: 'emi_to_income', label: 'EMIs vs income', value: '—', status: 'unknown', reason: `EMIs of ${formatINR(emi)} a month, but no income recorded in ${span}.` });
+    out.push({ key: 'emi_to_income', label: 'EMIs vs income', value: '—', status: 'unknown', reason: `EMIs of ${money(emi)} a month, but no income recorded in ${span}.` });
   } else {
     const ratio = emi / avgIncome;
     out.push({
@@ -79,7 +80,7 @@ export function financialHealth(input: HealthInput, today: YMD): HealthMetric[] 
       label: 'EMIs vs income',
       value: pct(ratio),
       status: ratio <= 0.3 ? 'good' : ratio <= 0.5 ? 'watch' : 'risk',
-      reason: `EMIs of ${formatINR(emi)} a month against average income of ${formatINR(avgIncome)}. ${ratio <= 0.3 ? 'Comfortable.' : ratio <= 0.5 ? 'Above 30%: little room for new loans.' : 'Above 50%: most lenders treat this as overstretched.'}`,
+      reason: `EMIs of ${money(emi)} a month against average income of ${money(avgIncome)}. ${ratio <= 0.3 ? 'Comfortable.' : ratio <= 0.5 ? 'Above 30%: little room for new loans.' : 'Above 50%: most lenders treat this as overstretched.'}`,
     });
   }
 
@@ -96,7 +97,7 @@ export function financialHealth(input: HealthInput, today: YMD): HealthMetric[] 
       label: 'Card utilisation',
       value: pct(ratio),
       status: ratio <= 0.3 ? 'good' : ratio <= 0.5 ? 'watch' : 'risk',
-      reason: `${formatINR(owed)} owed on limits of ${formatINR(limit)}. ${ratio <= 0.3 ? 'Under 30% is good for your credit score.' : 'Above 30% can lower your credit score.'}`,
+      reason: `${money(owed)} owed on limits of ${money(limit)}. ${ratio <= 0.3 ? 'Under 30% is good for your credit score.' : 'Above 30% can lower your credit score.'}`,
     });
   }
 

@@ -203,3 +203,13 @@ describe('answer loop', () => {
     expect(factLines({ a_b: '₹1', n: 2, list: [1], obj: {} })).toEqual(['a b: ₹1', 'n: 2']);
   });
 });
+
+describe('financial health with hidden amounts', () => {
+  it('formats every amount through the given formatter', () => {
+    const transactions = ['2026-06', '2026-07', '2026-08'].map((m) => txn({ type: 'income', amount: 50_000_00, occurredAt: `${m}-01T04:00:00.000Z` }));
+    const all = financialHealth({ transactions, loans: [loan()], cards: [], cardOverrides: [], budgets: [] }, TODAY, () => '₹ ••••');
+    const text = all.map((m) => m.reason).join(' ');
+    expect(text).toContain('₹ ••••');
+    expect(text).not.toMatch(/₹\d/);
+  });
+});

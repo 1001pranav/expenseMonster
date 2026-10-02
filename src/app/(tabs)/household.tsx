@@ -39,6 +39,12 @@ export default function Household() {
               </View>
             );
           })}
+          {members.length === 1 ? (
+            <>
+              <Divider inset={space(9)} />
+              <ListRow icon="person-add" iconColor={colors.primary} title="Add family members" subtitle="Split expenses and see who owes whom" chevron onPress={() => router.push('/member/new')} />
+            </>
+          ) : null}
         </Card>
       </Section>
 
@@ -75,6 +81,8 @@ export default function Household() {
           <ListRow icon="wallet" iconColor={colors.income} title="Recurring income" chevron onPress={() => router.push('/income')} />
           <Divider inset={space(9)} />
           <ListRow icon="bar-chart" iconColor={colors.primary} title="Insights" chevron onPress={() => router.push('/insights')} />
+          <Divider inset={space(9)} />
+          <ListRow icon="receipt" iconColor={colors.income} title="Tax saver" subtitle="80C, 80D, home-loan deductions" chevron onPress={() => router.push('/tax')} />
           <Divider inset={space(9)} />
           <ListRow icon="cloud-download" iconColor={colors.textMuted} title="Backup & export" chevron onPress={() => router.push('/backup')} />
         </Card>

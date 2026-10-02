@@ -4,6 +4,7 @@ import { Tabs, router } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { Pressable, View } from 'react-native';
 import { usePending } from '@/data/hooks';
+import { GradientTile } from '@/ui/components/Aurora';
 import { Txt, type IconName } from '@/ui/components/core';
 import { radius, shadow, useTheme } from '@/ui/theme';
 
@@ -38,10 +39,10 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
         }}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 8 }}
       >
-        <View>
-          <Ionicons name={focused ? meta.active : meta.icon} size={23} color={focused ? colors.primary : colors.textFaint} />
+        <View style={{ width: 52, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? colors.primarySoft : 'transparent' }}>
+          <Ionicons name={focused ? meta.active : meta.icon} size={22} color={focused ? colors.primary : colors.textFaint} />
           {routeName === 'index' && reviewCount > 0 ? (
-            <View style={{ position: 'absolute', top: -2, right: -8, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}>
+            <View style={{ position: 'absolute', top: -2, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}>
               <Txt variant="caption" style={{ color: '#fff', fontSize: 10 }}>
                 {reviewCount > 99 ? '99+' : reviewCount}
               </Txt>
@@ -84,22 +85,11 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
           }}
           accessibilityRole="button"
           accessibilityLabel="Add transaction, scan, bill, loan or card"
-          style={({ pressed }) => ({
-            width: 56,
-            height: 56,
-            borderRadius: 20,
-            backgroundColor: colors.primary,
-            alignItems: 'center',
-            justifyContent: 'center',
-            transform: [{ scale: pressed ? 0.94 : 1 }],
-            shadowColor: colors.primary,
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 6,
-          })}
+          style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.92 : 1 }, { translateY: -14 }] })}
         >
-          <Ionicons name="add" size={32} color={colors.primaryText} />
+          <GradientTile size={58} radius={20} gradient="brand" style={{ borderWidth: 4, borderColor: colors.bg }}>
+            <Ionicons name="add" size={32} color="#FFFFFF" />
+          </GradientTile>
         </Pressable>
       </View>
       {routes.slice(2).map((r) => tab(r.name, r.i))}

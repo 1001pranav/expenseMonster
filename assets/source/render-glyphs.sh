@@ -34,7 +34,7 @@ HTML
 
 # Shortcuts: same icons as the in-app "+" sheet and tabs.
 for pair in expense:remove-circle scan:scan dues:calendar assistant:sparkles; do
-  render "$OUT/${pair%%:*}.png" "${pair#*:}" 432 150 '#4F46E5'
+  render "$OUT/${pair%%:*}.png" "${pair#*:}" 432 150 '#5B3DF5'
 done
 
 # Widget buttons.
@@ -48,7 +48,7 @@ pill() { echo "<div class=b><img src=\"file://$PWD/assets/widget/$1.png\"><span>
 cat > "$TMP/preview.html" <<HTML
 <!doctype html><html><head><style>
 html,body{margin:0;width:512px;height:300px;background:transparent;font-family:Roboto,Arial,sans-serif}
-.w{box-sizing:border-box;width:512px;height:112px;padding:12px;border-radius:48px;background:#4F46E5;display:flex;align-items:center;gap:8px}
+.w{box-sizing:border-box;width:512px;height:112px;padding:12px;border-radius:48px;background:#5B3DF5;display:flex;align-items:center;gap:8px}
 .logo{width:88px;height:88px;padding:8px;box-sizing:border-box}
 .b{flex:1;height:88px;border-radius:32px;background:rgba(255,255,255,.13);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:24px}
 .b img{width:44px;height:44px;margin-bottom:4px}

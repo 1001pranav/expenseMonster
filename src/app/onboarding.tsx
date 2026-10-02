@@ -9,11 +9,12 @@ import { useStore } from '@/db/store';
 import { isSmsAvailable } from '../../modules/sms-reader';
 import { ensurePermission } from '@/services/notifications';
 import { setPin } from '@/services/secure';
+import { Aurora, BrandMark, GradientTile } from '@/ui/components/Aurora';
 import { Button, Card, ListRow, Row, Txt, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
-import { radius, space, useTheme } from '@/ui/theme';
+import { radius, space, useTheme, type GradientName } from '@/ui/theme';
 
 const STEPS = 4;
 
@@ -82,7 +83,24 @@ export default function Onboarding() {
     >
       {step === 0 ? (
         <>
-          <Hero icon="wallet" title="Your household's money, on your phone only" body="Expenses, loans, EMIs, credit cards, bills and insurance. No account, no ads. Cloud sync is optional and end-to-end encrypted." />
+          <View style={{ borderRadius: radius.xl, overflow: 'hidden', padding: space(3), gap: space(1.5), backgroundColor: colors.heroBase }}>
+            <Aurora />
+            <BrandMark size={84} />
+            <Txt variant="h1" style={{ color: '#FFFFFF' }}>
+              Your household's money, on your phone only
+            </Txt>
+            <Txt style={{ color: 'rgba(255,255,255,0.78)' }}>Expenses, EMIs, credit cards, bills and insurance — with reminders before every due date.</Txt>
+            <Row gap={0.75} wrap>
+              {['No account', 'No ads', 'Encrypted', 'Cloud optional'].map((t) => (
+                <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' }}>
+                  <Ionicons name="checkmark" size={13} color="#FFFFFF" />
+                  <Txt variant="small" style={{ color: '#FFFFFF' }}>
+                    {t}
+                  </Txt>
+                </View>
+              ))}
+            </Row>
+          </View>
           <TextField label="Your name" value={name} onChangeText={setName} placeholder="Pranav" autoCapitalize="words" autoFocus />
           <TextField label="Household name" value={household} onChangeText={setHousehold} placeholder="The Sharmas" autoCapitalize="words" />
         </>
@@ -90,7 +108,7 @@ export default function Onboarding() {
 
       {step === 1 ? (
         <>
-          <Hero icon="lock-closed" title="Lock it" body="Your data is already encrypted on this phone. Add a lock so nobody can open the app on your unlocked phone." />
+          <Hero icon="lock-closed" gradient="violet" title="Lock it" body="Your data is already encrypted on this phone. Add a lock so nobody can open the app on your unlocked phone." />
           <TextField label="6-digit PIN (optional)" value={pin} onChangeText={(v) => setPinValue(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secure />
           {bioAvailable ? <SwitchRow icon="finger-print" label="Unlock with fingerprint / face" value={bio} onChange={setBio} /> : null}
         </>
@@ -98,7 +116,7 @@ export default function Onboarding() {
 
       {step === 2 ? (
         <>
-          <Hero icon="people" title="Joining your family?" body="If someone at home already uses ExpenseMonster, scan the QR code on their phone (Household → Sync → Show my QR)." />
+          <Hero icon="people" gradient="ocean" title="Joining your family?" body="If someone at home already uses ExpenseMonster, scan the QR code on their phone (Household → Sync → Show my QR)." />
           <Card padded={false} style={{ overflow: 'hidden' }}>
             <ListRow icon="scan" iconColor={colors.primary} title="Scan family QR code" subtitle="Share bills, loans and expenses" chevron onPress={() => router.push('/sync/scan')} />
           </Card>
@@ -110,7 +128,7 @@ export default function Onboarding() {
 
       {step === 3 ? (
         <>
-          <Hero icon="notifications" title="Never miss a due date" body="Reminders before every EMI, card bill, utility bill and insurance renewal. Generated on this phone." />
+          <Hero icon="notifications" gradient="sunset" title="Never miss a due date" body="Reminders before every EMI, card bill, utility bill and insurance renewal. Generated on this phone." />
           <Card padded={false} style={{ overflow: 'hidden' }}>
             <ListRow
               icon="notifications-outline"
@@ -136,13 +154,10 @@ export default function Onboarding() {
   );
 }
 
-function Hero({ icon, title, body }: { icon: IconName; title: string; body: string }) {
-  const { colors } = useTheme();
+function Hero({ icon, title, body, gradient }: { icon: IconName; title: string; body: string; gradient: GradientName }) {
   return (
     <View style={{ gap: space(1.5), marginBottom: space(1) }}>
-      <View style={{ width: 64, height: 64, borderRadius: radius.lg, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-        <Ionicons name={icon} size={30} color={colors.primaryText} />
-      </View>
+      <GradientTile icon={icon} gradient={gradient} size={68} radius={24} />
       <Txt variant="h1">{title}</Txt>
       <Txt tone="muted">{body}</Txt>
     </View>

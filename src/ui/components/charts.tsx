@@ -262,6 +262,7 @@ export function LineChart({ points, labels, height = 150, color, format = (v: nu
 export function HeatCalendar({ days, color }: { days: { date: string; amount: Paise }[]; color?: string }) {
   const { colors } = useTheme();
   const { width: screen } = useWindowDimensions();
+  const hidden = useStore((s) => s.settings.hideAmounts);
   const [active, setActive] = useState<number | null>(null);
   const max = Math.max(1, ...days.map((d) => d.amount));
   const first = days.length ? new Date(`${days[0].date}T12:00:00`).getDay() : 0;
@@ -273,7 +274,7 @@ export function HeatCalendar({ days, color }: { days: { date: string; amount: Pa
   return (
     <View style={{ gap: 8 }}>
       <Txt variant="small" tone="muted" style={{ minHeight: 18 }}>
-        {sel ? `${Number(sel.date.slice(8))} · ${formatINR(sel.amount)}` : 'Tap a day'}
+        {sel ? `${Number(sel.date.slice(8))} · ${hidden ? '₹ ••••' : formatINR(sel.amount)}` : 'Tap a day'}
       </Txt>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
