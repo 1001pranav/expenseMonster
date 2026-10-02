@@ -61,7 +61,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-local-authentication', { faceIDPermission: 'Unlock ExpenseMonster with Face ID.' }],
     ['expo-camera', { cameraPermission: 'Used only to scan the pairing QR code of a family member’s phone.', recordAudioAndroid: false }],
     ['expo-image-picker', { photosPermission: 'Used to read payment screenshots you choose. Images stay on this phone.', cameraPermission: 'Used only to scan the pairing QR code.', microphonePermission: false }],
-    ['expo-share-intent', { androidIntentFilters: ['image/*'], disableIOS: true }],
+    // Galleries and file managers often share even a single picture as SEND_MULTIPLE, so register for both.
+    ['expo-share-intent', { androidIntentFilters: ['image/*'], androidMultiIntentFilters: ['image/*'], disableIOS: true }],
     '@react-native-community/datetimepicker',
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
   ],

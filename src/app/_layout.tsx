@@ -167,11 +167,15 @@ function Router() {
 
   useEffect(() => {
     if (!hasShareIntent) return;
-    const file = shareIntent.files?.[0];
+    const files = shareIntent.files ?? [];
+    const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find((f) => f.mimeType?.startsWith('image/'));
     if (file?.path) {
       const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
       if (file.fileName?.endsWith('.emx')) router.push({ pathname: '/sync', params: { file: uri } });
-      else if (file.mimeType?.startsWith('image/')) router.push({ pathname: '/scan', params: { uri } });
+      else {
+        router.push({ pathname: '/scan', params: { uri } });
+        if (files.length > 1) toast('Scanning the first screenshot; share the others one at a time');
+      }
     }
     resetShareIntent();
   }, [hasShareIntent, shareIntent, resetShareIntent]);
