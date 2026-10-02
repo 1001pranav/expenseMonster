@@ -1,0 +1,22 @@
+<!-- ExpenseMonster mark. Source for every icon PNG; regenerate with assets/source/render.sh. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Face features are holes, so whatever is behind (gradient, launcher colour) shows through. -->
+    <mask id="face">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <circle cx="512" cy="478" r="86" fill="#000"/>
+      <path d="M392 586 Q512 612 632 586 Q626 700 512 704 Q398 700 392 586 Z" fill="#000"/>
+    </mask>
+  </defs>
+  <g id="monster" fill="#fff">
+    <!-- horns -->
+    <path d="M352 372 Q296 300 318 222 Q326 206 340 220 Q392 268 468 316 Z"/>
+    <path d="M672 372 Q728 300 706 222 Q698 206 684 220 Q632 268 556 316 Z"/>
+    <!-- body with face cut out -->
+    <rect x="296" y="296" width="432" height="452" rx="216" mask="url(#face)"/>
+    <!-- pupil glint and fangs sit inside the holes -->
+    <circle cx="540" cy="452" r="30"/>
+    <path d="M438 596 L478 604 L460 646 Z"/>
+    <path d="M586 596 L546 604 L564 646 Z"/>
+  </g>
+</svg>
