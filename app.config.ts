@@ -63,6 +63,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-image-picker', { photosPermission: 'Used to read payment screenshots you choose. Images stay on this phone.', cameraPermission: 'Used only to scan the pairing QR code.', microphonePermission: false }],
     // Galleries and file managers often share even a single picture as SEND_MULTIPLE, so register for both.
     ['expo-share-intent', { androidIntentFilters: ['image/*'], androidMultiIntentFilters: ['image/*'], disableIOS: true }],
+    // On-device assistant runtime (LiteRT-LM, ~21 MB). The Gemma weights are not bundled: the
+    // user downloads them from Settings → On-device assistant, so the APK stays small.
+    ['expo-ai-kit', { llm: true }],
     '@react-native-community/datetimepicker',
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
   ],

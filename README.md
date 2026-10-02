@@ -54,6 +54,20 @@ Setup:
 
 The anon key ships inside the APK, so anyone can call the two functions. They can't read anything they don't hold the key for, junk uploads fail to decrypt and are skipped, and `emx_push` caps uploads per mailbox per hour.
 
+## Financial health and the optional on-device assistant
+
+**Financial health** (Insights) is plain code, so it works on every phone. It shows the savings rate and EMIs as a share of income (both averaged over the last 3 complete months), credit card utilisation, and this month's budgets. Each is rated good / watch / risk against common thresholds: saving 20%+, EMIs ≤30% (≤50% at most), utilisation ≤30%. Source: `src/domain/health.ts`.
+
+**Assistant (optional model pack).** Settings → *On-device assistant* downloads Google's Gemma 4 E2B (about 2.6 GB, SHA-256 verified) into app-private storage. The LiteRT-LM runtime ships in the APK through [`expo-ai-kit`](https://github.com/saidkaban/expo-ai-kit) and adds about 21 MB. Removing the pack frees the space. Questions and data never leave the phone; the download is the only network use.
+
+How answers stay honest:
+- The model never sees the database. It calls **read-only tools** (`src/domain/assistant/tools.ts`) that run the same domain code as the screens and return pre-formatted figures (`"₹12,400"`, `"34%"`). No tool can write, pay or send anything.
+- **Number check** (`grounding.ts`): every number in a reply must appear in a tool result, the question, or an earlier verified answer. If it doesn't, the model is asked once more with the bad numbers named. If it still fails, the app shows the tool figures directly instead of the model's text (`answer.ts`).
+- Payee names and notes are clipped and marked as data in the system prompt (prompt-injection guard). The prompt also rules out specific investment, insurance and tax recommendations.
+- The model is unloaded after 2 minutes idle and whenever the app goes to the background, freeing about 1.5 GB.
+
+Device gate: hidden below 4 GB RAM and on emulators. Phones with 4–6 GB get a "will be slow" warning.
+
 ## Security
 
 - App lock: biometrics and/or a 6-digit PIN. The PIN is stored as a salted PBKDF2 hash in the Keystore. Auto-lock timeout is configurable, and you can opt in to an erase after 10 wrong PINs.
