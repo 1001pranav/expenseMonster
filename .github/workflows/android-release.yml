@@ -1,7 +1,7 @@
 name: Android production build
 
-# Builds the sideloadable production APK (SMS capture included). Cloud sync uses the Supabase
-# project committed in src/config/supabase.ts and stays off until the user enables it.
+# Builds the sideloadable production APK (SMS capture included). Cloud sync is compiled in from
+# the APP_ENV secret (same lines as .env.example) and stays off until the user enables it.
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
@@ -26,6 +26,24 @@ jobs:
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v4
+
+      # APP_ENV secret = the contents of a .env.local file (see .env.example). Written before the
+      # tests so the "no service_role key" check sees the real values.
+      - name: Load app environment
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          if [ -z "$APP_ENV" ]; then
+            echo "::notice::APP_ENV secret not set: building without cloud sync."
+            exit 0
+          fi
+          # Drop Windows line endings, comments, blank lines and surrounding quotes.
+          printf '%s\n' "$APP_ENV" | tr -d '\r' | { grep -E '^[A-Z0-9_]+=' || true; } \
+            | sed -E "s/^([A-Z0-9_]+)=[\"']?([^\"']*)[\"']?[[:space:]]*$/\1=\2/" > .env.local
+          # Expo reads .env.local; exporting too covers the Gradle-driven bundling step.
+          grep -E '^EXPO_PUBLIC_' .env.local >> "$GITHUB_ENV" \
+            || { echo "::error::APP_ENV has no EXPO_PUBLIC_ lines. Copy the format of .env.example."; exit 1; }
+          echo "Loaded: $(cut -d= -f1 .env.local | paste -sd ' ' -)"
 
       - uses: actions/setup-node@v4
         with:

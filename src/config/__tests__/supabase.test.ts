@@ -13,8 +13,9 @@ function jwtRole(key: string): string | null {
   }
 }
 
-// This file ships inside every APK, so a server key here would hand out full database access.
-describe('committed Supabase config', () => {
+// These values are compiled into every APK (from .env.local or the APP_ENV secret), so a server
+// key here would hand out full database access to anyone who unpacks the app.
+describe('Supabase build config', () => {
   it('never contains a secret / service_role key', () => {
     expect(SUPABASE.anonKey.startsWith('sb_secret_')).toBe(false);
     expect(jwtRole(SUPABASE.anonKey)).not.toBe('service_role');

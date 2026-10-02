@@ -50,7 +50,11 @@ Off by default. When a phone turns it on (Sync → *Sync through the cloud*), it
 Setup:
 
 1. Create a Supabase project and run `supabase/migrations/20261002000000_emx_cloud_sync.sql` (SQL editor, or `supabase db push`).
-2. Put the project URL and the **publishable / anon** key in `src/config/supabase.ts` and commit. They are compiled into every build: local, EAS and GitHub Actions alike. Never use the `service_role` / secret key. If they are left empty, the cloud option is hidden.
+2. Give the build the project URL and the **publishable / anon** key (never the `service_role` / secret key). They are compiled into the APK; nothing is fetched at runtime:
+   - **Local builds:** `cp .env.example .env.local` and fill it in. The file is git-ignored.
+   - **GitHub Actions:** repository **Settings → Secrets and variables → Actions → New repository secret**, named `APP_ENV`, with the same lines as `.env.local` as its value.
+
+   Without them, the cloud option is hidden. A test fails the build if a secret / service_role key is set.
 
 The anon key ships inside the APK, so anyone can call the two functions. They can't read anything they don't hold the key for, junk uploads fail to decrypt and are skipped, and `emx_push` caps uploads per mailbox per hour.
 
