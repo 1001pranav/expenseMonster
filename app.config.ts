@@ -68,6 +68,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-ai-kit', { llm: true }],
     '@react-native-community/datetimepicker',
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
+    // Long-press the app icon: Expense / Scan / Dues / Ask (deep links into the app).
+    './plugins/withAndroidShortcuts',
   ],
   experiments: { typedRoutes: false },
   extra: { smsEnabled: !playStore },
