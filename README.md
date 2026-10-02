@@ -54,13 +54,14 @@ npm install
 npx expo run:android            # dev build on a connected phone / emulator
 # or with EAS (cloud build):
 npx eas-cli@latest build -p android --profile development   # dev client
-npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no INTERNET permission
+npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no INTERNET permission (install via ADB: has READ_SMS)
+npx eas-cli@latest build -p android --profile preview-nosms # same without READ_SMS: installs from a browser/file manager
 npx eas-cli@latest build -p android --profile play          # Play Store bundle, no READ_SMS
 ```
 
 ### Production APK via GitHub Actions
 
-`.github/workflows/android-release.yml` builds the production APK on GitHub. Push a tag (`git tag v1.0.1 && git push origin v1.0.1`) and the APK is attached to a GitHub Release. You can also run the workflow manually from the Actions tab (artifact only).
+`.github/workflows/android-release.yml` builds the production APK on GitHub, without `READ_SMS` (see the sideloading note below). Push a tag (`git tag v1.0.1 && git push origin v1.0.1`) and the APK is attached to a GitHub Release. You can also run the workflow manually from the Actions tab (artifact only).
 
 **Set a signing key before relying on it.** Without one, each build gets a different debug signature. Android then refuses to update, and uninstalling deletes all on-phone data. One-time setup:
 
@@ -71,6 +72,8 @@ base64 -w0 expensemonster.keystore   # → secret ANDROID_KEYSTORE_BASE64
 Add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`expensemonster`) and `ANDROID_KEY_PASSWORD`. Back up the keystore: if you lose it, you can never update the installed app.
 
 **Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. SMS capture is for the sideloaded `preview` APK. iOS cannot read SMS at all.
+
+**Sideloading note:** Play Protect blocks installs from browsers, messaging apps and file managers when the app requests `READ_SMS`. The CI APK and the `preview-nosms` profile therefore leave it out (`SMS=off`). For an APK with SMS capture, use the `preview` profile or run the workflow manually with "Include SMS capture", then install it with `adb install`.
 
 ## Checks
 

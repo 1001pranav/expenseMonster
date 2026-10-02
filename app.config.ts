@@ -6,9 +6,11 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  *   physically cannot send data anywhere.
  * - STORE=play              → Play Store flavour without READ_SMS (Google restricts it to
  *   default SMS apps). Screenshot capture still works.
+ * - SMS=off                 → same READ_SMS removal for sideloaded APKs: Play Protect blocks
+ *   browser/file-manager installs of apps that request SMS access.
  */
 const production = process.env.APP_VARIANT === 'production';
-const playStore = process.env.STORE === 'play';
+const noSms = process.env.STORE === 'play' || process.env.SMS === 'off';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -39,7 +41,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     predictiveBackGestureEnabled: false,
     // Nothing is backed up to Google's cloud: the DB key lives in the Keystore and wouldn't restore anyway.
     allowBackup: false,
-    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA', ...(playStore ? [] : ['android.permission.READ_SMS'])],
+    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA', ...(noSms ? [] : ['android.permission.READ_SMS'])],
     blockedPermissions: [
       'android.permission.RECORD_AUDIO',
       'android.permission.SYSTEM_ALERT_WINDOW',
@@ -47,7 +49,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
       ...(production ? ['android.permission.INTERNET'] : []),
-      ...(playStore ? ['android.permission.READ_SMS'] : []),
+      ...(noSms ? ['android.permission.READ_SMS'] : []),
     ],
   },
   plugins: [
@@ -66,5 +68,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
   ],
   experiments: { typedRoutes: false },
-  extra: { smsEnabled: !playStore },
+  extra: { smsEnabled: !noSms },
 });

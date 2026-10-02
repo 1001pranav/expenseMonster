@@ -14,6 +14,10 @@
       "android": { "buildType": "apk" },
       "env": { "APP_VARIANT": "production" }
     },
+    "preview-nosms": {
+      "extends": "preview",
+      "env": { "APP_VARIANT": "production", "SMS": "off" }
+    },
     "play": {
       "android": { "buildType": "app-bundle" },
       "env": { "APP_VARIANT": "production", "STORE": "play" }
