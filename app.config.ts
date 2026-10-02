@@ -70,6 +70,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-build-properties', { android: { minSdkVersion: 26 } }],
     // Long-press the app icon: Expense / Scan / Dues / Ask (deep links into the app).
     './plugins/withAndroidShortcuts',
+    // Home-screen "Quick add" widget: Expense / Income / Scan buttons, no amounts shown.
+    './plugins/withAndroidWidget',
   ],
   experiments: { typedRoutes: false },
   extra: { smsEnabled: !playStore },

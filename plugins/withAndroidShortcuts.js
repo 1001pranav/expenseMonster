@@ -8,7 +8,7 @@
  * Generates (Continuous Native Generation; never edit android/ by hand):
  * - res/xml/shortcuts.xml + <meta-data android.app.shortcuts> on MainActivity
  * - res/drawable-anydpi-v26/shortcut_<icon>.xml adaptive icons (white background, foreground PNG
- *   from assets/shortcuts, rendered by assets/source/render-shortcuts.sh)
+ *   from assets/shortcuts, rendered by assets/source/render-glyphs.sh)
  * - string resources for the labels (Android requires @string references here)
  */
 const fs = require('fs');
@@ -66,7 +66,7 @@ const withShortcutFiles = (config) =>
       fs.writeFileSync(path.join(xmlDir, 'shortcuts.xml'), shortcutsXml(scheme, pkg));
       for (const icon of new Set(SHORTCUTS.map((s) => s.icon))) {
         const src = path.join(c.modRequest.projectRoot, 'assets/shortcuts', `${icon}.png`);
-        if (!fs.existsSync(src)) throw new Error(`withAndroidShortcuts: missing ${src} (run assets/source/render-shortcuts.sh)`);
+        if (!fs.existsSync(src)) throw new Error(`withAndroidShortcuts: missing ${src} (run assets/source/render-glyphs.sh)`);
         fs.copyFileSync(src, path.join(nodpi, `shortcut_${icon}_fg.png`));
         fs.writeFileSync(path.join(anydpi, `shortcut_${icon}.xml`), adaptiveXml(icon));
       }
