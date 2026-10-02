@@ -3,6 +3,7 @@ import { fullPushDue, mailboxId } from '@/domain/sync/cloud';
 import { DecryptError, seal } from '@/domain/sync/crypto';
 import { getMeta, setMeta } from '@/db/repo';
 import { getState } from '@/db/store';
+import { SUPABASE } from '@/config/supabase';
 import { getHouseholdKey } from './secure';
 import { collectRows, importSealed, loadConflicts } from './sync';
 
@@ -12,10 +13,10 @@ import { collectRows, importSealed, loadConflicts } from './sync';
  * Only household rows are sent; private rows stay on the phone. Off unless the user enables it.
  */
 
-const URL = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
-const KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const URL = SUPABASE.url.trim().replace(/\/+$/, '');
+const KEY = SUPABASE.anonKey.trim();
 
-/** The build was given a Supabase project; without one the cloud option is hidden. */
+/** A Supabase project is set in src/config/supabase.ts; without one the cloud option is hidden. */
 export const cloudConfigured = Boolean(URL && KEY);
 
 const PAGE = 20;

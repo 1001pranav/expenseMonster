@@ -1,7 +1,7 @@
 name: Android production build
 
-# Builds the sideloadable production APK (SMS capture included; cloud sync available when the
-# SUPABASE_URL / SUPABASE_ANON_KEY secrets are set, off until the user enables it).
+# Builds the sideloadable production APK (SMS capture included). Cloud sync uses the Supabase
+# project committed in src/config/supabase.ts and stays off until the user enables it.
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
@@ -23,9 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      # Inlined into the JS bundle. Unset → the app hides the cloud sync option.
-      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v4

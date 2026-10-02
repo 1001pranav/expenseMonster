@@ -1,9 +1,9 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
- * INTERNET is kept only for the optional Supabase cloud sync (EXPO_PUBLIC_SUPABASE_URL /
- * EXPO_PUBLIC_SUPABASE_ANON_KEY at build time). It is off until the user turns it on, and the
- * server only receives end-to-end encrypted bundles.
+ * INTERNET is kept for the optional Supabase cloud sync (project in src/config/supabase.ts) and the
+ * optional assistant model download. Both are off until the user turns them on; the sync server
+ * only ever receives end-to-end encrypted bundles.
  *
  * Build variants (set in eas.json or the shell):
  * - STORE=play              → Play Store flavour without READ_SMS (Google restricts it to
