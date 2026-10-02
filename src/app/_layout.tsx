@@ -20,6 +20,7 @@ import { generateFixedBills } from '@/data/actions';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { scanSms } from '@/services/capture';
+import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { hasPin } from '@/services/secure';
 import { Button, Txt } from '@/ui/components/core';
@@ -83,6 +84,7 @@ function App() {
         if (useStore.getState().settings.smsEnabled) scanSms().catch(() => {});
         // A new month may have started while the app was in the background.
         generateFixedBills().catch(() => {});
+        cloudSyncSoon(0, onCloudResult);
       }
     });
     return () => sub.remove();
@@ -99,6 +101,11 @@ function App() {
   useEffect(() => {
     if (ready && identity.onboarded) scheduleSoon();
   }, [ready, version, identity.onboarded]);
+
+  // Optional cloud sync: upload edits shortly after they happen (no-op unless the user turned it on).
+  useEffect(() => {
+    if (ready && identity.onboarded && !locked) cloudSyncSoon(10_000, onCloudResult);
+  }, [ready, version, identity.onboarded, locked, settings.cloudSync]);
 
   useEffect(() => {
     if (!ready || locked || !identity.onboarded) return;
@@ -154,6 +161,13 @@ function App() {
   );
 }
 
+let knownConflicts = 0;
+function onCloudResult(r: CloudResult) {
+  const grew = r.pendingConflicts > knownConflicts;
+  knownConflicts = r.pendingConflicts;
+  if (grew) toast(`${r.pendingConflicts} entries changed on two phones. Resolve them in Sync.`, { tone: 'error' });
+}
+
 function OnboardingRedirect() {
   useEffect(() => {
     const t = setTimeout(() => router.replace('/onboarding'), 0);
@@ -169,11 +183,15 @@ function Router() {
 
   useEffect(() => {
     if (!hasShareIntent) return;
-    const file = shareIntent.files?.[0];
+    const files = shareIntent.files ?? [];
+    const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find((f) => f.mimeType?.startsWith('image/'));
     if (file?.path) {
       const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
       if (file.fileName?.endsWith('.emx')) router.push({ pathname: '/sync', params: { file: uri } });
-      else if (file.mimeType?.startsWith('image/')) router.push({ pathname: '/scan', params: { uri } });
+      else {
+        router.push({ pathname: '/scan', params: { uri } });
+        if (files.length > 1) toast('Scanning the first screenshot; share the others one at a time');
+      }
     }
     resetShareIntent();
   }, [hasShareIntent, shareIntent, resetShareIntent]);

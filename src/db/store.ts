@@ -16,6 +16,8 @@ export interface Settings {
   syncConflictPolicy: ConflictPolicy;
   smsPromptDismissed: boolean;
   setupDismissed: boolean;
+  /** Upload encrypted household changes to the Supabase mailbox. Off by default: data stays on the phone. */
+  cloudSync: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   syncConflictPolicy: 'ask',
   smsPromptDismissed: false,
   setupDismissed: false,
+  cloudSync: false,
 };
 
 export interface Identity {

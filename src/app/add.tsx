@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
-import Animated, { SlideInDown } from 'react-native-reanimated';
+import Animated, { Easing, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '@/db/store';
 import { GradientTile } from '@/ui/components/Aurora';
@@ -58,7 +58,8 @@ export default function AddSheet() {
   return (
     <View style={{ flex: 1, justifyContent: 'flex-end' }}>
       <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }} onPress={() => router.back()} accessibilityLabel="Close" />
-      <Animated.View entering={SlideInDown.springify().damping(18)} style={{ backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: space(2.5), paddingBottom: insets.bottom + space(3), gap: space(2.5) }}>
+      {/* Timing, not a spring: Reanimated 4's spring defaults (mass 4, stiffness 900) made damping(18) wobble. */}
+      <Animated.View entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))} style={{ backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: space(2.5), paddingBottom: insets.bottom + space(3), gap: space(2.5) }}>
         <View style={{ alignItems: 'center' }}>
           <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
         </View>

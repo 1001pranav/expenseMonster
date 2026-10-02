@@ -11,12 +11,11 @@
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "APP_VARIANT": "production" }
+      "android": { "buildType": "apk" }
     },
     "play": {
       "android": { "buildType": "app-bundle" },
-      "env": { "APP_VARIANT": "production", "STORE": "play" }
+      "env": { "STORE": "play" }
     }
   }
 }

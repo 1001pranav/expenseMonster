@@ -10,7 +10,7 @@ import { getState } from '@/db/store';
 import { writeCacheFile } from './files';
 import { getHouseholdKey, setHouseholdKey } from './secure';
 
-async function collectRows(): Promise<Partial<Record<TableName, BaseRow[]>>> {
+export async function collectRows(): Promise<Partial<Record<TableName, BaseRow[]>>> {
   const out: Partial<Record<TableName, BaseRow[]>> = {};
   for (const t of SYNC_TABLES) out[t] = (await allRows(t)) as BaseRow[];
   return out;
@@ -119,10 +119,14 @@ export async function resolveConflicts(keys: string[], choice: 'mine' | 'theirs'
 
 /** Import a .emx file received from another phone in this household. */
 export async function importChanges(uri: string): Promise<ImportResult> {
+  return importSealed(await new File(uri).text());
+}
+
+/** Decrypt and merge one sealed delta, whether it came from a file or the cloud mailbox. */
+export async function importSealed(text: string): Promise<ImportResult> {
   const key = await getHouseholdKey();
   if (!key) throw new Error('Household key missing');
   const { identity } = getState();
-  const text = await new File(uri).text();
   const bundle = validateBundle(open<Bundle>(text, key, identity.householdId));
   if (bundle.kind !== 'delta') throw new Error('This is a backup file. Use Restore backup instead.');
   if (bundle.fromDeviceId === identity.deviceId) throw new Error('This file was sent from this phone');

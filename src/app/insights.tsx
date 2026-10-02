@@ -7,10 +7,11 @@ import { addMonths, daysInMonth, formatMonth, fromParts, isoToYMD, monthKey, par
 import { loanEmisPaid } from '@/domain/dues';
 import { scheduleFor } from '@/domain/emi';
 import type { Paise } from '@/domain/money';
+import { financialHealth, type HealthStatus } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
 import { Bars, Donut, HeatCalendar, LineChart, type Slice } from '@/ui/components/charts';
-import { Card, Chip, IconButton, ListRow, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
+import { Card, Chip, IconButton, ListRow, Pill, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
@@ -28,6 +29,8 @@ export default function Insights() {
   const overrides = useTable('card_overrides');
   const loans = useTable('loans');
   const allTxns = useTable('transactions');
+  const health = useMemo(() => financialHealth({ transactions: allTxns, loans, cards, cardOverrides: overrides, budgets }, today, money), [allTxns, loans, cards, overrides, budgets, today, money]);
+  const healthTone: Record<HealthStatus, 'income' | 'warn' | 'expense' | 'muted'> = { good: 'income', watch: 'warn', risk: 'expense', unknown: 'muted' };
   const [range, setRange] = useState<Range>('month');
   const [month, setMonth] = useState(monthKey(today));
 
@@ -112,7 +115,23 @@ export default function Insights() {
   })();
 
   return (
-    <Screen title="Insights" back>
+    <Screen title="Insights" back right={<IconButton name="sparkles" label="Ask the assistant" onPress={() => router.push('/assistant')} />}>
+      <Section title="Financial health" action="Ask" onAction={() => router.push('/assistant')}>
+        <Card style={{ gap: space(1.5) }}>
+          {health.map((m) => (
+            <View key={m.key} style={{ gap: 4 }}>
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Txt variant="bodyStrong">{m.label}</Txt>
+                <Pill label={m.status === 'unknown' ? 'No data' : `${m.value} · ${m.status}`} tone={healthTone[m.status]} />
+              </Row>
+              <Txt variant="small" tone="muted">
+                {m.reason}
+              </Txt>
+            </View>
+          ))}
+        </Card>
+      </Section>
+
       <Segmented
         value={range}
         onChange={setRange}
