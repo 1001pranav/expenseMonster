@@ -1,7 +1,7 @@
 name: Android production build
 
 # Builds the sideloadable production APK (SMS capture included). Cloud sync is compiled in from
-# the APP_ENV secret (same lines as .env.example) and stays off until the user enables it.
+# the DEV environment's EXPO_PUBLIC_* values and stays off until the user enables it.
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
@@ -22,27 +22,43 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Secrets and variables come from this GitHub environment (repo-level ones still apply).
+    environment: DEV
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v7
 
-      # APP_ENV secret = the contents of a .env.local file (see .env.example). Written before the
-      # tests so the "no service_role key" check sees the real values.
+      # Build config comes from the DEV environment (Settings → Environments → DEV), in either form:
+      #   - APP_ENV secret: the contents of a .env.local file (see .env.example), or
+      #   - one variable or secret per key, e.g. EXPO_PUBLIC_SUPABASE_URL (these win over APP_ENV).
+      # Written before the tests so the "no service_role key" check sees the real values.
       - name: Load app environment
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
+          ENV_VARS: ${{ toJSON(vars) }}
+          ENV_SECRETS: ${{ toJSON(secrets) }}
         run: |
-          if [ -z "$APP_ENV" ]; then
-            echo "::notice::APP_ENV secret not set: building without cloud sync."
+          {
+            # Drop Windows line endings, comments, blank lines and surrounding quotes.
+            printf '%s\n' "$APP_ENV" | tr -d '\r' | { grep -E '^[A-Z0-9_]+=' || true; } \
+              | sed -E "s/^([A-Z0-9_]+)=[\"']?([^\"']*)[\"']?[[:space:]]*$/\1=\2/"
+            for j in "$ENV_SECRETS" "$ENV_VARS"; do
+              printf '%s' "$j" | jq -r 'to_entries[] | select(.key | startswith("EXPO_PUBLIC_"))
+                | "\(.key)=\(.value | gsub("^\\s+|\\s+$"; ""))"'
+            done
+          } | awk -F= '{ v[$1] = $0; if (!($1 in seen)) { seen[$1] = 1; k[++n] = $1 } }
+                       END { for (i = 1; i <= n; i++) print v[k[i]] }' > .env.local
+          if [ -n "$APP_ENV" ] && ! printf '%s\n' "$APP_ENV" | grep -qE '^EXPO_PUBLIC_'; then
+            echo "::error::APP_ENV has no EXPO_PUBLIC_ lines. Copy the format of .env.example."; exit 1
+          fi
+          if ! grep -qE '^EXPO_PUBLIC_' .env.local; then
+            rm .env.local
+            echo "::notice::No EXPO_PUBLIC_ values in the DEV environment: building without cloud sync."
             exit 0
           fi
-          # Drop Windows line endings, comments, blank lines and surrounding quotes.
-          printf '%s\n' "$APP_ENV" | tr -d '\r' | { grep -E '^[A-Z0-9_]+=' || true; } \
-            | sed -E "s/^([A-Z0-9_]+)=[\"']?([^\"']*)[\"']?[[:space:]]*$/\1=\2/" > .env.local
           # Expo reads .env.local; exporting too covers the Gradle-driven bundling step.
-          grep -E '^EXPO_PUBLIC_' .env.local >> "$GITHUB_ENV" \
-            || { echo "::error::APP_ENV has no EXPO_PUBLIC_ lines. Copy the format of .env.example."; exit 1; }
+          grep -E '^EXPO_PUBLIC_' .env.local >> "$GITHUB_ENV"
           echo "Loaded: $(cut -d= -f1 .env.local | paste -sd ' ' -)"
 
       - uses: actions/setup-node@v7
