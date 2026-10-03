@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import Animated, { Easing, SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStore } from '@/db/store';
 import { GradientTile } from '@/ui/components/Aurora';
 import { Txt, type IconName } from '@/ui/components/core';
 import { radius, space, useTheme, type GradientName } from '@/ui/theme';
@@ -18,13 +17,12 @@ interface Tile {
 export default function AddSheet() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const sms = useStore((s) => s.settings.smsEnabled);
 
   const capture: Tile[] = [
     { label: 'Expense', icon: 'arrow-up', gradient: 'rose', href: { pathname: '/txn/new', params: { type: 'expense' } } },
     { label: 'Income', icon: 'arrow-down', gradient: 'mint', href: { pathname: '/txn/new', params: { type: 'income' } } },
     { label: 'Scan screenshot', icon: 'scan', gradient: 'violet', href: '/scan' },
-    { label: sms ? 'Check SMS' : 'Paste SMS', icon: 'chatbubble-ellipses', gradient: 'ocean', href: sms ? '/review?scan=1' : '/paste-sms' },
+    { label: 'Paste SMS', icon: 'chatbubble-ellipses', gradient: 'ocean', href: '/paste-sms' },
     { label: 'Transfer', icon: 'swap-horizontal', gradient: 'ink', href: { pathname: '/txn/new', params: { type: 'transfer' } } },
     { label: 'Settle up', icon: 'people', gradient: 'brand', href: '/settle' },
   ];

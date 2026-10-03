@@ -6,7 +6,7 @@ import { formatINR } from '@/domain/money';
 import { ROLE_LABEL, applyFormat, buildPattern, tokenize, type TokenRole } from '@/domain/parsers/custom';
 import { insert, remove } from '@/db/repo';
 import { useTable } from '@/data/hooks';
-import { captureText, smsPermissionGranted, testFormatOnInbox } from '@/services/capture';
+import { captureText } from '@/services/capture';
 import { Button, Card, Chip, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { Field, Segmented, SwitchRow, TextField } from '@/ui/components/forms';
@@ -31,7 +31,6 @@ export default function TeachSmsFormat() {
   const [isCard, setIsCard] = useState(Boolean(existing?.isCard));
   const [role, setRole] = useState<TokenRole>('amount');
   const [tags, setTags] = useState<(TokenRole | null)[]>([]);
-  const [testing, setTesting] = useState(false);
 
   const tokens = useMemo(() => tokenize(sample), [sample]);
   const tagList = tokens.map((_, i) => tags[i] ?? null);
@@ -52,20 +51,9 @@ export default function TeachSmsFormat() {
   const save = async () => {
     if (!preview) return toast('Tap at least the amount so the sample can be read', { tone: 'error' });
     await insert('sms_formats', { ...format, name: name.trim() || sender.trim() || 'My bank SMS', scope: 'household' });
-    toast('Format saved. Matching SMS will now be captured.', { tone: 'success' });
+    toast('Format saved. Matching pasted SMS will now be recognised.', { tone: 'success' });
     if (params.text) await captureText(sample, sender);
     router.back();
-  };
-
-  const test = async () => {
-    if (!(await smsPermissionGranted())) return toast('Allow SMS access to test against your inbox', { tone: 'error' });
-    setTesting(true);
-    try {
-      const r = await testFormatOnInbox(format);
-      toast(r.matched ? `Matches ${r.matched} messages from the last 60 days, e.g. ${r.examples[0]}` : 'No other messages in your inbox match yet');
-    } finally {
-      setTesting(false);
-    }
   };
 
   if (existing) {
@@ -171,7 +159,6 @@ export default function TeachSmsFormat() {
       ) : null}
 
       <TextField label="Name (optional)" value={name} onChangeText={setName} placeholder="MyCoop debit" />
-      {preview ? <Button title="Test on my inbox" icon="flask-outline" variant="secondary" loading={testing} onPress={test} /> : null}
       <Txt variant="small" tone="faint" style={{ marginBottom: space(1) }}>
         Only a pattern is saved (and shared with family phones), not the message: the words you tap and every number become placeholders.
       </Txt>

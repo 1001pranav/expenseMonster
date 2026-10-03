@@ -1,20 +1,17 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
-import { isSmsAvailable } from '../../../modules/sms-reader';
+import { Pressable, ScrollView, View } from 'react-native';
 import { budgetUsage, spendByCategory } from '@/domain/budget';
 import { addDays, addMonths, daysInMonth, monthKey, parts, shortMonth, toDate } from '@/domain/dates';
 import { comparableChange, dailySpend, monthTotals } from '@/domain/transactions';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { useCategoryMap, useConfirmed, useDues, useMembers, usePending, useSelfId, useTable, useToday } from '@/data/hooks';
-import { scanSms } from '@/services/capture';
 import { GradientTile } from '@/ui/components/Aurora';
 import { Avatar } from '@/ui/components/Avatar';
 import { Bars, Donut, type Slice } from '@/ui/components/charts';
-import { Button, Card, EmptyState, IconButton, Money, Pill, ProgressBar, Row, Section, Stat, Txt, useMoneyText, type IconName } from '@/ui/components/core';
-import { toast } from '@/ui/components/feedback';
+import { Card, EmptyState, IconButton, Money, Pill, ProgressBar, Row, Section, Stat, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { DueCard, TxnRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
 import { radius, space, useTheme, type GradientName } from '@/ui/theme';
@@ -47,7 +44,6 @@ export default function Home() {
   const dues = useDues(14);
   const settings = useStore((s) => s.settings);
   const household = useStore((s) => s.identity.householdName);
-  const [refreshing, setRefreshing] = useState(false);
 
   const me = members.find((m) => m.id === selfId);
   const { y, m, d: dayOfMonth } = parts(today);
@@ -72,19 +68,6 @@ export default function Home() {
   const dueTotal = upcoming.filter((d) => !d.incoming).reduce((a, d) => a + (d.amount ?? 0), 0);
   const overdueCount = upcoming.filter((d) => d.state === 'overdue').length;
 
-  const refresh = async () => {
-    if (!settings.smsEnabled) return;
-    setRefreshing(true);
-    try {
-      const s = await scanSms();
-      toast(s.added + s.bills ? `${s.added + s.bills} new from SMS` : 'No new bank SMS', { tone: s.added ? 'success' : 'default' });
-    } catch (e) {
-      toast((e as Error).message, { tone: 'error' });
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
   const spentRatio = budgetTotal ? totals.expense / budgetTotal : 0;
   const daysLeft = monthDays - dayOfMonth + 1;
   const left = budgetTotal - totals.expense;
@@ -93,7 +76,6 @@ export default function Home() {
       ? `${money(Math.floor(left / daysLeft), { decimals: 'never' })}/day for ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`
       : `Over by ${money(-left, { decimals: 'never' })}`
     : `${money(Math.round(totals.expense / dayOfMonth), { decimals: 'never' })}/day on average`;
-  const showSmsPrompt = Platform.OS === 'android' && isSmsAvailable() && !settings.smsEnabled && !settings.smsPromptDismissed;
 
   const setup = [
     { label: 'Record your first expense', hint: 'Or share a GPay / PhonePe screenshot', done: all.length > 0, href: '/txn/new' },
@@ -107,8 +89,6 @@ export default function Home() {
   return (
     <Screen
       tabBar
-      refreshing={refreshing}
-      onRefresh={settings.smsEnabled ? refresh : undefined}
       header={
         <Row style={{ paddingHorizontal: space(2), paddingTop: space(1), paddingBottom: space(0.5), justifyContent: 'space-between' }}>
           <Pressable onPress={() => router.push('/household')} accessibilityRole="button" accessibilityLabel={`${household} household`} style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.25), flex: 1, minWidth: 0 }}>
@@ -200,7 +180,7 @@ export default function Home() {
           <View style={{ flex: 1 }}>
             <Txt variant="bodyStrong">{reviewCount === 1 ? '1 entry to review' : `${reviewCount} entries to review`}</Txt>
             <Txt variant="small" tone="muted">
-              Captured from SMS & screenshots — swipe to approve
+              Captured from screenshots & pasted SMS — swipe to approve
             </Txt>
           </View>
           <Pill label="Review" tone="warn" />
@@ -244,26 +224,6 @@ export default function Home() {
               </Pressable>
             ))}
           </View>
-        </Card>
-      ) : null}
-
-      {showSmsPrompt ? (
-        <Card style={{ gap: space(1.25) }}>
-          <Row gap={1.5}>
-            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.infoSoft, alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chatbubble-ellipses" size={22} color={colors.info} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Txt variant="bodyStrong">Read bank SMS automatically?</Txt>
-              <Txt variant="small" tone="muted">
-                Optional. Payments are suggested for you to approve. Say no and everything stays manual.
-              </Txt>
-            </View>
-          </Row>
-          <Row gap={1}>
-            <Button title="Allow" size="sm" onPress={() => router.push('/settings/sms')} style={{ flex: 1 }} />
-            <Button title="No, keep manual" size="sm" variant="secondary" onPress={() => saveSettings({ smsPromptDismissed: true })} style={{ flex: 1 }} />
-          </Row>
         </Card>
       ) : null}
 
@@ -325,7 +285,7 @@ export default function Home() {
           {recent.length ? (
             recent.map((t) => <TxnRow key={t.id} t={t} cat={cats.get(t.categoryId ?? '')} card={cards.find((c) => c.id === t.cardId)} />)
           ) : (
-            <EmptyState icon="receipt-outline" title="No transactions yet" body="Tap + to add one, share a payment screenshot, or turn on SMS capture." action="Add expense" onAction={() => router.push('/txn/new')} />
+            <EmptyState icon="receipt-outline" title="No transactions yet" body="Tap + to add one, share a payment screenshot, or paste a bank SMS." action="Add expense" onAction={() => router.push('/txn/new')} />
           )}
         </Card>
       </Section>

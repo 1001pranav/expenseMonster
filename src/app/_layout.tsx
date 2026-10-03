@@ -19,7 +19,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { generateFixedBills } from '@/data/actions';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
-import { scanSms } from '@/services/capture';
 import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { hasPin } from '@/services/secure';
@@ -73,7 +72,7 @@ function App() {
     if (fontsLoaded && (ready || error)) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded, ready, error]);
 
-  // Lock again after the configured time in the background; pick up new SMS on return.
+  // Lock again after the configured time in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background') backgroundedAt.current = Date.now();
@@ -81,7 +80,6 @@ function App() {
         const away = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
         backgroundedAt.current = null;
         if ((pinSet || settings.biometric) && away > settings.autoLockMinutes * 60_000) setLocked(true);
-        if (useStore.getState().settings.smsEnabled) scanSms().catch(() => {});
         // A new month may have started while the app was in the background.
         generateFixedBills().catch(() => {});
         cloudSyncSoon(0, onCloudResult);
@@ -109,10 +107,8 @@ function App() {
 
   useEffect(() => {
     if (!ready || locked || !identity.onboarded) return;
-    if (settings.smsEnabled) scanSms().catch(() => {});
     rescheduleAll().catch(() => {});
     // Only on unlock / first ready.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, locked, identity.onboarded]);
 
   if (!fontsLoaded || (!ready && !error)) {

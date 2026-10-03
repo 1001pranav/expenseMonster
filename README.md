@@ -7,7 +7,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 | Area | What it does |
 |---|---|
 | Transactions | Expense, income, transfer and settlement. Category splits, equal split with family members, private entries |
-| Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Bank SMS is optional**: the app asks once and reads nothing unless you allow it (and stops if the permission is revoked). Without it, **paste a bank SMS** or add entries manually. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
+| Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Paste a bank SMS**: the app never asks for SMS permission or reads your inbox; copy a bank message and paste it, or add entries manually. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
 | Loans & EMIs | Borrowed and lent loans, reducing or flat interest, amortisation schedule, prepayment simulator, overdue EMIs |
 | Credit cards | Statement day and due day per card. Purchases on or before the statement day go on this bill; anything after goes on the next one. Refunds reduce the cycle. Bill payments are **transfers, not expenses**, so spending is never counted twice. Bank statement amounts can override the computed total |
 | Bills | Variable bills (electricity/water/gas, with units), fixed bills (rent/internet, created each cycle automatically), prepaid recharges (validity tracking), LPG (predicts the next booking), autopay (warns if no debit shows up) |
@@ -89,7 +89,7 @@ Both are deep links on `expensemonster://`, so Expo Router opens the screen and 
 
 ## Build and run
 
-Needs Node 20+, and for local builds the Android SDK and JDK 17. Expo Go won't work because ML Kit, SQLCipher and the SMS module are native code.
+Needs Node 20+, and for local builds the Android SDK and JDK 17. Expo Go won't work because ML Kit and SQLCipher are native code.
 
 ```bash
 npm install
@@ -97,7 +97,7 @@ npx expo run:android            # dev build on a connected phone / emulator
 # or with EAS (cloud build):
 npx eas-cli@latest build -p android --profile development   # dev client
 npx eas-cli@latest build -p android --profile preview       # sideloadable APK
-npx eas-cli@latest build -p android --profile play          # Play Store bundle, no READ_SMS
+npx eas-cli@latest build -p android --profile play          # Play Store bundle (AAB)
 ```
 
 ### Production APK via GitHub Actions
@@ -111,8 +111,6 @@ keytool -genkeypair -v -keystore expensemonster.keystore -alias expensemonster -
 base64 -w0 expensemonster.keystore   # → secret ANDROID_KEYSTORE_BASE64
 ```
 In **Settings → Environments → DEV**, add the secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`, plus `ANDROID_KEY_ALIAS` (`expensemonster`; a secret or a variable). `ANDROID_KEY_PASSWORD` is only needed if your key has its own password; keystores made by current `keytool` (PKCS12) use the keystore password for both. The *Check build configuration* step on each run shows which values are missing or wrong. Back up the keystore: if you lose it, you can never update the installed app.
-
-**Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. SMS capture is for the sideloaded `preview` APK. iOS cannot read SMS at all.
 
 ## Checks
 
@@ -131,14 +129,13 @@ src/domain/         pure TypeScript business logic + tests (no React / native im
   sync/             bundle format, AES-GCM envelope, merge rules
 src/db/             schema, migrations, SQLCipher client, repository, in-memory store
 src/data/           app actions (mark paid, captures…) and React hooks
-src/services/       OCR, SMS capture, notifications, UPI, sync/backup, secure storage
+src/services/       OCR, pasted-SMS capture, notifications, UPI, sync/backup, secure storage
 src/ui/             theme, components, charts, forms
-modules/sms-reader/ local Expo module (Kotlin) that reads the SMS inbox on demand
 ```
 
 ## Known limitations
 
-- Native features (OCR, SMS, biometrics, notifications, UPI, SQLCipher) have to be tested on a device. CI covers the domain logic and type/lint checks only.
+- Native features (OCR, biometrics, notifications, UPI, SQLCipher) have to be tested on a device. CI covers the domain logic and type/lint checks only.
 - OCR and SMS parsing are heuristic. That is why everything goes through Review. Bank SMS formats change, so add new samples to `src/domain/__tests__/sms.test.ts` when one isn't recognised.
 - Sync is manual (file based), not real-time.
 - Receiving `.emx` files works through *Receive file*. The app only registers for shared images so it doesn't clutter every share sheet.

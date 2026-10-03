@@ -1,10 +1,9 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
-import { isSmsAvailable } from '../../../modules/sms-reader';
 import { ensurePermission, rescheduleAll } from '@/services/notifications';
 import { clearPin, hasPin, setPin } from '@/services/secure';
 import { eraseEverything } from '@/services/wipe';
@@ -87,8 +86,8 @@ export default function Settings() {
           <ListRow
             icon="chatbubble-ellipses"
             iconColor={colors.info}
-            title="Bank SMS capture"
-            subtitle={Platform.OS !== 'android' ? 'Not possible on iOS' : !isSmsAvailable() ? 'Not included in this build' : settings.smsEnabled ? 'On' : 'Off'}
+            title="Bank SMS formats"
+            subtitle="Paste messages and teach your bank's format"
             chevron
             onPress={() => router.push('/settings/sms')}
           />
