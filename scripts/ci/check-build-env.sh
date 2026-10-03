@@ -5,7 +5,9 @@
 # only warn: the build still works without cloud sync or a release key.
 #
 # Reads: EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, ANDROID_KEYSTORE_BASE64,
-#        ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#        ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (optional: defaults to
+#        the keystore password, as PKCS12 keystores use one password for both), and
+#        SIGNING_IN_VARS (names of signing passwords/keystore wrongly saved as plain variables).
 set -uo pipefail
 
 ROWS=()
@@ -65,47 +67,60 @@ if { [ -n "$URL" ] && [ -z "$KEY" ]; } || { [ -z "$URL" ] && [ -n "$KEY" ]; }; t
 fi
 
 # --- Release signing --------------------------------------------------------------------------
-SIGN_VARS=(ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD)
-MISSING_SIGN=()
-for v in "${SIGN_VARS[@]}"; do [ -z "${!v:-}" ] && MISSING_SIGN+=("$v"); done
+for v in ${SIGNING_IN_VARS:-}; do
+  row "$v" INVALID "Saved as a variable, which shows in plain text. Delete the variable and add it as a secret."
+done
 
-if [ ${#MISSING_SIGN[@]} -eq ${#SIGN_VARS[@]} ]; then
+KS_B64=${ANDROID_KEYSTORE_BASE64:-}
+KSP=${ANDROID_KEYSTORE_PASSWORD:-}
+ALIAS=${ANDROID_KEY_ALIAS:-}
+KP=${ANDROID_KEY_PASSWORD:-}
+
+if [ -z "$KS_B64$KSP$ALIAS$KP" ]; then
   row "Release signing" MISSING "No ANDROID_* secrets: APK is debug-signed, and later builds won't install over it."
-elif [ ${#MISSING_SIGN[@]} -gt 0 ]; then
-  row "Release signing" INVALID "Missing secret(s): ${MISSING_SIGN[*]}. Add all four, as secrets (not variables)."
+elif [ -z "$KS_B64" ] || [ -z "$KSP" ]; then
+  [ -z "$KS_B64" ] && row ANDROID_KEYSTORE_BASE64 INVALID "Not set, but other signing values are. Add it as a secret: base64 -w0 expensemonster.keystore"
+  [ -z "$KSP" ] && row ANDROID_KEYSTORE_PASSWORD INVALID "Not set, but other signing values are. Add it as a secret."
 else
   KS=$(mktemp)
   trap 'rm -f "$KS"' EXIT
-  if ! printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d ' \r\n\t' | base64 -d > "$KS" 2>/dev/null || [ ! -s "$KS" ]; then
+  export KSP KP="${KP:-$KSP}"
+  if ! printf '%s' "$KS_B64" | tr -d ' \r\n\t' | base64 -d > "$KS" 2>/dev/null || [ ! -s "$KS" ]; then
     row ANDROID_KEYSTORE_BASE64 INVALID "Not valid base64. Create it with: base64 -w0 expensemonster.keystore"
-  else
-    export KSP="$ANDROID_KEYSTORE_PASSWORD" KP="$ANDROID_KEY_PASSWORD"
-    if ! out=$(keytool -list -keystore "$KS" -storepass:env KSP 2>&1); then
-      if grep -qi 'password' <<< "$out"; then
-        row ANDROID_KEYSTORE_PASSWORD INVALID "Wrong keystore password."
-      else
-        row ANDROID_KEYSTORE_BASE64 INVALID "Decoded file is not a keystore: $(head -1 <<< "$out")"
-      fi
-    else
+  elif ! out=$(keytool -list -v -keystore "$KS" -storepass:env KSP 2>&1); then
+    if grep -qi 'password' <<< "$out"; then
       row ANDROID_KEYSTORE_BASE64 OK "Valid keystore"
-      row ANDROID_KEYSTORE_PASSWORD OK "Opens the keystore"
-      if ! info=$(keytool -list -v -keystore "$KS" -storepass:env KSP -alias "$ANDROID_KEY_ALIAS" 2>&1); then
-        aliases=$(keytool -list -v -keystore "$KS" -storepass:env KSP 2>/dev/null | grep -oP '^Alias name: \K.*' | paste -sd, -)
-        row ANDROID_KEY_ALIAS INVALID "Alias not in the keystore. Aliases found: ${aliases:-none}"
-      else
-        row ANDROID_KEY_ALIAS OK "Found"
-        # certreq needs the private key, so it only succeeds with the right key password.
-        if keytool -certreq -keystore "$KS" -storepass:env KSP -alias "$ANDROID_KEY_ALIAS" -keypass:env KP > /dev/null 2>&1; then
+      row ANDROID_KEYSTORE_PASSWORD INVALID "Wrong keystore password."
+    else
+      row ANDROID_KEYSTORE_BASE64 INVALID "Decoded file is not a keystore: $(head -1 <<< "$out")"
+    fi
+  else
+    row ANDROID_KEYSTORE_BASE64 OK "Valid keystore"
+    row ANDROID_KEYSTORE_PASSWORD OK "Opens the keystore"
+    aliases=$(grep -oP '^Alias name: \K.*' <<< "$out" | paste -sd, -)
+    if [ -z "$ALIAS" ]; then
+      row ANDROID_KEY_ALIAS INVALID "Not set. This keystore contains: ${aliases:-no keys}. Add that name as secret or variable ANDROID_KEY_ALIAS."
+    elif ! info=$(keytool -list -v -keystore "$KS" -storepass:env KSP -alias "$ALIAS" 2>&1); then
+      row ANDROID_KEY_ALIAS INVALID "Alias not in the keystore. This keystore contains: ${aliases:-no keys}"
+    else
+      row ANDROID_KEY_ALIAS OK "Found"
+      # certreq needs the private key, so it only succeeds with the right key password.
+      if keytool -certreq -keystore "$KS" -storepass:env KSP -alias "$ALIAS" -keypass:env KP > /dev/null 2>&1; then
+        if [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
           row ANDROID_KEY_PASSWORD OK "Unlocks the key"
         else
-          row ANDROID_KEY_PASSWORD INVALID "Wrong key password for alias $ANDROID_KEY_ALIAS."
+          row ANDROID_KEY_PASSWORD OK "Not set; the keystore password unlocks the key, so none is needed"
         fi
-        # Public certificate details: safe to show, and the fingerprint tells you whether two
-        # builds were signed with the same key (they must be, for updates to install).
-        sha=$(grep -m1 -oP 'SHA256:\s*\K\S+' <<< "$info")
-        until=$(grep -m1 -oP 'until:\s*\K.*' <<< "$info")
-        row "Signing certificate" OK "SHA-256 ${sha:-?}, valid until ${until:-?}"
+      elif [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+        row ANDROID_KEY_PASSWORD INVALID "Wrong key password for alias $ALIAS."
+      else
+        row ANDROID_KEY_PASSWORD INVALID "Not set, and the keystore password doesn't unlock the key. Add the key password as a secret."
       fi
+      # Public certificate details: safe to show, and the fingerprint tells you whether two
+      # builds were signed with the same key (they must be, for updates to install).
+      sha=$(grep -m1 -oP 'SHA256:\s*\K\S+' <<< "$info")
+      until=$(grep -m1 -oP 'until:\s*\K.*' <<< "$info")
+      row "Signing certificate" OK "SHA-256 ${sha:-?}, valid until ${until:-?}"
     fi
   fi
 fi

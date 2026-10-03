@@ -110,7 +110,7 @@ npx eas-cli@latest build -p android --profile play          # Play Store bundle,
 keytool -genkeypair -v -keystore expensemonster.keystore -alias expensemonster -keyalg RSA -keysize 4096 -validity 10000
 base64 -w0 expensemonster.keystore   # → secret ANDROID_KEYSTORE_BASE64
 ```
-Add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`expensemonster`) and `ANDROID_KEY_PASSWORD`. Back up the keystore: if you lose it, you can never update the installed app.
+In **Settings → Environments → DEV**, add the secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`, plus `ANDROID_KEY_ALIAS` (`expensemonster`; a secret or a variable). `ANDROID_KEY_PASSWORD` is only needed if your key has its own password; keystores made by current `keytool` (PKCS12) use the keystore password for both. The *Check build configuration* step on each run shows which values are missing or wrong. Back up the keystore: if you lose it, you can never update the installed app.
 
 **Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. SMS capture is for the sideloaded `preview` APK. iOS cannot read SMS at all.
 

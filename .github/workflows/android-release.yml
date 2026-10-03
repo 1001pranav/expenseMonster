@@ -77,8 +77,12 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_IN_VARS: >-
+            ${{ vars.ANDROID_KEYSTORE_BASE64 && 'ANDROID_KEYSTORE_BASE64' || '' }}
+            ${{ vars.ANDROID_KEYSTORE_PASSWORD && 'ANDROID_KEYSTORE_PASSWORD' || '' }}
+            ${{ vars.ANDROID_KEY_PASSWORD && 'ANDROID_KEY_PASSWORD' || '' }}
         run: bash scripts/ci/check-build-env.sh
 
       # v6 defaults to a proprietary cache provider (free-preview only on private repos);
@@ -111,8 +115,10 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # The alias isn't secret, so a variable works too. PKCS12 keystores (keytool's default)
+          # use the keystore password for the key, so ANDROID_KEY_PASSWORD is optional.
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
           OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}.apk
