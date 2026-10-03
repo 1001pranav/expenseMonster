@@ -1,5 +1,5 @@
 import type { ParsedBill, ParsedCardStatement, ParsedTxn } from '../parsers/common';
-import { isLikelyFinancialSender, parseSms } from '../parsers/sms';
+import { parseSms } from '../parsers/sms';
 
 const R = '2026-09-12';
 const tx = (s: string) => parseSms(s, R) as ParsedTxn;
@@ -68,11 +68,5 @@ describe('bank SMS parser', () => {
   it('parses credit card statement SMS', () => {
     const p = parseSms('HDFC Bank Credit Card XX5678 Statement: Total Amt Due Rs.12,345.67, Min Amt Due Rs.620.00, Due by 05-Nov-26.', R) as ParsedCardStatement;
     expect(p).toMatchObject({ kind: 'card_statement', cardLast4: '5678', total: 1234567, minDue: 62000, dueDate: '2026-11-05' });
-  });
-
-  it('recognises transactional senders, not personal numbers', () => {
-    expect(isLikelyFinancialSender('VM-HDFCBK')).toBe(true);
-    expect(isLikelyFinancialSender('AD-SBIINB-S')).toBe(true);
-    expect(isLikelyFinancialSender('+919876543210')).toBe(false);
   });
 });

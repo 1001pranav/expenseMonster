@@ -2,11 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { insert, saveIdentity, saveSettings } from '@/db/repo';
 import { MEMBER_COLORS } from '@/db/seed';
 import { useStore } from '@/db/store';
-import { isSmsAvailable } from '../../modules/sms-reader';
 import { ensurePermission } from '@/services/notifications';
 import { setPin } from '@/services/secure';
 import { Aurora, BrandMark, GradientTile } from '@/ui/components/Aurora';
@@ -138,9 +137,6 @@ export default function Onboarding() {
               chevron
               onPress={async () => toast((await ensurePermission()) ? 'Reminders on' : 'You can enable them later in Settings', { tone: 'success' })}
             />
-            {Platform.OS === 'android' && isSmsAvailable() ? (
-              <ListRow icon="chatbubble-ellipses-outline" iconColor={colors.info} title="Read bank SMS (optional)" subtitle="Suggests transactions for you to approve" chevron onPress={() => router.push('/settings/sms')} />
-            ) : null}
           </Card>
           <Card tone="alt" style={{ gap: 6 }}>
             <Txt variant="bodyStrong">Tip: share screenshots</Txt>

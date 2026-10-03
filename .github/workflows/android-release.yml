@@ -1,6 +1,6 @@
 name: Android production build
 
-# Builds the sideloadable production APK (SMS capture included). Cloud sync is compiled in from
+# Builds the sideloadable production APK. Cloud sync is compiled in from
 # the DEV environment's EXPO_PUBLIC_* values and stays off until the user enables it.
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
@@ -153,5 +153,4 @@ jobs:
           body: |
             Production APK (sideload). Signed with: ${{ env.SIGNING }}.
             - Data stays on the phone unless you turn on cloud sync, which uploads only end-to-end encrypted household changes.
-            - SMS capture included (optional, asks first).
             Install: download on the phone → open → allow "Install unknown apps" for your browser/Files app.

@@ -5,11 +5,9 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  * optional assistant model download. Both are off until the user turns them on; the sync server
  * only ever receives end-to-end encrypted bundles.
  *
- * Build variants (set in eas.json or the shell):
- * - STORE=play              → Play Store flavour without READ_SMS (Google restricts it to
- *   default SMS apps). Screenshot capture still works.
+ * The app never reads SMS: bank messages come in only when the user pastes one. The SMS
+ * permissions are blocked so no library can merge them back into the manifest.
  */
-const playStore = process.env.STORE === 'play';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -40,14 +38,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     predictiveBackGestureEnabled: false,
     // Nothing is backed up to Google's cloud: the DB key lives in the Keystore and wouldn't restore anyway.
     allowBackup: false,
-    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA', ...(playStore ? [] : ['android.permission.READ_SMS'])],
+    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA'],
     blockedPermissions: [
       'android.permission.RECORD_AUDIO',
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
-      ...(playStore ? ['android.permission.READ_SMS'] : []),
+      'android.permission.READ_SMS',
+      'android.permission.RECEIVE_SMS',
     ],
   },
   plugins: [
@@ -74,5 +73,4 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     './plugins/withAndroidWidget',
   ],
   experiments: { typedRoutes: false },
-  extra: { smsEnabled: !playStore },
 });

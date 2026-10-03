@@ -11,10 +11,8 @@ export interface Settings {
   wipeAfterFailures: boolean;
   deleteCapturesAfterApproval: boolean;
   defaultTxnScope: Scope;
-  smsEnabled: boolean;
   theme: 'system' | 'light' | 'dark';
   syncConflictPolicy: ConflictPolicy;
-  smsPromptDismissed: boolean;
   setupDismissed: boolean;
   /** Upload encrypted household changes to the Supabase mailbox. Off by default: data stays on the phone. */
   cloudSync: boolean;
@@ -29,10 +27,8 @@ export const DEFAULT_SETTINGS: Settings = {
   wipeAfterFailures: false,
   deleteCapturesAfterApproval: true,
   defaultTxnScope: 'household',
-  smsEnabled: false,
   theme: 'system',
   syncConflictPolicy: 'ask',
-  smsPromptDismissed: false,
   setupDismissed: false,
   cloudSync: false,
 };

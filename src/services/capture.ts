@@ -1,19 +1,16 @@
 import { matchBiller, viewBill } from '@/domain/bills';
 import { statementDateFor } from '@/domain/creditCard';
-import { addDays, addMonths, isoToYMD, toISO, todayYMD, type YMD } from '@/domain/dates';
+import { addDays, addMonths, toISO, todayYMD, type YMD } from '@/domain/dates';
 import { textHash } from '@/domain/ids';
 import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domain/parsers/common';
 import { applyFormat } from '@/domain/parsers/custom';
-import { formatINR } from '@/domain/money';
 import { looksLikeBill, parseBillDocument, parsePaymentScreenshot } from '@/domain/parsers/ocr';
-import { isLikelyFinancialSender, parseSms } from '@/domain/parsers/sms';
+import { parseSms } from '@/domain/parsers/sms';
 import { suggestCategory } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
 import { addCapture, type TxnDraft } from '@/data/actions';
-import { PermissionsAndroid, Platform } from 'react-native';
-import { getMeta, insert, saveSettings, setMeta } from '@/db/repo';
+import { insert } from '@/db/repo';
 import { getState } from '@/db/store';
-import { isSmsAvailable, readInbox } from '../../modules/sms-reader';
 import { saveAttachment } from './files';
 import { recognizeText } from './ocr';
 
@@ -159,40 +156,9 @@ async function captureParsed(parsed: Parsed, raw: string, hash: string, received
   if (duplicate && !row) summary.duplicates++;
 }
 
-/** SMS is read only while the user has granted it; if revoked in Android settings, stop and switch to manual. */
-export async function smsPermissionGranted(): Promise<boolean> {
-  if (Platform.OS !== 'android' || !isSmsAvailable()) return false;
-  return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
-}
-
-/** Parse SMS messages newer than the last scan and queue them for review. */
-export async function scanSms(opts: { initialDays?: number } = {}): Promise<CaptureSummary> {
-  const summary = emptySummary();
-  if (!getState().settings.smsEnabled) return summary;
-  if (!(await smsPermissionGranted())) {
-    await saveSettings({ smsEnabled: false });
-    return summary;
-  }
-  const stored = await getMeta('smsCursor');
-  const since = stored ? Number(stored) : Date.now() - (opts.initialDays ?? 30) * 86_400_000;
-  const messages = await readInbox(since, 1000);
-  let cursor = since;
-
-  for (const m of messages.slice().reverse()) {
-    cursor = Math.max(cursor, m.date);
-    if (!isLikelyFinancialSender(m.address)) continue;
-    const received = isoToYMD(new Date(m.date).toISOString());
-    const parsed = parseMessage(m.address, m.body, received);
-    if (!parsed) continue;
-    await captureParsed(parsed, m.body, textHash(`${m.address}|${m.body}`), received, 'sms', summary, new Date(m.date).toISOString());
-  }
-  await setMeta('smsCursor', String(cursor));
-  return summary;
-}
-
 /**
- * Manual path for people who don't grant SMS access: paste (or share) a bank SMS and it goes
- * through the same parsers into Review. The text itself is not stored.
+ * Paste a bank SMS and it goes through the parsers into Review. The app never reads the SMS
+ * inbox; the text itself is not stored.
  */
 export async function captureText(text: string, sender = ''): Promise<CaptureSummary & { recognised: boolean }> {
   const summary = emptySummary();
@@ -201,21 +167,6 @@ export async function captureText(text: string, sender = ''): Promise<CaptureSum
   if (!parsed) return { ...summary, recognised: false };
   await captureParsed(parsed, text, textHash(`${sender}|${text}`), today, 'sms', summary, null);
   return { ...summary, recognised: true };
-}
-
-/** How many inbox messages from the last `days` a format would recognise (for "Test on my inbox"). */
-export async function testFormatOnInbox(format: Parameters<typeof applyFormat>[0], days = 60): Promise<{ matched: number; examples: string[] }> {
-  if (!(await smsPermissionGranted())) return { matched: 0, examples: [] };
-  const messages = await readInbox(Date.now() - days * 86_400_000, 1000);
-  let matched = 0;
-  const examples: string[] = [];
-  for (const m of messages) {
-    const p = applyFormat(format, m.address, m.body, isoToYMD(new Date(m.date).toISOString()));
-    if (!p) continue;
-    matched++;
-    if (examples.length < 3) examples.push(`${formatINR(p.amount)} · ${p.payee ?? 'no payee'} · ${p.date}`);
-  }
-  return { matched, examples };
 }
 
 export interface ImageCapture {

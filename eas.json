@@ -14,8 +14,7 @@
       "android": { "buildType": "apk" }
     },
     "play": {
-      "android": { "buildType": "app-bundle" },
-      "env": { "STORE": "play" }
+      "android": { "buildType": "app-bundle" }
     }
   }
 }

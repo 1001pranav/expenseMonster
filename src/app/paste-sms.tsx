@@ -8,7 +8,7 @@ import { TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
 
-/** Manual path when SMS access isn't granted: long-press a bank SMS → Copy → paste here. */
+/** The only way bank SMS reach the app (it never reads the inbox): long-press a bank SMS → Copy → paste here. */
 export default function PasteSms() {
   const [text, setText] = useState('');
   const [unrecognised, setUnrecognised] = useState(false);

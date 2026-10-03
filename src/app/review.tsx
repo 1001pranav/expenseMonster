@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
+import { useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { formatDay, isoToYMD, relativeDay } from '@/domain/dates';
 import { flagsOf } from '@/domain/transactions';
@@ -7,7 +7,6 @@ import type { Transaction } from '@/domain/types';
 import { remove, update } from '@/db/repo';
 import { approveCapture, rejectCapture } from '@/data/actions';
 import { useCategoryMap, usePending, useTable, useToday } from '@/data/hooks';
-import { scanSms } from '@/services/capture';
 import { Button, Card, Chip, EmptyState, IconButton, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
@@ -16,35 +15,13 @@ import { space, useTheme } from '@/ui/theme';
 
 export default function Review() {
   const { colors } = useTheme();
-  const params = useLocalSearchParams<{ scan?: string }>();
   const { transactions, bills } = usePending();
   const cats = useCategoryMap();
   const cards = useTable('cards');
   const billers = useTable('billers');
   const today = useToday();
-  const [scanning, setScanning] = useState(false);
   const [cardFor, setCardFor] = useState<Transaction | null>(null);
   const narrow = useWindowDimensions().width < 360;
-
-  const scan = async () => {
-    setScanning(true);
-    try {
-      const s = await scanSms();
-      const parts = [s.added && `${s.added} new`, s.bills && `${s.bills} bills`, s.statements && `${s.statements} card statements`, s.duplicates && `${s.duplicates} already recorded`].filter(Boolean);
-      toast(parts.length ? parts.join(' · ') : 'No new bank SMS', { tone: s.added ? 'success' : 'default' });
-      if (s.unknownBillers.length) toast(`Bill from ${s.unknownBillers[0]} — add it as a biller to track it`);
-    } catch (e) {
-      toast((e as Error).message, { tone: 'error' });
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  // Opened from "+ → Check SMS": start a scan once on arrival.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (params.scan) scan();
-  }, [params.scan]);
 
   const approve = async (t: Transaction) => {
     await approveCapture(t.id);
@@ -66,12 +43,9 @@ export default function Review() {
       title="Review"
       subtitle="Nothing is recorded until you approve it"
       back
-      right={<Button title="Check SMS" icon="refresh" size="sm" variant="ghost" loading={scanning} onPress={scan} />}
-      onRefresh={scan}
-      refreshing={scanning}
     >
       {transactions.length + bills.length === 0 ? (
-        <EmptyState icon="checkmark-done-circle-outline" title="All caught up" body="Share a payment screenshot from GPay / PhonePe to ExpenseMonster, or pull down to check bank SMS." action="Scan a screenshot" onAction={() => router.replace('/scan')} />
+        <EmptyState icon="checkmark-done-circle-outline" title="All caught up" body="Share a payment screenshot from GPay / PhonePe to ExpenseMonster, or paste a bank SMS." action="Scan a screenshot" onAction={() => router.replace('/scan')} />
       ) : null}
 
       {confident.length > 1 ? <Button title={`Approve ${confident.length} high-confidence`} icon="checkmark-done" variant="secondary" onPress={approveConfident} /> : null}

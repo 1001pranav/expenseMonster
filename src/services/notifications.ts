@@ -87,7 +87,7 @@ export async function rescheduleAll(): Promise<number> {
     const at = toDate(now.getHours() >= 21 ? addDays(today, 1) : today, 21);
     await Notifications.scheduleNotificationAsync({
       identifier: 'review-nudge',
-      content: { title: `${pending} transaction${pending > 1 ? 's' : ''} to review`, body: 'Captured from SMS & screenshots. Takes a few seconds.', data: { href: '/review' } },
+      content: { title: `${pending} transaction${pending > 1 ? 's' : ''} to review`, body: 'Captured from screenshots & pasted SMS. Takes a few seconds.', data: { href: '/review' } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at, channelId: CHANNEL },
     });
   }

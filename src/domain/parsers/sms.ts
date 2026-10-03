@@ -16,15 +16,6 @@ import {
   type ParsedTxn,
 } from './common';
 
-/** Transactional sender IDs look like "VM-HDFCBK", "AD-SBIINB-S", "JX-ICICIT". */
-const BANK_SENDER = /(HDFC|SBI|ICICI|AXIS|KOTAK|KOTAKB|PNB|BOB|BARODA|CANARA|CANBNK|UNION|UBOI|IDFC|INDUS|YESB|AUBANK|FEDBNK|AMEX|ONECRD|PAYTM|PHONPE|GPAY|AIRTEL|JIO|BESCOM|TATAPW|ADANI|MSEDCL|BSES|TNEB|KSEB|IGL|MGL|ACTFBR|HATHWY|LIC|HDFCLI|ICICIP|SBILIF|STARHL|BAJAJ|NIVA|CARE)/i;
-
-export function isLikelyFinancialSender(address: string): boolean {
-  if (!address) return false;
-  if (/^\+?\d{10,13}$/.test(address.replace(/\s/g, ''))) return false; // personal numbers
-  return BANK_SENDER.test(address) || /^[A-Z]{2}-[A-Z0-9]{5,6}(-[STPG])?$/i.test(address);
-}
-
 const IGNORE = [
   /\botp\b|one[\s-]?time\s+password|verification code|\bcode is\b/i,
   /pre-?approved|eligible for|apply now|offer|cashback up ?to|win\b|lucky|reward points? (?:earned|balance)/i,
