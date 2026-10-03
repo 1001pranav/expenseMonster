@@ -13,31 +13,16 @@
     },
     "preview": {
       "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "APP_VARIANT": "production"
-      }
+      "android": { "buildType": "apk" }
     },
     "play": {
-      "android": {
-        "buildType": "app-bundle"
-      },
-      "env": {
-        "APP_VARIANT": "production",
-        "STORE": "play"
-      }
+      "android": { "buildType": "app-bundle" },
+      "env": { "STORE": "play" }
     },
     "preview-sms": {
       "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "APP_VARIANT": "production",
-        "SMS": "1"
-      }
+      "android": { "buildType": "apk" },
+      "env": { "SMS": "1" }
     }
   }
 }

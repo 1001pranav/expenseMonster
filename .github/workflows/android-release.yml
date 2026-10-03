@@ -1,8 +1,9 @@
 name: Android production build
 
-# Builds the sideloadable production APK (no INTERNET permission, no SMS permission).
-# Play Protect blocks sideloaded installs of apps that request READ_SMS, so SMS reach the app via
-# the share sheet. Run the workflow manually with "sms" ticked for an ADB-only build with SMS reading.
+# Builds the sideloadable production APK without READ_SMS: Play Protect blocks sideloaded installs
+# of apps that request it, so bank SMS reach the app via the share sheet. Run the workflow manually
+# with "sms" ticked for an ADB-only build with SMS reading. Cloud sync is compiled in from the DEV
+# environment's EXPO_PUBLIC_* values and stays off until the user enables it.
 # Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
 on:
   push:
@@ -28,24 +29,75 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Secrets and variables come from this GitHub environment (repo-level ones still apply).
+    environment: DEV
     env:
-      APP_VARIANT: production
       SMS: ${{ inputs.sms && '1' || '' }}
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      # Build config comes from the DEV environment (Settings → Environments → DEV), in either form:
+      #   - APP_ENV secret: the contents of a .env.local file (see .env.example), or
+      #   - one variable or secret per key, e.g. EXPO_PUBLIC_SUPABASE_URL (these win over APP_ENV).
+      # Written before the tests so the "no service_role key" check sees the real values.
+      - name: Load app environment
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+          ENV_VARS: ${{ toJSON(vars) }}
+          ENV_SECRETS: ${{ toJSON(secrets) }}
+        run: |
+          {
+            # Drop Windows line endings, comments, blank lines and surrounding quotes.
+            printf '%s\n' "$APP_ENV" | tr -d '\r' | { grep -E '^[A-Z0-9_]+=' || true; } \
+              | sed -E "s/^([A-Z0-9_]+)=[\"']?([^\"']*)[\"']?[[:space:]]*$/\1=\2/"
+            for j in "$ENV_SECRETS" "$ENV_VARS"; do
+              printf '%s' "$j" | jq -r 'to_entries[] | select(.key | startswith("EXPO_PUBLIC_"))
+                | "\(.key)=\(.value | gsub("^\\s+|\\s+$"; ""))"'
+            done
+          } | awk -F= '{ v[$1] = $0; if (!($1 in seen)) { seen[$1] = 1; k[++n] = $1 } }
+                       END { for (i = 1; i <= n; i++) print v[k[i]] }' > .env.local
+          if [ -n "$APP_ENV" ] && ! printf '%s\n' "$APP_ENV" | grep -qE '^EXPO_PUBLIC_'; then
+            echo "::error::APP_ENV has no EXPO_PUBLIC_ lines. Copy the format of .env.example."; exit 1
+          fi
+          if ! grep -qE '^EXPO_PUBLIC_' .env.local; then
+            rm .env.local
+            echo "::notice::No EXPO_PUBLIC_ values in the DEV environment: building without cloud sync."
+            exit 0
+          fi
+          # Expo reads .env.local; exporting too covers the Gradle-driven bundling step.
+          grep -E '^EXPO_PUBLIC_' .env.local >> "$GITHUB_ENV"
+          echo "Loaded: $(cut -d= -f1 .env.local | paste -sd ' ' -)"
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      # Table of every build setting: present / missing / wrong, never the values (also shown on
+      # the run's Summary page). Fails here, in seconds, if a value is set but wrong.
+      - name: Check build configuration
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SIGNING_IN_VARS: >-
+            ${{ vars.ANDROID_KEYSTORE_BASE64 && 'ANDROID_KEYSTORE_BASE64' || '' }}
+            ${{ vars.ANDROID_KEYSTORE_PASSWORD && 'ANDROID_KEYSTORE_PASSWORD' || '' }}
+            ${{ vars.ANDROID_KEY_PASSWORD && 'ANDROID_KEY_PASSWORD' || '' }}
+        run: bash scripts/ci/check-build-env.sh
+
+      # v6 defaults to a proprietary cache provider (free-preview only on private repos);
+      # "basic" is the MIT one built on actions/cache.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Install dependencies
         run: npm ci
@@ -56,12 +108,8 @@ jobs:
           npx eslint .
           npx jest
 
-      - name: Generate native project (production variant)
+      - name: Generate native project
         run: npx expo prebuild --platform android --no-install --clean
-
-      - name: Check release manifest has no INTERNET permission
-        run: |
-          grep -q 'android.permission.INTERNET" tools:node="remove"' android/app/src/main/AndroidManifest.xml
 
       - name: Check READ_SMS is removed unless asked for
         if: env.SMS != '1'
@@ -80,14 +128,17 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # The alias isn't secret, so a variable works too; if neither is set, the check step
+          # picks the keystore's only key. PKCS12 keystores (keytool's default) use the keystore
+          # password for the key, so ANDROID_KEY_PASSWORD is optional.
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS || env.DETECTED_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
           OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}${SMS:+-sms-adb}.apk
           if [ -n "$KEYSTORE_BASE64" ]; then
             BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-            echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            ANDROID_KEYSTORE_BASE64="$KEYSTORE_BASE64" bash scripts/ci/decode-keystore.sh release.keystore
             "$BT/zipalign" -f -p 4 "$APK" aligned.apk
             "$BT/apksigner" sign --ks release.keystore --ks-pass env:KEYSTORE_PASSWORD \
               --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD --out "$OUT" aligned.apk
@@ -102,18 +153,18 @@ jobs:
           echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
           sha256sum "$OUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ExpenseMonster-apk
           path: ${{ env.APK_FILE }}
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ env.APK_FILE }}
           body: |
             Production APK (sideload). Signed with: ${{ env.SIGNING }}.
-            - No INTERNET permission: the app cannot send data anywhere.
+            - Data stays on the phone unless you turn on cloud sync, which uploads only end-to-end encrypted household changes.
             - No SMS permission, so Play Protect lets it install. Share a bank SMS from Messages to add it.
             Install: download on the phone → open → allow "Install unknown apps" for your browser/Files app.

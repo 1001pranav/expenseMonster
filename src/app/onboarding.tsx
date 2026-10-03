@@ -91,7 +91,7 @@ export default function Onboarding() {
             </Txt>
             <Txt style={{ color: 'rgba(255,255,255,0.78)' }}>Expenses, EMIs, credit cards, bills and insurance — with reminders before every due date.</Txt>
             <Row gap={0.75} wrap>
-              {['No account', 'No server', 'No ads', 'Encrypted'].map((t) => (
+              {['No account', 'No ads', 'Encrypted', 'Cloud optional'].map((t) => (
                 <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' }}>
                   <Ionicons name="checkmark" size={13} color="#FFFFFF" />
                   <Txt variant="small" style={{ color: '#FFFFFF' }}>

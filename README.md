@@ -24,7 +24,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 - Every row has `id` (UUID v7), `createdAt`, `updatedAt`, `deletedAt` (soft delete, so deletions sync), `deviceId` and `scope` (`personal` | `household`).
 - Schema lives in `src/db/schema.ts` and migrations are append-only (`PRAGMA user_version`).
 
-## Phone-to-phone sharing (no server)
+## Phone-to-phone sharing
 
 1. **Pair once:** Household → Sync → *Show my QR* on one phone, *Scan to join* on the other. The QR carries a household AES key, and both phones show the same fingerprint.
 2. **Send:** builds the household rows changed since the last send to that phone, gzips them, encrypts them with **AES-256-GCM** (household id as associated data) and opens the share sheet (WhatsApp, Nearby Share, Bluetooth…).
@@ -37,11 +37,53 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 
 Rows marked **private** never leave the phone.
 
+## Optional cloud sync (Supabase)
+
+Off by default. When a phone turns it on (Sync → *Sync through the cloud*), it swaps the same encrypted bundles automatically instead of you sending files:
+
+- **The server can't read your data.** Each upload is a sealed `EMX1.` bundle, exactly like a `.emx` file. The household key never leaves the paired phones.
+- **Mailbox:** bundles are stored under `HKDF-SHA256(household key, household id)`, so only paired phones can address them. The table is closed to clients; the only way in is two `SECURITY DEFINER` functions (`emx_push`, `emx_pull`), so mailboxes can't be listed.
+- **When it syncs:** when the app opens or returns to the foreground, about 10 s after an edit, and when you tap *Sync now*. Each run downloads new bundles from other phones, merges them with your chosen conflict policy, then uploads changes made since this phone's last upload.
+- **Retention:** bundles older than 90 days are deleted. Every phone re-uploads all household rows every 30 days, so a phone that joins later still gets old entries. A phone that has been offline for more than 90 days should use *Send all* / *Receive* once.
+- **What the server can see:** the mailbox id, device ids, bundle sizes and timestamps (when your household is active), but not amounts, payees or names.
+
+Setup:
+
+1. Create a Supabase project and run `supabase/migrations/20261002000000_emx_cloud_sync.sql` (SQL editor, or `supabase db push`).
+2. Give the build the project URL and the **publishable / anon** key (never the `service_role` / secret key). They are compiled into the APK; nothing is fetched at runtime:
+   - **Local builds:** `cp .env.example .env.local` and fill it in. The file is git-ignored.
+   - **GitHub Actions:** the build job uses the `DEV` environment (**Settings → Environments → DEV**). Add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` there as variables (they end up in the APK anyway, so they aren't secret), or add one secret `APP_ENV` holding the same lines as `.env.local`. If both are set, the separate values win. Repository-level secrets and variables still work too.
+
+   Without them, the cloud option is hidden. A test fails the build if a secret / service_role key is set.
+
+The anon key ships inside the APK, so anyone can call the two functions. They can't read anything they don't hold the key for, junk uploads fail to decrypt and are skipped, and `emx_push` caps uploads per mailbox per hour.
+
+## Financial health and the optional on-device assistant
+
+**Financial health** (Insights) is plain code, so it works on every phone. It shows the savings rate and EMIs as a share of income (both averaged over the last 3 complete months), credit card utilisation, and this month's budgets. Each is rated good / watch / risk against common thresholds: saving 20%+, EMIs ≤30% (≤50% at most), utilisation ≤30%. Source: `src/domain/health.ts`.
+
+**Assistant (optional model pack).** Settings → *On-device assistant* downloads Google's Gemma 4 E2B (about 2.6 GB, SHA-256 verified) into app-private storage. The LiteRT-LM runtime ships in the APK through [`expo-ai-kit`](https://github.com/saidkaban/expo-ai-kit) and adds about 21 MB. Removing the pack frees the space. Questions and data never leave the phone; the download is the only network use.
+
+How answers stay honest:
+- The model never sees the database. It calls **read-only tools** (`src/domain/assistant/tools.ts`) that run the same domain code as the screens and return pre-formatted figures (`"₹12,400"`, `"34%"`). No tool can write, pay or send anything.
+- **Number check** (`grounding.ts`): every number in a reply must appear in a tool result, the question, or an earlier verified answer. If it doesn't, the model is asked once more with the bad numbers named. If it still fails, the app shows the tool figures directly instead of the model's text (`answer.ts`).
+- Payee names and notes are clipped and marked as data in the system prompt (prompt-injection guard). The prompt also rules out specific investment, insurance and tax recommendations.
+- The model is unloaded after 2 minutes idle and whenever the app goes to the background, freeing about 1.5 GB.
+
+Device gate: hidden below 4 GB RAM and on emulators. Phones with 4–6 GB get a "will be slow" warning.
+
+## Home screen: shortcuts and widget
+
+- **Shortcuts:** long-press the app icon for **Expense, Scan, Dues, Ask**. Each can also be dragged onto the home screen as its own icon. They appear right after install.
+- **Quick add widget:** long-press the home screen → Widgets → ExpenseMonster → *Quick add*. It's a resizable bar with **Expense / Income / Scan** buttons; the logo opens the app.
+
+Both are deep links on `expensemonster://`, so Expo Router opens the screen and the app lock still covers it. The widget deliberately **shows no amounts**: home-screen widgets sit outside the app lock and screenshot blocking. Both are generated at prebuild by `plugins/withAndroidShortcuts.js` and `plugins/withAndroidWidget.js`. Icons come from `assets/source/render-glyphs.sh`.
+
 ## Security
 
 - App lock: biometrics and/or a 6-digit PIN. The PIN is stored as a salted PBKDF2 hash in the Keystore. Auto-lock timeout is configurable, and you can opt in to an erase after 10 wrong PINs.
 - `FLAG_SECURE` blocks screenshots and the recent-apps preview. You can turn it off.
-- The release build (`APP_VARIANT=production`) **removes the INTERNET permission**. ML Kit's bundled model works offline.
+- Nothing is sent over the network unless you turn on cloud sync, and then only end-to-end encrypted household rows. ML Kit's bundled model works offline.
 - Raw SMS text is never stored, only the parsed fields plus a hash. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
 - Backups are encrypted with your passphrase (PBKDF2-SHA256 → AES-GCM). CSV export escapes formula characters.
 
@@ -54,7 +96,7 @@ npm install
 npx expo run:android            # dev build on a connected phone / emulator
 # or with EAS (cloud build):
 npx eas-cli@latest build -p android --profile development   # dev client
-npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no INTERNET or SMS permission
+npx eas-cli@latest build -p android --profile preview       # sideloadable APK, no SMS permission
 npx eas-cli@latest build -p android --profile preview-sms   # adds READ_SMS — install over ADB only (see below)
 npx eas-cli@latest build -p android --profile play          # Play Store bundle, no READ_SMS
 ```
@@ -69,11 +111,11 @@ npx eas-cli@latest build -p android --profile play          # Play Store bundle,
 keytool -genkeypair -v -keystore expensemonster.keystore -alias expensemonster -keyalg RSA -keysize 4096 -validity 10000
 base64 -w0 expensemonster.keystore   # → secret ANDROID_KEYSTORE_BASE64
 ```
-Add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`expensemonster`) and `ANDROID_KEY_PASSWORD`. Back up the keystore: if you lose it, you can never update the installed app.
+In **Settings → Environments → DEV**, add the secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`, plus `ANDROID_KEY_ALIAS` (`expensemonster`; a secret or a variable). `ANDROID_KEY_PASSWORD` is only needed if your key has its own password; keystores made by current `keytool` (PKCS12) use the keystore password for both. The *Check build configuration* step on each run shows which values are missing or wrong. Back up the keystore: if you lose it, you can never update the installed app.
 
 **"Blocked to protect your device… can request access to sensitive data":** in India, Play Protect's enhanced fraud protection refuses to install a sideloaded app (from a browser, WhatsApp, a file manager) that requests `READ_SMS`. That's why the default APK leaves it out: bank SMS reach the app through the share sheet instead (Messages → long-press → Share → ExpenseMonster), and are read immediately. If you want automatic SMS reading on your own phone, build with `SMS=1` (the `preview-sms` profile, or the workflow's manual run with "sms" ticked) and install it with `adb install`; ADB installs aren't covered by that block.
 
-**Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. SMS capture is for the sideloaded `preview` APK. iOS cannot read SMS at all.
+**Play Store note:** Google only allows `READ_SMS` for default SMS apps and approved exceptions. The `play` profile drops it (`STORE=play`), and screenshot capture still works. Automatic SMS capture needs the ADB-installed `preview-sms` APK. iOS cannot read SMS at all.
 
 ## Checks
 
