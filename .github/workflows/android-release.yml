@@ -124,7 +124,7 @@ jobs:
           OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}.apk
           if [ -n "$KEYSTORE_BASE64" ]; then
             BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-            echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            ANDROID_KEYSTORE_BASE64="$KEYSTORE_BASE64" bash scripts/ci/decode-keystore.sh release.keystore
             "$BT/zipalign" -f -p 4 "$APK" aligned.apk
             "$BT/apksigner" sign --ks release.keystore --ks-pass env:KEYSTORE_PASSWORD \
               --ks-key-alias "$KEY_ALIAS" --key-pass env:KEY_PASSWORD --out "$OUT" aligned.apk

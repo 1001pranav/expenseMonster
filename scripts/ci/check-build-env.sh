@@ -85,8 +85,8 @@ else
   KS=$(mktemp)
   trap 'rm -f "$KS"' EXIT
   export KSP KP="${KP:-$KSP}"
-  if ! printf '%s' "$KS_B64" | tr -d ' \r\n\t' | base64 -d > "$KS" 2>/dev/null || [ ! -s "$KS" ]; then
-    row ANDROID_KEYSTORE_BASE64 INVALID "Not valid base64. Create it with: base64 -w0 expensemonster.keystore"
+  if ! why=$(bash "$(dirname "$0")/decode-keystore.sh" "$KS" 2>&1); then
+    row ANDROID_KEYSTORE_BASE64 INVALID "$why Encode the file: Linux base64 -w0 FILE; macOS base64 -i FILE; Windows PowerShell [Convert]::ToBase64String([IO.File]::ReadAllBytes('FILE'))"
   elif ! out=$(keytool -list -v -keystore "$KS" -storepass:env KSP 2>&1); then
     if grep -qi 'password' <<< "$out"; then
       row ANDROID_KEYSTORE_BASE64 OK "Valid keystore"
