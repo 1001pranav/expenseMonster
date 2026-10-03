@@ -89,13 +89,15 @@ else
     row ANDROID_KEYSTORE_BASE64 INVALID "$why Encode the file: Linux base64 -w0 FILE; macOS base64 -i FILE; Windows PowerShell [Convert]::ToBase64String([IO.File]::ReadAllBytes('FILE'))"
   elif ! out=$(keytool -list -v -keystore "$KS" -storepass:env KSP 2>&1); then
     if grep -qi 'password' <<< "$out"; then
-      row ANDROID_KEYSTORE_BASE64 OK "Valid keystore"
+      row ANDROID_KEYSTORE_BASE64 OK "Valid keystore. $why"
       row ANDROID_KEYSTORE_PASSWORD INVALID "Wrong keystore password."
+    elif grep -q 'EOFException' <<< "$out"; then
+      row ANDROID_KEYSTORE_BASE64 INVALID "The keystore ends early: the value was cut off while copying. Copy it again in full. $why"
     else
-      row ANDROID_KEYSTORE_BASE64 INVALID "Decoded file is not a keystore: $(head -1 <<< "$out")"
+      row ANDROID_KEYSTORE_BASE64 INVALID "Decoded file is not a keystore: $(head -1 <<< "$out") $why"
     fi
   else
-    row ANDROID_KEYSTORE_BASE64 OK "Valid keystore"
+    row ANDROID_KEYSTORE_BASE64 OK "Valid keystore. $why"
     row ANDROID_KEYSTORE_PASSWORD OK "Opens the keystore"
     aliases=$(grep -oP '^Alias name: \K.*' <<< "$out" | paste -sd, -)
     if [ -z "$ALIAS" ]; then
