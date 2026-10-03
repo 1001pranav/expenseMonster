@@ -89,23 +89,30 @@ else
     row ANDROID_KEYSTORE_BASE64 INVALID "$why Encode the file: Linux base64 -w0 FILE; macOS base64 -i FILE; Windows PowerShell [Convert]::ToBase64String([IO.File]::ReadAllBytes('FILE'))"
   elif ! out=$(keytool -list -v -keystore "$KS" -storepass:env KSP 2>&1); then
     if grep -qi 'password' <<< "$out"; then
-      row ANDROID_KEYSTORE_BASE64 OK "Valid keystore. $why"
+      row ANDROID_KEYSTORE_BASE64 OK "Valid keystore.${why:+ $why}"
       row ANDROID_KEYSTORE_PASSWORD INVALID "Wrong keystore password."
     elif grep -q 'EOFException' <<< "$out"; then
-      row ANDROID_KEYSTORE_BASE64 INVALID "The keystore ends early: the value was cut off while copying. Copy it again in full. $why"
+      row ANDROID_KEYSTORE_BASE64 INVALID "The keystore ends early: the value was cut off while copying. Copy it again in full.${why:+ $why}"
     else
-      row ANDROID_KEYSTORE_BASE64 INVALID "Decoded file is not a keystore: $(head -1 <<< "$out") $why"
+      row ANDROID_KEYSTORE_BASE64 INVALID "Decoded file is not a keystore: $(head -1 <<< "$out")${why:+ $why}"
     fi
   else
-    row ANDROID_KEYSTORE_BASE64 OK "Valid keystore. $why"
+    row ANDROID_KEYSTORE_BASE64 OK "Valid keystore.${why:+ $why}"
     row ANDROID_KEYSTORE_PASSWORD OK "Opens the keystore"
     aliases=$(grep -oP '^Alias name: \K.*' <<< "$out" | paste -sd, -)
+    alias_note="Found"
+    if [ -z "$ALIAS" ] && [ -n "$aliases" ] && [[ $aliases != *,* ]]; then
+      # Only one key, so there's nothing to choose. The signing step picks this up from GITHUB_ENV.
+      ALIAS=$aliases
+      alias_note="Not set; using the keystore's only key, $ALIAS"
+      [ -n "${GITHUB_ENV:-}" ] && echo "DETECTED_KEY_ALIAS=$ALIAS" >> "$GITHUB_ENV"
+    fi
     if [ -z "$ALIAS" ]; then
-      row ANDROID_KEY_ALIAS INVALID "Not set. This keystore contains: ${aliases:-no keys}. Add that name as secret or variable ANDROID_KEY_ALIAS."
+      row ANDROID_KEY_ALIAS INVALID "Not set, and the keystore has several keys: ${aliases:-none}. Add the one to use as secret or variable ANDROID_KEY_ALIAS."
     elif ! info=$(keytool -list -v -keystore "$KS" -storepass:env KSP -alias "$ALIAS" 2>&1); then
       row ANDROID_KEY_ALIAS INVALID "Alias not in the keystore. This keystore contains: ${aliases:-no keys}"
     else
-      row ANDROID_KEY_ALIAS OK "Found"
+      row ANDROID_KEY_ALIAS OK "$alias_note"
       # certreq needs the private key, so it only succeeds with the right key password.
       if keytool -certreq -keystore "$KS" -storepass:env KSP -alias "$ALIAS" -keypass:env KP > /dev/null 2>&1; then
         if [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then

@@ -115,9 +115,10 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          # The alias isn't secret, so a variable works too. PKCS12 keystores (keytool's default)
-          # use the keystore password for the key, so ANDROID_KEY_PASSWORD is optional.
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS }}
+          # The alias isn't secret, so a variable works too; if neither is set, the check step
+          # picks the keystore's only key. PKCS12 keystores (keytool's default) use the keystore
+          # password for the key, so ANDROID_KEY_PASSWORD is optional.
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS || env.DETECTED_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
