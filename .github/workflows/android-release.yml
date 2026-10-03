@@ -71,6 +71,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # Table of every build setting: present / missing / wrong, never the values (also shown on
+      # the run's Summary page). Fails here, in seconds, if a value is set but wrong.
+      - name: Check build configuration
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash scripts/ci/check-build-env.sh
+
       # v6 defaults to a proprietary cache provider (free-preview only on private repos);
       # "basic" is the MIT one built on actions/cache.
       - uses: gradle/actions/setup-gradle@v6
