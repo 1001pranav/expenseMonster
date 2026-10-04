@@ -85,12 +85,6 @@ jobs:
             ${{ vars.ANDROID_KEY_PASSWORD && 'ANDROID_KEY_PASSWORD' || '' }}
         run: bash scripts/ci/check-build-env.sh
 
-      # v6 defaults to a proprietary cache provider (free-preview only on private repos);
-      # "basic" is the MIT one built on actions/cache.
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-
       - name: Install dependencies
         run: npm ci
 
@@ -102,6 +96,14 @@ jobs:
 
       - name: Generate native project
         run: npx expo prebuild --platform android --no-install --clean
+
+      # After prebuild: the Gradle cache key hashes the build files, and android/ only exists
+      # once prebuild has generated it (the repo itself has no *.gradle files).
+      # v6 defaults to a proprietary cache provider (free-preview only on private repos);
+      # "basic" is the MIT one built on actions/cache.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Build release APK
         working-directory: android
