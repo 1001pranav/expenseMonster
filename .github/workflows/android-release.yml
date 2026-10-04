@@ -20,7 +20,9 @@ concurrency:
 
 jobs:
   apk:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moves to Ubuntu 26 from 2026-10-19 (actions/runner-images#14748).
+    # Bump this deliberately, with a test build, rather than letting the label move under us.
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     # Secrets and variables come from this GitHub environment (repo-level ones still apply).
     environment: DEV
