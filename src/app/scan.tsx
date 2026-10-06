@@ -16,13 +16,17 @@ export default function Scan() {
   const [uri, setUri] = useState<string | null>(params.uri ?? null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [readText, setReadText] = useState('');
+  const [showRead, setShowRead] = useState(false);
 
   const process = useCallback(async (imageUri: string) => {
     setUri(imageUri);
     setPhase('reading');
     setError(null);
+    setShowRead(false);
     try {
       const res = await captureImage(imageUri);
+      setReadText(res.text);
       if (res.status === 'failed') return setPhase('failed');
       if (res.status === 'unreadable') return setPhase('unreadable');
       if (res.status === 'bill') {
@@ -78,6 +82,12 @@ export default function Scan() {
           <Txt variant="bodyStrong">Couldn't find an amount</Txt>
           <Txt tone="muted">Use the payment's success screen (not the chat), uncropped, or add it manually.</Txt>
           <Button title="Add manually" variant="secondary" onPress={() => router.replace('/txn/new')} />
+          {readText ? <Button title={showRead ? 'Hide what was read' : 'Show what was read'} variant="ghost" onPress={() => setShowRead((v) => !v)} /> : null}
+          {showRead ? (
+            <Txt tone="muted" selectable style={{ fontSize: 12 }}>
+              {readText}
+            </Txt>
+          ) : null}
         </Card>
       ) : null}
 
@@ -88,7 +98,7 @@ export default function Scan() {
       ) : null}
 
       {!uri ? (
-        <EmptyState icon="scan-outline" title="Pick a payment screenshot" body="GPay, PhonePe, Paytm, BHIM, bank apps, or a photo of a bill. Tip: in GPay tap Share → ExpenseMonster to skip this step." />
+        <EmptyState icon="scan-outline" title="Pick a payment screenshot" body="GPay, PhonePe, BHIM, Paytm, bank apps, or a photo of a bill. Payments and money received are both read, with who it was paid to or received from. Tip: share the screenshot to ExpenseMonster to skip this step." />
       ) : null}
 
       <Row gap={1}>
