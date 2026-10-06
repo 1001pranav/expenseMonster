@@ -2,12 +2,13 @@ name: Android production build
 
 # Builds the sideloadable production APK. Cloud sync is compiled in from
 # the DEV environment's EXPO_PUBLIC_* values and stays off until the user enables it.
-# Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
+# Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `main` (every merged PR) and
+# `mobile` build an artifact only.
 on:
   push:
     tags: ['v*']
-    # Every push to the app branch also builds (artifact only, no release) as a native-build check.
-    branches: [mobile]
+    # Every push to these branches also builds (artifact only, no release) as a native-build check.
+    branches: [main, mobile]
   workflow_dispatch:
 
 permissions:
