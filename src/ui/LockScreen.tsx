@@ -6,6 +6,7 @@ import { AppState, Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '@/db/store';
+import { usePendingShare } from '@/services/pendingShare';
 import { verifyPin } from '@/services/secure';
 import { markBiometricPrompt } from '@/services/unlock';
 import { eraseEverything } from '@/services/wipe';
@@ -28,6 +29,7 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
   const [busy, setBusy] = useState(false);
 
   const [hint, setHint] = useState<string | null>(null);
+  const shared = usePendingShare((s) => s.pending?.kind === 'image');
   const inFlight = useRef(false);
   const attempt = useRef(0);
   const mounted = useRef(true);
@@ -142,6 +144,11 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
             {name ? `Welcome back, ${name.split(' ')[0]}` : 'Welcome back'}
           </Txt>
           <Txt style={{ color: 'rgba(255,255,255,0.7)' }}>{hasPin ? 'Enter your 6-digit PIN' : 'Unlock to continue'}</Txt>
+          {shared ? (
+            <Txt variant="small" style={{ color: '#FFFFFF', marginTop: 4 }}>
+              Screenshot received — it opens once you unlock
+            </Txt>
+          ) : null}
         </View>
         {hasPin ? (
           <Animated.View style={[{ flexDirection: 'row', gap: 14, marginTop: space(1) }, dotsStyle]} accessibilityLabel={`${pin.length} of 6 digits entered`}>
