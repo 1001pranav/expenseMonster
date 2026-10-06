@@ -111,6 +111,57 @@ describe('payment screenshot OCR parser', () => {
     expect(parsePaymentScreenshot(bare, T)!.amountSure).toBe(false);
   });
 
+  describe('real BHIM screens (Oct 2026 layout)', () => {
+    const SELF = { selfNames: ['Pranav R Nayak N'] };
+    const footer = ['Process details'];
+    const tail = ['Hide details', 'Split this', 'Share', 'UPI Help', 'expense', 'screenshot', 'BHIM', 'POWERED BY', 'UPI'];
+
+    it('paid a merchant from a RuPay credit card', () => {
+      const text = [
+        "BHIM - Bharat's Own Payments App", 'Paid', '₹382.20', 'Banking Name', 'MC DONALDS', 'Transaction ID', 'Date & Time', '195451170670', '4th Oct 26,', '07:54 pm',
+        'To UPI ID', 'Remarks', 'MCDONALDS', 'NO REMARK', '.27312402@hd', 'fcbank', 'Debited account', 'HDFC BANK RUPAY CREDIT', 'CARD', 'XXXXXX06',
+        ...footer, 'Payment initiated by PRANAV R', 'NAYAKN', 'Payment transferred from PRANAV R', "NAYAKN's account", 'Payment received by MC DONALDS', ...tail,
+      ].join('\n');
+      const p = parsePaymentScreenshot(text, T, SELF)!;
+      expect(p).toMatchObject({ app: 'BHIM', status: 'success', direction: 'debit', amount: 38220, payee: 'Mc Donalds', vpa: 'mcdonalds.27312402@hdfcbank', ref: '195451170670', date: '2026-10-04', isCreditCard: true, amountSure: true });
+      expect(p.time).toBe(19 * 60 + 54);
+    });
+
+    it('paid a person on a Paytm handle: still BHIM, still an expense', () => {
+      const text = [
+        "BHIM - Bharat's Own Payments App", 'Paid', '₹10.00', 'Banking Name', 'DEEPAK KUMAR', 'Transaction ID', 'Date & Time', '133715389297', '5th Oct 26,', '01:37 pm',
+        'To UPI ID', 'Remarks', 'paytm', 'NO REMARK', '.s1e8kds@pty', 'Debited account', 'HDFC BANK LTD', 'XXXX1100',
+        ...footer, 'Payment initiated by PRANAV R', 'NAYAK N', 'Payment transferred from PRANAV R', "NAYAK N's account", 'Payment received by DEEPAK KUMAR', ...tail,
+      ].join('\n');
+      const p = parsePaymentScreenshot(text, T, SELF)!;
+      expect(p).toMatchObject({ app: 'BHIM', direction: 'debit', amount: 1000, payee: 'Deepak Kumar', vpa: 'paytm.s1e8kds@pty', ref: '133715389297', date: '2026-10-05', accountLast4: '1100' });
+      expect(p.time).toBe(13 * 60 + 37);
+    });
+
+    it('₹10.00 read as "710.00": flagged, never silently trusted', () => {
+      const text = ["BHIM - Bharat's Own Payments App", 'Paid', '710.00', 'Banking Name', 'DEEPAK KUMAR', 'Transaction ID', 'Date & Time', '133715389297', '5th Oct 26,', '01:37 pm', 'Payment received by DEEPAK KUMAR'].join('\n');
+      const p = parsePaymentScreenshot(text, T, { prominent: ['710.00'] })!;
+      expect(p.direction).toBe('debit');
+      expect(p.amountSure).toBe(false);
+    });
+
+    it('money received: the sender is the payer, not you', () => {
+      const text = [
+        "BHIM - Bharat's Own Payments App", 'Received', '₹50.00', 'Banking Name', 'MAHESH SANGEET', 'Transaction ID', 'Date & Time', '135022938559', '6th Oct 26,', '01:50 pm',
+        'From UPI ID', 'Remarks', '******6241@u', 'NO REMARK', 'pi', 'Credited account', 'FEDERAL BANK', 'XXXX0483',
+        ...footer, 'Payment initiated by MAHESH', 'SANGEET', 'Payment transferred from MAHESH', "SANGEET's account", 'Payment received by PRANAV R', 'NAYAK N', 'Hide details', 'Share', 'screenshot', 'BHIM', 'UPI',
+      ].join('\n');
+      const p = parsePaymentScreenshot(text, T, SELF)!;
+      expect(p).toMatchObject({ app: 'BHIM', direction: 'credit', amount: 5000, payee: 'Mahesh Sangeet', vpa: null, ref: '135022938559', date: '2026-10-06' });
+      expect(p.time).toBe(13 * 60 + 50);
+    });
+
+    it('icon read as a stray character before the banner word', () => {
+      const text = ['BHIM', 'e Received', '₹50.00', 'Banking Name', 'MAHESH SANGEET', 'Payment received by PRANAV R'].join('\n');
+      expect(parsePaymentScreenshot(text, T)!.direction).toBe('credit');
+    });
+  });
+
   it('detects and parses an electricity bill', () => {
     const text = ['BANGALORE ELECTRICITY SUPPLY COMPANY', 'Electricity Bill', 'Consumer No: 1234567890', 'Bill Date: 05-09-2026', 'Units Consumed: 270', 'Amount Payable: Rs. 1,840.00', 'Due Date: 20-09-2026'].join('\n');
     expect(looksLikeBill(text)).toBe(true);

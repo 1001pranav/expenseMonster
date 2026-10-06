@@ -11,12 +11,13 @@ export interface RecognizedText {
  * On-device OCR via Google ML Kit (the bundled model ships inside the APK, so this works offline).
  * Lines are rebuilt top-to-bottom, left-to-right so labels and their values stay adjacent.
  */
-export async function recognizeText(uri: string): Promise<RecognizedText> {
+export async function recognizeText(uri: string, script: 'Latin' | 'Devanagari' = 'Latin'): Promise<RecognizedText> {
   if (!NativeModules.TextRecognition) {
     throw new Error('Text recognition needs a development build (it is not available in Expo Go).');
   }
-  const { default: TextRecognition } = await import('@react-native-ml-kit/text-recognition');
-  const result: TextRecognitionResult = await TextRecognition.recognize(uri);
+  const { default: TextRecognition, TextRecognitionScript } = await import('@react-native-ml-kit/text-recognition');
+  // The Devanagari model is trained on Indian text and reads ₹ where the Latin one often sees a 7.
+  const result: TextRecognitionResult = await TextRecognition.recognize(uri, script === 'Devanagari' ? TextRecognitionScript.DEVANAGARI : TextRecognitionScript.LATIN);
   const lines = result.blocks.flatMap((b) => b.lines);
   if (!lines.every((l) => l.frame)) return { text: result.text, prominent: [] };
   const text = lines

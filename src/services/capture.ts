@@ -196,6 +196,16 @@ export async function captureImage(uri: string): Promise<ImageCapture> {
   const { tables, identity } = getState();
   const self = tables.members.find((m) => m.id === identity.selfMemberId)?.name;
   const parsed = parsePaymentScreenshot(text, today, { prominent, selfNames: self ? [self] : [] });
+  if (parsed && !parsed.amountSure) {
+    // The Latin model often reads ₹ as a 7 ("₹10.00" → "710.00"); ask the Devanagari model for the amount.
+    const second = await recognizeText(uri, 'Devanagari')
+      .then((r) => parsePaymentScreenshot(r.text, today, { prominent: r.prominent }))
+      .catch(() => null);
+    if (second?.amountSure) {
+      parsed.amount = second.amount;
+      parsed.amountSure = true;
+    }
+  }
   if (!parsed) return { summary, transactionId: null, duplicateOf: null, status: 'unreadable', text };
   if (parsed.status === 'failed') return { summary, transactionId: null, duplicateOf: null, status: 'failed', text };
   const attachment = await saveAttachment(uri);
