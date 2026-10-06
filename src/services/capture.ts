@@ -2,9 +2,10 @@ import { matchBiller, viewBill } from '@/domain/bills';
 import { statementDateFor } from '@/domain/creditCard';
 import { addDays, addMonths, toISO, todayYMD, type YMD } from '@/domain/dates';
 import { textHash } from '@/domain/ids';
+import type { Paise } from '@/domain/money';
 import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domain/parsers/common';
 import { applyFormat } from '@/domain/parsers/custom';
-import { looksLikeBill, parseBillDocument, parsePaymentScreenshot } from '@/domain/parsers/ocr';
+import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
 import { suggestCategory } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
@@ -179,43 +180,66 @@ export interface ImageCapture {
   text: string;
 }
 
-/** OCR a payment screenshot or bill photo and queue it for review. */
-export async function captureImage(uri: string): Promise<ImageCapture> {
-  const summary = emptySummary();
+/** What OCR found in a screenshot, before anything is saved. */
+export type ScreenshotRead =
+  | { kind: 'bill'; uri: string; text: string; bill: ParsedBill | null }
+  | { kind: 'payment'; uri: string; text: string; payment: ScreenshotAnalysis };
+
+/** OCR a payment screenshot or bill photo. Nothing is saved, so the user can confirm the amount first. */
+export async function readScreenshot(uri: string): Promise<ScreenshotRead> {
   const { text, prominent } = await recognizeText(uri);
   const today = todayYMD();
-  const hash = textHash(text);
-
-  if (looksLikeBill(text)) {
-    const bill = parseBillDocument(text, today);
-    if (!bill) return { summary, transactionId: null, duplicateOf: null, status: 'unreadable', text };
-    await saveDraftBill(bill, text, hash, today, await saveAttachment(uri), summary);
-    return { summary, transactionId: null, duplicateOf: null, status: 'bill', text };
-  }
+  if (looksLikeBill(text)) return { kind: 'bill', uri, text, bill: parseBillDocument(text, today) };
 
   const { tables, identity } = getState();
   const self = tables.members.find((m) => m.id === identity.selfMemberId)?.name;
-  const parsed = parsePaymentScreenshot(text, today, { prominent, selfNames: self ? [self] : [] });
-  if (parsed && !parsed.amountSure) {
+  const payment = analyzePaymentScreenshot(text, today, { prominent, selfNames: self ? [self] : [] });
+  if (!payment.amountSure) {
     // The Latin model often reads ₹ as a 7 ("₹10.00" → "710.00"); ask the Devanagari model for the amount.
     const second = await recognizeText(uri, 'Devanagari')
-      .then((r) => parsePaymentScreenshot(r.text, today, { prominent: r.prominent }))
+      .then((r) => analyzePaymentScreenshot(r.text, today, { prominent: r.prominent }))
       .catch(() => null);
-    if (second?.amountSure) {
-      parsed.amount = second.amount;
-      parsed.amountSure = true;
+    if (second?.amount && second.amountSure) {
+      payment.amount = second.amount;
+      payment.amountSure = true;
     }
   }
-  if (!parsed) return { summary, transactionId: null, duplicateOf: null, status: 'unreadable', text };
-  if (parsed.status === 'failed') return { summary, transactionId: null, duplicateOf: null, status: 'failed', text };
-  const attachment = await saveAttachment(uri);
-  const draft = toDraft(parsed, 'ocr', hash, text, attachment);
-  const extra = [parsed.status === 'pending' ? 'payment-pending' : null, parsed.amountSure ? null : 'amount-unsure'];
+  return { kind: 'payment', uri, text, payment };
+}
+
+/** Save what readScreenshot found; `amount` is the amount the user typed or confirmed. */
+export async function saveScreenshot(read: ScreenshotRead, confirmed?: { amount: Paise }): Promise<ImageCapture> {
+  const summary = emptySummary();
+  const { text } = read;
+  const hash = textHash(text);
+  const none = { summary, transactionId: null, duplicateOf: null, text };
+
+  if (read.kind === 'bill') {
+    if (!read.bill) return { ...none, status: 'unreadable' };
+    await saveDraftBill(read.bill, text, hash, todayYMD(), await saveAttachment(read.uri), summary);
+    return { ...none, status: 'bill' };
+  }
+
+  const p = read.payment;
+  const amount = confirmed?.amount ?? p.amount;
+  if (!amount) return { ...none, status: 'unreadable' };
+  if (p.status === 'failed') return { ...none, status: 'failed' };
+  const sure = Boolean(confirmed) || p.amountSure;
+  const parsed: ScreenshotPayment = { ...p, amount, amountSure: sure };
+  const draft = toDraft(parsed, 'ocr', hash, text, await saveAttachment(read.uri));
+  const extra = [p.status === 'pending' ? 'payment-pending' : null, sure ? null : 'amount-unsure', confirmed ? 'amount-confirmed' : null];
   draft.flags = [draft.flags, ...extra].filter(Boolean).join(',') || null;
-  // Never let "approve all confident" take an amount whose ₹ sign wasn't read.
-  if (!parsed.amountSure) draft.confidence = Math.min(draft.confidence ?? 0, 0.6);
+  // Never let "approve all confident" take an amount whose ₹ sign wasn't read; one the user typed
+  // or checked against the screenshot is as good as a clearly read one.
+  if (!sure) draft.confidence = Math.min(draft.confidence ?? 0, 0.6);
+  else if (confirmed) draft.confidence = Math.min(0.95, (draft.confidence ?? 0) + 0.2);
   const { row, duplicate, duplicateOf } = await addCapture(draft);
   if (row) summary.added++;
   else if (duplicate) summary.duplicates++;
-  return { summary, transactionId: row?.id ?? null, duplicateOf: row ? null : duplicateOf, status: parsed.status, text };
+  return { summary, transactionId: row?.id ?? null, duplicateOf: row ? null : duplicateOf, status: p.status, text };
+}
+
+/** OCR a payment screenshot or bill photo and queue it for review, without asking anything. */
+export async function captureImage(uri: string): Promise<ImageCapture> {
+  return saveScreenshot(await readScreenshot(uri));
 }

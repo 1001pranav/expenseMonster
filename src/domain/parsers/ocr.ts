@@ -284,12 +284,21 @@ function isSelf(name: string | null, selfNames: string[]): boolean {
   });
 }
 
+export type ScreenshotPayment = ParsedTxn & { status: OcrStatus; amountSure: boolean };
+/** Everything read from a payment screenshot; the amount may be missing. */
+export type ScreenshotAnalysis = Omit<ScreenshotPayment, 'amount'> & { amount: number | null };
+
 /** Parse the OCR text of a UPI / bank payment screenshot (Google Pay, PhonePe, BHIM, Paytm, bank apps). */
-export function parsePaymentScreenshot(
-  text: string,
-  today: YMD,
-  hints: ScreenshotHints = {},
-): (ParsedTxn & { status: OcrStatus; amountSure: boolean }) | null {
+export function parsePaymentScreenshot(text: string, today: YMD, hints: ScreenshotHints = {}): ScreenshotPayment | null {
+  const a = analyzePaymentScreenshot(text, today, hints);
+  return a.amount ? { ...a, amount: a.amount } : null;
+}
+
+/**
+ * Like parsePaymentScreenshot, but keeps the payee, date and reference when no amount was found,
+ * so the user can be asked for just the amount.
+ */
+export function analyzePaymentScreenshot(text: string, today: YMD, hints: ScreenshotHints = {}): ScreenshotAnalysis {
   const lines = mergeWrappedVpas(text.split(/\n+/).map((l) => l.trim()).filter(Boolean));
   const flat = lines.join(' ');
   const status = detectStatus(flat);
@@ -297,7 +306,6 @@ export function parsePaymentScreenshot(
 
   const hero = findHeroAmount(lines, hints.prominent ?? []);
   const amount = hero?.amount ?? findAmounts(flat)[0]?.amount ?? null;
-  if (!amount) return null;
 
   let isCredit = detectCredit(lines, flat);
   const selfNames = (hints.selfNames ?? []).filter((n) => n.trim().length >= 2);
