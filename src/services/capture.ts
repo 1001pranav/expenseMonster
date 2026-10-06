@@ -7,7 +7,7 @@ import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domai
 import { applyFormat } from '@/domain/parsers/custom';
 import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
-import { suggestCategory } from '@/domain/transactions';
+import { categoryHistory, suggestCategory } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
 import { addCapture, type TxnDraft } from '@/data/actions';
 import { insert } from '@/db/repo';
@@ -62,7 +62,10 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     }
   }
 
-  const categoryId = type === 'transfer' ? null : suggestCategory(`${p.payee ?? ''} ${p.vpa ?? ''}`, tables.rules) ?? (p.isRefund ? 'cat_cashback' : null);
+  // What this payee was filed under before (across name spellings) wins over keyword rules; when
+  // they were filed two ways the most used is picked and the approval screen offers the other.
+  const past = type === 'transfer' ? [] : categoryHistory(p.payee, p.vpa, type, tables.transactions);
+  const categoryId = type === 'transfer' ? null : past[0]?.categoryId ?? suggestCategory(`${p.payee ?? ''} ${p.vpa ?? ''}`, tables.rules) ?? (p.isRefund ? 'cat_cashback' : null);
 
   return {
     type,

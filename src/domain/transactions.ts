@@ -84,6 +84,51 @@ export function suggestCategory(text: string, rules: CategoryRule[]): string | n
   return hit?.categoryId ?? null;
 }
 
+/**
+ * Keys that identify the same payee across name spellings and UPI IDs: "MC DONALDS", "McDonald's"
+ * and "mcdonalds.27312402@hdfcbank" all share "mcdonalds".
+ */
+export function payeeKeys(payee: string | null, vpa: string | null): string[] {
+  const keys = new Set<string>();
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+  const name = letters(payee ?? '');
+  if (name.length >= 4) keys.add(`n:${name}`);
+  if (vpa) {
+    const v = vpa.toLowerCase();
+    keys.add(`v:${v}`);
+    // The readable part of a merchant VPA ("mcdonalds" in "mcdonalds.27312402@hdfcbank"), not a phone number.
+    const local = letters(v.split('@')[0].split(/[.\-_]/)[0]);
+    if (local.length >= 4 && !['paytm', 'phonepe', 'gpay', 'upi', 'bhim'].includes(local)) keys.add(`n:${local}`);
+  }
+  return [...keys];
+}
+
+export interface CategoryChoice {
+  categoryId: string;
+  /** Approved transactions with this payee filed under this category. */
+  count: number;
+  lastAt: string;
+}
+
+/**
+ * The categories this payee was filed under before, most used first (most recent on a tie). Two or
+ * more entries means the user has filed them differently, so both are offered.
+ */
+export function categoryHistory(payee: string | null, vpa: string | null, type: Transaction['type'], txns: Transaction[], excludeId?: string): CategoryChoice[] {
+  const keys = new Set(payeeKeys(payee, vpa));
+  if (!keys.size) return [];
+  const byCategory = new Map<string, CategoryChoice>();
+  for (const t of txns) {
+    if (t.id === excludeId || t.deletedAt || t.status !== 'confirmed' || t.type !== type || !t.categoryId) continue;
+    if (!payeeKeys(t.payee, t.vpa).some((k) => keys.has(k))) continue;
+    const c = byCategory.get(t.categoryId) ?? { categoryId: t.categoryId, count: 0, lastAt: '' };
+    c.count++;
+    if (t.occurredAt > c.lastAt) c.lastAt = t.occurredAt;
+    byCategory.set(t.categoryId, c);
+  }
+  return [...byCategory.values()].sort((a, b) => b.count - a.count || b.lastAt.localeCompare(a.lastAt));
+}
+
 /** Key used to learn a rule from a payee/VPA: "swiggy" from "Swiggy Ltd", "zomato" from "zomato@hdfcbank". */
 export function ruleKey(payee: string | null, vpa: string | null): string | null {
   const source = (vpa?.split('@')[0] || payee || '').toLowerCase();
