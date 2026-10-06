@@ -16,6 +16,21 @@ export async function saveAttachment(sourceUri: string): Promise<string> {
   return dest.uri;
 }
 
+/**
+ * Copy an incoming image to its own cache file. The share library names its copy after the sender's
+ * file name, so a second screenshot from the same app overwrites the first at the same path.
+ */
+export async function stageImage(sourceUri: string): Promise<string> {
+  try {
+    const src = new File(sourceUri);
+    const dest = new File(Paths.cache, `scan-${uuidv7()}${(src.extension || '.jpg').toLowerCase()}`);
+    await src.copy(dest);
+    return dest.uri;
+  } catch {
+    return sourceUri;
+  }
+}
+
 export function deleteAttachment(uri: string | null | undefined) {
   if (!uri) return;
   try {

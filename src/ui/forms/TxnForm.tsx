@@ -13,7 +13,7 @@ import { useMembers, useSelfId, useSortedCategories, useTable, useToday } from '
 import { Button, Card, Chip, Pill, Row, Txt, type IconName } from '../components/core';
 import { Keypad, toast } from '../components/feedback';
 import { ChipSelect, DateField, Field, Segmented, SwitchRow, TextField } from '../components/forms';
-import { Screen } from '../components/Screen';
+import { Screen, goBack } from '../components/Screen';
 import { fonts, radius, space, useTheme } from '../theme';
 
 const METHODS: { value: PayMethod; label: string; icon: IconName }[] = [
@@ -31,7 +31,7 @@ function amountText(paise: Paise | null) {
   return p ? `${r}.${String(p).padStart(2, '0').replace(/0$/, '')}` : String(r);
 }
 
-export function TxnForm({ existing, initialType = 'expense' }: { existing?: Transaction; initialType?: TxnType }) {
+export function TxnForm({ existing, initialType = 'expense', ocrText }: { existing?: Transaction; initialType?: TxnType; /** What OCR read, right after a scan. */ ocrText?: string }) {
   const { colors } = useTheme();
   const today = useToday();
   const accounts = useTable('accounts');
@@ -64,6 +64,7 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
   const [autoCat, setAutoCat] = useState(false);
   const [more, setMore] = useState(Boolean(existing && (existing.splitWith || existing.note)));
   const [saving, setSaving] = useState(false);
+  const [showOcr, setShowOcr] = useState(false);
 
   const catKind = type === 'income' ? 'income' : 'expense';
   const categories = useSortedCategories(catKind);
@@ -160,7 +161,7 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
         await saveTransaction(draft);
         toast(`${type === 'income' ? 'Income' : type === 'transfer' ? 'Transfer' : 'Expense'} of ${formatINR(amount)} saved`, { tone: 'success' });
       }
-      router.back();
+      goBack();
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });
     } finally {
@@ -173,7 +174,7 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
     if (pending) await rejectCapture(existing.id);
     else await deleteTransaction(existing.id);
     toast(pending ? 'Rejected' : 'Deleted', { actionLabel: pending ? undefined : 'Undo', onAction: pending ? undefined : () => restore('transactions', existing.id) });
-    router.back();
+    goBack();
   };
 
   const color = type === 'income' ? colors.income : type === 'expense' ? colors.expense : colors.info;
@@ -197,7 +198,13 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
             {existing?.confidence != null ? <Pill label={`${Math.round(existing.confidence * 100)}% sure`} tone={existing.confidence < 0.7 ? 'warn' : 'income'} /> : null}
             {flags.some((f) => f.startsWith('duplicate')) ? <Pill label="Possible duplicate" tone="expense" /> : null}
             {flags.includes('payment-pending') ? <Pill label="Payment was pending" tone="warn" /> : null}
+            {flags.includes('amount-unsure') ? <Pill label="Check the amount" tone="warn" /> : null}
           </Row>
+          {flags.includes('amount-unsure') ? (
+            <Txt variant="small" tone="warn">
+              The ₹ sign wasn't read clearly, so a digit may be wrong. Compare with the screenshot below.
+            </Txt>
+          ) : null}
           {existing?.sourceRef ? (
             <Txt variant="small" tone="muted">
               UPI ref {existing.sourceRef}
@@ -206,6 +213,18 @@ export function TxnForm({ existing, initialType = 'expense' }: { existing?: Tran
           {cardHint ? (
             <Txt variant="small" tone="warn">
               Card ending {cardHint} isn't saved. Add it under Dues → Cards to track its bill.
+            </Txt>
+          ) : null}
+          {ocrText ? (
+            <Pressable onPress={() => setShowOcr((v) => !v)} accessibilityRole="button">
+              <Txt variant="small" tone="primary">
+                {showOcr ? 'Hide what was read' : 'Show what was read'}
+              </Txt>
+            </Pressable>
+          ) : null}
+          {showOcr && ocrText ? (
+            <Txt tone="muted" selectable style={{ fontSize: 12 }}>
+              {ocrText}
             </Txt>
           ) : null}
           {existing?.attachment ? <Image source={{ uri: existing.attachment }} style={{ width: '100%', height: 220, borderRadius: radius.md }} resizeMode="contain" accessibilityLabel="Captured screenshot" /> : null}

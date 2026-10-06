@@ -21,8 +21,8 @@ const APPS: [RegExp, PaymentApp][] = [
   [/google\s*pay|\bg\s?pay\b|google\s+transaction\s+id|powered by upi.*google/i, 'Google Pay'],
   // PhonePe transaction IDs are "T" + ~21 digits.
   [/phonepe|phone\s?pe|\bT\d{18,24}\b/i, 'PhonePe'],
+  [/\bbhim\b|bharat'?s own payments app/i, 'BHIM'],
   [/paytm/i, 'Paytm'],
-  [/\bbhim\b/i, 'BHIM'],
   [/amazon\s*pay/i, 'Amazon Pay'],
   [/\bcred\b/i, 'CRED'],
 ];
@@ -49,16 +49,18 @@ const BARE_AMOUNT = /^(?:\d{1,3}(?:,\d{2})*,\d{3}|\d{1,7})(?:\.\d{1,2})?$/;
 /** A line that belongs to the payment itself (status-bar noise like "10:42", "85", "4G" comes before it). */
 const PAYMENT_WORDS = /\b(?:to|from|paid|received|sent|success(?:ful)?|completed|transaction|payment|credited|debited|pending|failed)\b/i;
 
-function amountLine(line: string): { amount: number; exact: boolean } | null {
+type Hero = { amount: number; exact: boolean; /** A ₹ (or a misread of it) was in front of the digits. */ symbol: boolean };
+
+function amountLine(line: string): Hero | null {
   const l = line.trim();
   const m = l.match(MONEY_LINE);
   if (m) {
     const a = parseAmount(m[1]);
-    return a ? { amount: a, exact: true } : null;
+    return a ? { amount: a, exact: true, symbol: true } : null;
   }
   if (BARE_AMOUNT.test(l) && !/^(?:19|20)\d{2}$/.test(l)) {
     const a = parseAmount(l);
-    return a ? { amount: a, exact: false } : null;
+    return a ? { amount: a, exact: false, symbol: false } : null;
   }
   return null;
 }
@@ -67,7 +69,7 @@ function amountLine(line: string): { amount: number; exact: boolean } | null {
  * The amount is the biggest text on GPay, PhonePe and BHIM, so the OCR's largest lines are tried first.
  * Then any "₹1,250" line, then a bare number (₹ dropped by OCR) below the first payment-related line.
  */
-function findHeroAmount(lines: string[], prominent: string[]): { amount: number; exact: boolean } | null {
+function findHeroAmount(lines: string[], prominent: string[]): Hero | null {
   const big = prominent.map(amountLine).filter((a) => a !== null);
   const bigExact = big.find((a) => a.exact);
   if (bigExact) return bigExact;
@@ -76,7 +78,7 @@ function findHeroAmount(lines: string[], prominent: string[]): { amount: number;
     if (a?.exact) return a;
   }
   // A bare number in the largest type is the amount with the ₹ lost.
-  if (big[0]) return { amount: big[0].amount, exact: true };
+  if (big[0]) return { ...big[0], exact: true };
   const start = lines.findIndex((l) => PAYMENT_WORDS.test(l));
   if (start < 0) return null;
   for (const line of lines.slice(start, start + 12)) {
@@ -98,34 +100,42 @@ function labelled(lines: string[], label: RegExp): string | null {
   return null;
 }
 
-// "Paid to" / "To" (GPay) / "Sent to" … and "Received from" / "From" (GPay, BHIM) …
+// "Paid to" / "To" (GPay) / "Sent to" … and "Received from" / "From" (GPay) …
 const PAID_HEAD = /^(?:paid\s+(?:successfully\s+)?to|sent\s+(?:successfully\s+)?to|payment\s+(?:sent\s+)?to|transferred\s+to|you\s+paid)\b:?/i;
-const RECEIVED_HEAD = /^(?:received\s+(?:successfully\s+)?from|money\s+received(?:\s+from)?|payment\s+received(?:\s+from)?|you\s+received|sent\s+by|paid\s+by)\b:?/i;
-const PAYEE_LABELS = [PAID_HEAD, /^to\b:?/i, /^banking\s+name\b:?/i, /\bpaid\s+to\b:?/i];
-const PAYER_LABELS = [RECEIVED_HEAD, /^from\b:?/i, /\breceived\s+from\b:?/i];
+// Not "Payment received by X": BHIM ends every *payment* with that line, naming the payee.
+const RECEIVED_HEAD = /^(?:received\s+(?:successfully\s+)?from|money\s+received(?:\s+from)?|payment\s+received(?:\s+from)?(?!\s+by)|you\s+received|sent\s+by|paid\s+by)\b:?/i;
+/** BHIM's banner: the word "Paid" or "Received" alone on a line (OCR may keep a stray icon character). */
+const BANNER = /^(?:\S{1,2}\s+)?(paid|received)$/i;
+// The bank-verified "Banking Name" is the most reliable name on GPay and BHIM, either direction.
+const PAYEE_LABELS = [/^banking\s+name\b:?/i, PAID_HEAD, /^to\b:?/i, /^payment\s+received\s+by\b:?/i, /\bpaid\s+to\b:?/i];
+const PAYER_LABELS = [/^banking\s+name\b:?/i, RECEIVED_HEAD, /^from\b:?/i, /^payment\s+initiated\s+by\b:?/i, /\breceived\s+from\b:?/i];
 /** The user's own side of the payment: their account on a debit, the receiving account on a credit. */
-const SELF_ON_DEBIT = /^(?:from\b|debited\s+from)/i;
-const SELF_ON_CREDIT = /^(?:to\b|credited\s+to)/i;
+const SELF_ON_DEBIT = /^(?:from\b|debited\s+(?:from|account))/i;
+const SELF_ON_CREDIT = /^(?:to\b|credited\s+(?:to|account))/i;
 
-/** Credit when the screen leads with "Received from" / "From …"; debit when it leads with "Paid to" / "To …". */
+/**
+ * Expenses are the common case, so a screen is a credit only on real evidence: a "Received from" /
+ * "Money received" heading, "credited to" your account, or a GPay-style "From X" heading with no
+ * sign of money going out.
+ */
 function detectCredit(lines: string[], flat: string): boolean {
+  const banner = lines.slice(0, 8).map((l) => l.match(BANNER)?.[1]).find(Boolean);
+  if (banner) return banner.toLowerCase() === 'received';
   for (const l of lines) {
     if (PAID_HEAD.test(l)) return false;
     if (RECEIVED_HEAD.test(l)) return true;
   }
-  const debitHint = /\b(?:debited\s+from|paid\s+successfully)\b/i.test(flat);
-  const creditHint = /\b(?:credited\s+to|received\s+successfully|credited)\b/i.test(flat);
+  const debitHint = /\b(?:debited|paid|sent|you\s+paid|payment\s+to|payment\s+received\s+by)\b/i.test(flat);
+  const creditHint = /\b(?:credited\s+(?:to|account)|received\s+successfully|money\s+received|you\s+received)\b/i.test(flat);
   if (debitHint !== creditHint) return creditHint;
-  for (const l of lines) {
-    if (/^to\b/i.test(l)) return false;
-    if (/^from\b/i.test(l)) return true;
-  }
-  return false;
+  if (debitHint) return false;
+  const first = lines.find((l) => /^(?:to|from)\b/i.test(l));
+  return Boolean(first && /^from\b/i.test(first));
 }
 
 const PHONE_RE = /(?:\+?91[\s-]?)?\b[6-9]\d{4}[\s-]?\d{5}\b/;
 const NOT_A_NAME =
-  /^(?:completed|successful(?:ly)?|success|pending|failed|transaction|transfer\s+details|payment|upi|details|view|share|split|done|paid|received|debited|credited|banking\s+name|upi\s+id|google\s+pay|phonepe|bhim)\b/i;
+  /^(?:completed|successful(?:ly)?|success|pending|failed|transaction|transfer\s+details|payment|upi|details|view|share|split|done|paid|received|debited|credited|banking\s+name|upi\s+id|google\s+pay|phonepe|bhim|remarks?|no\s+remark|date|process\s+details|hide\s+details)\b/i;
 
 /** A person / merchant name from an OCR line, without VPAs, amounts, masked accounts or "(HDFC Bank)". */
 function asName(raw: string | null | undefined): string | null {
@@ -133,7 +143,7 @@ function asName(raw: string | null | undefined): string | null {
   const s = raw
     .replace(VPA_RE, ' ')
     .replace(/(?:google\s*pay|phonepe|bhim)\s*[•·.-]?/gi, ' ')
-    .replace(/^(?:banking\s+name|upi\s+id|name)\s*[:\-]?/i, ' ')
+    .replace(/^\s*(?:banking\s+name|upi\s+id|name|by)\s*[:\-]?/i, ' ')
     .replace(/\([^)]*\)/g, ' ')
     .replace(/(?:₹|rs\.?|inr)\s*[\d,]+(?:\.\d{1,2})?/gi, ' ')
     .replace(/\b[xX*•]{2,}\s?\d{2,6}\b/g, ' ')
@@ -167,10 +177,73 @@ function findPartyHandle(lines: string[], labels: RegExp[], self: RegExp, re: Re
   lines.forEach((l, i) => {
     const into = isParty(l) ? near : self.test(l) ? own : null;
     if (!into) return;
-    for (let j = i; j < Math.min(lines.length, i + 4) && (j === i || !(isParty(lines[j]) || self.test(lines[j]))); j++) into.add(j);
+    for (let j = i; j < Math.min(lines.length, i + 5) && (j === i || !(isParty(lines[j]) || self.test(lines[j]))); j++) into.add(j);
   });
-  const hits = lines.map((l, i) => ({ i, m: l.match(re)?.[0] })).filter((h) => h.m && !own.has(h.i));
+  const hits = lines
+    .map((l, i) => {
+      const m = l.match(re);
+      // "******6241@upi" is masked: its visible tail is not a usable UPI ID.
+      const masked = m && /[*xX•]$/.test(l.slice(0, m.index ?? 0));
+      return { i, m: masked ? undefined : m?.[0] };
+    })
+    .filter((h) => h.m && !own.has(h.i));
   return (hits.find((h) => near.has(h.i)) ?? hits[0])?.m ?? null;
+}
+
+const PSP_HANDLES = new Set(
+  'upi ybl ibl axl okaxis okhdfcbank okicici oksbi paytm pty ptyes ptaxis pthdfc ptsbi hdfcbank icici sbi axisbank apl yapl ikwik freecharge kotak idfcbank fbl federal aubank barodampay cnrb pnb unionbank indus rbl yesbank waicici wahdfcbank waaxis wasbi superyes jupiteraxis naviaxis'.split(' '),
+);
+
+/**
+ * Narrow columns wrap long UPI IDs: BHIM prints "MCDONALDS" / ".27312402@hd" / "fcbank", with the
+ * next column's "NO REMARK" read in between. Glue the pieces back into one line.
+ */
+function mergeWrappedVpas(input: string[]): string[] {
+  const lines = [...input];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^([a-z0-9.\-_*]*)@([a-z0-9]*)$/i);
+    if (!m) continue;
+    let [, local, domain] = m;
+    const used: number[] = [];
+    if (/^[.\-_]/.test(local) || !local) {
+      for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+        if (/\s/.test(lines[j])) continue;
+        if (/^[a-z0-9.\-_]+$/i.test(lines[j])) {
+          local = lines[j] + local;
+          used.push(j);
+        }
+        break;
+      }
+    }
+    for (let j = i + 1; j < Math.min(lines.length, i + 3) && !PSP_HANDLES.has(domain.toLowerCase()); j++) {
+      if (/\s/.test(lines[j])) continue;
+      if (/^[a-z]{1,12}$/i.test(lines[j])) {
+        domain += lines[j];
+        used.push(j);
+      }
+      break;
+    }
+    if (!used.length) continue;
+    lines[i] = `${local}@${domain}`;
+    for (const j of used) lines[j] = '';
+  }
+  return lines.filter(Boolean);
+}
+
+/** A reference written after its label or on one of the next lines (BHIM puts "Date & Time" in between). */
+function labelledRef(lines: string[], label: RegExp): string | null {
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(label);
+    if (!m) continue;
+    const rest = lines[i].slice((m.index ?? 0) + m[0].length);
+    for (const candidate of [rest, ...lines.slice(i + 1, i + 4)]) {
+      const tokens = candidate.match(/\b[A-Z0-9]{9,30}\b/gi) ?? [];
+      // A word like "Completed" is not a reference: a fake ref made every later screenshot a "duplicate".
+      const ref = tokens.find((t) => /^\d{12}$/.test(t)) ?? tokens.find((t) => (t.match(/\d/g)?.length ?? 0) >= 6);
+      if (ref) return ref;
+    }
+  }
+  return null;
 }
 
 /** Prefer the line holding a year or a clock time, so stray words ("85 Paid") can't be read as a date. */
@@ -195,11 +268,29 @@ function findScreenTime(lines: string[], dateLine: string | null): number | null
 export interface ScreenshotHints {
   /** OCR lines set in the largest type, biggest first. */
   prominent?: string[];
+  /** The user's own name(s): seen as the other party, the direction must be the other way round. */
+  selfNames?: string[];
+}
+
+const nameKey = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+/** "PRANAV N" matches "Pranav Nair": same first word, and the rest agree as far as both go. */
+function isSelf(name: string | null, selfNames: string[]): boolean {
+  if (!name) return false;
+  const words = name.toLowerCase().split(/\s+/).map(nameKey).filter(Boolean);
+  return selfNames.some((self) => {
+    const own = self.toLowerCase().split(/\s+/).map(nameKey).filter(Boolean);
+    if (!own.length || !words.length || own[0] !== words[0]) return false;
+    return words.slice(1).every((w, i) => !own[i + 1] || own[i + 1].startsWith(w) || w.startsWith(own[i + 1]));
+  });
 }
 
 /** Parse the OCR text of a UPI / bank payment screenshot (Google Pay, PhonePe, BHIM, Paytm, bank apps). */
-export function parsePaymentScreenshot(text: string, today: YMD, hints: ScreenshotHints = {}): (ParsedTxn & { status: OcrStatus }) | null {
-  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+export function parsePaymentScreenshot(
+  text: string,
+  today: YMD,
+  hints: ScreenshotHints = {},
+): (ParsedTxn & { status: OcrStatus; amountSure: boolean }) | null {
+  const lines = mergeWrappedVpas(text.split(/\n+/).map((l) => l.trim()).filter(Boolean));
   const flat = lines.join(' ');
   const status = detectStatus(flat);
   const app = detectApp(flat);
@@ -208,13 +299,18 @@ export function parsePaymentScreenshot(text: string, today: YMD, hints: Screensh
   const amount = hero?.amount ?? findAmounts(flat)[0]?.amount ?? null;
   if (!amount) return null;
 
-  const isCredit = detectCredit(lines, flat);
-  const refText =
-    labelled(lines, /upi\s*(?:transaction|txn|ref(?:erence)?)\.?\s*(?:id|no\.?|number)?/i) ??
-    labelled(lines, /\b(?:utr|rrn)\b(?:\s*no\.?)?/i) ??
-    labelled(lines, /transaction\s*id/i);
-  // The 12-digit UTR is what bank SMS quote too, so it is the best duplicate key.
-  const ref = refText?.match(/\b\d{12}\b/)?.[0] ?? refText?.match(/[A-Z0-9]{9,30}/i)?.[0] ?? findRef(flat);
+  let isCredit = detectCredit(lines, flat);
+  const selfNames = (hints.selfNames ?? []).filter((n) => n.trim().length >= 2);
+  // The user's own name on the "other party" side means the direction was read backwards.
+  if (selfNames.length && isSelf(findParty(lines, isCredit ? PAYER_LABELS : PAYEE_LABELS), selfNames)) {
+    const flipped = findParty(lines, isCredit ? PAYEE_LABELS : PAYER_LABELS);
+    if (flipped && !isSelf(flipped, selfNames)) isCredit = !isCredit;
+  }
+  const ref =
+    labelledRef(lines, /upi\s*(?:transaction|txn|ref(?:erence)?)\.?\s*(?:id|no\.?|number)?/i) ??
+    labelledRef(lines, /\b(?:utr|rrn)\b(?:\s*no\.?)?/i) ??
+    labelledRef(lines, /transaction\s*id/i) ??
+    findRef(flat);
 
   const labels = isCredit ? PAYER_LABELS : PAYEE_LABELS;
   const self = isCredit ? SELF_ON_CREDIT : SELF_ON_DEBIT;
@@ -236,6 +332,8 @@ export function parsePaymentScreenshot(text: string, today: YMD, hints: Screensh
   return {
     kind: 'transaction',
     status,
+    // No ₹ sign was read next to the amount, so a misread digit (₹ → 7 / 2) can't be ruled out.
+    amountSure: Boolean(hero?.symbol),
     direction: isCredit ? 'credit' : 'debit',
     amount,
     date: when?.date ?? today,

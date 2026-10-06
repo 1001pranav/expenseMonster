@@ -14,8 +14,18 @@ export function getDb(): SQLite.SQLiteDatabase {
  * Opens the SQLCipher-encrypted database. `PRAGMA key` must be the first statement;
  * the key lives only in the Android Keystore / iOS Keychain.
  */
-export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (db) return db;
+let opening: Promise<SQLite.SQLiteDatabase> | null = null;
+
+/** Concurrent callers (the app re-mounting while coming back from a share) share one open. */
+export function openDatabase(): Promise<SQLite.SQLiteDatabase> {
+  if (db) return Promise.resolve(db);
+  opening ??= openOnce().finally(() => {
+    opening = null;
+  });
+  return opening;
+}
+
+async function openOnce(): Promise<SQLite.SQLiteDatabase> {
   const key = await getDatabaseKey();
   const conn = await SQLite.openDatabaseAsync(DB_NAME);
   await conn.execAsync(`PRAGMA key = "x'${key}'";`);
