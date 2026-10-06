@@ -173,30 +173,32 @@ export interface ImageCapture {
   summary: CaptureSummary;
   transactionId: string | null;
   status: 'success' | 'failed' | 'pending' | 'unknown' | 'bill' | 'unreadable';
+  /** What OCR read, shown when nothing usable was found so the user can see why. */
+  text: string;
 }
 
 /** OCR a payment screenshot or bill photo and queue it for review. */
 export async function captureImage(uri: string): Promise<ImageCapture> {
   const summary = emptySummary();
-  const text = await recognizeText(uri);
+  const { text, prominent } = await recognizeText(uri);
   const today = todayYMD();
   const hash = textHash(text);
 
   if (looksLikeBill(text)) {
     const bill = parseBillDocument(text, today);
-    if (!bill) return { summary, transactionId: null, status: 'unreadable' };
+    if (!bill) return { summary, transactionId: null, status: 'unreadable', text };
     await saveDraftBill(bill, text, hash, today, await saveAttachment(uri), summary);
-    return { summary, transactionId: null, status: 'bill' };
+    return { summary, transactionId: null, status: 'bill', text };
   }
 
-  const parsed = parsePaymentScreenshot(text, today);
-  if (!parsed) return { summary, transactionId: null, status: 'unreadable' };
-  if (parsed.status === 'failed') return { summary, transactionId: null, status: 'failed' };
+  const parsed = parsePaymentScreenshot(text, today, { prominent });
+  if (!parsed) return { summary, transactionId: null, status: 'unreadable', text };
+  if (parsed.status === 'failed') return { summary, transactionId: null, status: 'failed', text };
   const attachment = await saveAttachment(uri);
   const draft = toDraft(parsed, 'ocr', hash, text, attachment);
   if (parsed.status === 'pending') draft.flags = [draft.flags, 'payment-pending'].filter(Boolean).join(',');
   const { row, duplicate } = await addCapture(draft);
   if (row) summary.added++;
   else if (duplicate) summary.duplicates++;
-  return { summary, transactionId: row?.id ?? null, status: parsed.status };
+  return { summary, transactionId: row?.id ?? null, status: parsed.status, text };
 }

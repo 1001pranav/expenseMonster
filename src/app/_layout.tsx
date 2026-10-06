@@ -33,7 +33,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ShareIntentProvider options={{ resetOnBackground: true }}>
+        {/* Not reset on background: the biometric unlock prompt can background the app on some phones and
+            would drop a screenshot shared from GPay / PhonePe / BHIM. Router clears it once handled. */}
+        <ShareIntentProvider options={{ resetOnBackground: false }}>
           <App />
         </ShareIntentProvider>
       </SafeAreaProvider>
@@ -180,7 +182,8 @@ function Router() {
   useEffect(() => {
     if (!hasShareIntent) return;
     const files = shareIntent.files ?? [];
-    const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find((f) => f.mimeType?.startsWith('image/'));
+    const isImage = (f: (typeof files)[number]) => f.mimeType?.startsWith('image/') || /\.(?:png|jpe?g|webp|heic)$/i.test(f.fileName ?? f.path ?? '');
+    const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find(isImage);
     if (file?.path) {
       const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
       if (file.fileName?.endsWith('.emx')) router.push({ pathname: '/sync', params: { file: uri } });
