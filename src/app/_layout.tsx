@@ -48,7 +48,15 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * Each mount of the app's React tree gets a number. If Android recreates the activity while the JS
+ * runtime keeps running, an old tree can linger briefly next to the new one, and both share Expo
+ * Router's global navigation queue: only the newest may navigate.
+ */
+let latestRoot = 0;
+
 function App() {
+  const [rootId] = useState(() => ++latestRoot);
   const { colors, dark } = useTheme();
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Sora_600SemiBold, Sora_700Bold });
   const ready = useStore((s) => s.ready);
@@ -65,7 +73,7 @@ function App() {
   }, []);
 
   const start = useCallback(() => {
-    logInfo('opening data');
+    logInfo(`opening data${rootId > 1 ? ` (screen recreated, copy ${rootId})` : ''}`);
     bootstrap()
       .then(async () => {
         const pin = await hasPin();
@@ -81,7 +89,7 @@ function App() {
         logError(`app failed to open: ${e.message}`);
         setError(e.message);
       });
-  }, []);
+  }, [rootId]);
 
   useEffect(start, [start]);
 
@@ -169,7 +177,7 @@ function App() {
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
       </Stack>
       <ShareCatcher />
-      {identity.onboarded && !locked ? <Router /> : null}
+      {identity.onboarded && !locked ? <Router rootId={rootId} /> : null}
       {!identity.onboarded ? <OnboardingRedirect /> : null}
       <ToastHost />
       {locked && identity.onboarded ? (
@@ -192,11 +200,7 @@ function OnboardingRedirect() {
   const navReady = useNavigationReady();
   useEffect(() => {
     if (!navReady) return;
-    try {
-      router.replace('/onboarding');
-    } catch (e) {
-      logError(`couldn't open onboarding: ${(e as Error).message}`);
-    }
+    router.replace('/onboarding');
   }, [navReady]);
   return null;
 }
@@ -251,15 +255,6 @@ function ShareCatcher() {
   return null;
 }
 
-/** Navigate without letting a navigation error crash the app (it is logged instead). */
-function safePush(href: Parameters<typeof router.push>[0]) {
-  try {
-    router.push(href);
-  } catch (e) {
-    logError(`navigation failed: ${(e as Error).message}`);
-  }
-}
-
 /**
  * True once Expo Router can navigate. Navigating earlier throws "Attempted to navigate before
  * mounting the Root Layout component", and a throw inside an effect crashes a release build: that
@@ -284,7 +279,7 @@ function useNavigationReady(): boolean {
 }
 
 /** Deep links from notifications, and opening a shared screenshot once the app is unlocked. */
-function Router() {
+function Router({ rootId }: { rootId: number }) {
   const lastResponse = Notifications.useLastNotificationResponse();
   const pending = usePendingShare((s) => s.pending);
   const clearPending = usePendingShare((s) => s.clear);
@@ -292,44 +287,37 @@ function Router() {
 
   useEffect(() => {
     if (!pending) return;
+    if (rootId !== latestRoot) {
+      logInfo('an older copy of the app left the screenshot for the current one');
+      return;
+    }
     if (!navReady) {
       logInfo('screenshot waiting for navigation to be ready');
       return;
     }
     logInfo(`opening ${pending.kind === 'backup' ? 'Sync' : 'Scan'}`);
-    try {
-      if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
-      else router.push({ pathname: '/scan', params: { uri: pending.uri } });
-    } catch (e) {
-      // Keep the screenshot and try again shortly, rather than crash the app and lose it.
-      const attempts = (pending.attempts ?? 0) + 1;
-      logError(`couldn't open ${pending.kind === 'backup' ? 'Sync' : 'Scan'} (try ${attempts}): ${(e as Error).message}`);
-      if (attempts >= 10) {
-        clearPending();
-        toast("Couldn't open the shared screenshot. Open Scan and pick it from the gallery.", { tone: 'error' });
-        return;
-      }
-      const retry = setTimeout(() => usePendingShare.getState().set({ ...pending, attempts }), 500);
-      return () => clearTimeout(retry);
-    }
+    // router.push only queues: Expo Router checks readiness later, in its own effect, where a throw
+    // can't be caught here and crashes the app. Hence the navReady / newest-tree checks above.
+    if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
+    else router.push({ pathname: '/scan', params: { uri: pending.uri } });
     clearPending();
     if (pending.kind === 'image' && pending.extra) toast('Scanning the first screenshot; share the others one at a time');
-  }, [pending, clearPending, navReady]);
+  }, [pending, clearPending, navReady, rootId]);
 
   useEffect(() => {
-    if (!lastResponse || !navReady) return;
+    if (!lastResponse || !navReady || rootId !== latestRoot) return;
     const data = lastResponse.notification.request.content.data as { href?: string; dueKey?: string } | undefined;
     if (lastResponse.actionIdentifier === ACTION_SNOOZE) {
       snooze(lastResponse.notification.request).then(() => toast('Snoozed for a day'));
     } else if (lastResponse.actionIdentifier === ACTION_PAID && data?.dueKey) {
-      safePush({ pathname: '/pay', params: { due: data.dueKey } });
+      router.push({ pathname: '/pay', params: { due: data.dueKey } });
     } else if (data?.dueKey && lastResponse.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
-      safePush({ pathname: '/pay', params: { due: data.dueKey, upi: '1' } });
+      router.push({ pathname: '/pay', params: { due: data.dueKey, upi: '1' } });
     } else if (data?.href) {
-      safePush(data.href as never);
+      router.push(data.href as never);
     }
     Notifications.clearLastNotificationResponseAsync().catch(() => {});
-  }, [lastResponse, navReady]);
+  }, [lastResponse, navReady, rootId]);
 
   return null;
 }
