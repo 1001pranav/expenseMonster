@@ -2,12 +2,17 @@ name: Android production build
 
 # Builds the sideloadable production APK. Cloud sync is compiled in from
 # the DEV environment's EXPO_PUBLIC_* values and stays off until the user enables it.
-# Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `mobile` build an artifact only.
+# Push a tag like v1.0.0 to publish it as a GitHub Release. Pushes to `main` (every merged PR) and
+# `mobile`, and pull requests into `main`, build an artifact only.
 on:
   push:
     tags: ['v*']
-    # Every push to the app branch also builds (artifact only, no release) as a native-build check.
-    branches: [mobile]
+    # Every push to these branches also builds (artifact only, no release) as a native-build check.
+    branches: [main, mobile]
+  # Install a PR's APK on the phone and test it before merging. Never switch this to
+  # pull_request_target: that would run a PR's code with the signing secrets.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +25,9 @@ concurrency:
 
 jobs:
   apk:
+    # PRs from forks don't get the signing secrets and shouldn't run in the DEV environment: only
+    # branches of this repository are built, so their APK is release-signed and installs over the app.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Pinned: ubuntu-latest moves to Ubuntu 26 from 2026-10-19 (actions/runner-images#14748).
     # Bump this deliberately, with a test build, rather than letting the label move under us.
     runs-on: ubuntu-24.04
@@ -124,9 +132,13 @@ jobs:
           # password for the key, so ANDROID_KEY_PASSWORD is optional.
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || vars.ANDROID_KEY_ALIAS || env.DETECTED_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
-          OUT=ExpenseMonster-${GITHUB_REF_NAME//\//-}.apk
+          # "pr13" for a pull request (its ref name is "13/merge"), else the branch or tag name.
+          NAME=${PR_NUMBER:+pr$PR_NUMBER}
+          NAME=${NAME:-${GITHUB_REF_NAME//\//-}}
+          OUT=ExpenseMonster-$NAME.apk
           if [ -n "$KEYSTORE_BASE64" ]; then
             BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
             ANDROID_KEYSTORE_BASE64="$KEYSTORE_BASE64" bash scripts/ci/decode-keystore.sh release.keystore

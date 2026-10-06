@@ -21,7 +21,10 @@ import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
+import { stageImage } from '@/services/files';
+import { usePendingShare } from '@/services/pendingShare';
 import { hasPin } from '@/services/secure';
+import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
 import { ToastHost, toast } from '@/ui/components/feedback';
 import { LockScreen } from '@/ui/LockScreen';
@@ -78,6 +81,8 @@ function App() {
   // Lock again after the configured time in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      // The fingerprint dialog itself can background the app on some phones: that isn't leaving.
+      if (isOwnBiometricTransition()) return;
       if (state === 'background') backgroundedAt.current = Date.now();
       if (state === 'active') {
         const away = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
@@ -148,6 +153,7 @@ function App() {
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
       </Stack>
+      <ShareCatcher />
       {identity.onboarded && !locked ? <Router /> : null}
       {!identity.onboarded ? <OnboardingRedirect /> : null}
       <ToastHost />
@@ -175,12 +181,15 @@ function OnboardingRedirect() {
   return null;
 }
 
-/** Deep links from notifications and the Android share sheet (screenshots shared from GPay/PhonePe). */
-function Router() {
-  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
-  const lastResponse = Notifications.useLastNotificationResponse();
+/**
+ * Takes a screenshot shared from GPay / PhonePe / BHIM the moment it arrives, even while the app is
+ * locked, copies it to its own file and holds it until Router can open it.
+ */
+function ShareCatcher() {
+  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
+  const setPending = usePendingShare((s) => s.set);
   // resetShareIntent is a new function every render, so this effect re-runs until the reset lands:
-  // remember the share already handled so one screenshot doesn't open two Scan screens.
+  // remember the share already taken so one screenshot isn't queued twice.
   const handled = useRef<typeof shareIntent | null>(null);
 
   useEffect(() => {
@@ -189,16 +198,39 @@ function Router() {
     const files = shareIntent.files ?? [];
     const isImage = (f: (typeof files)[number]) => f.mimeType?.startsWith('image/') || /\.(?:png|jpe?g|webp|heic)$/i.test(f.fileName ?? f.path ?? '');
     const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find(isImage);
-    if (file?.path) {
-      const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
-      if (file.fileName?.endsWith('.emx')) router.push({ pathname: '/sync', params: { file: uri } });
-      else {
-        router.push({ pathname: '/scan', params: { uri } });
-        if (files.length > 1) toast('Scanning the first screenshot; share the others one at a time');
-      }
-    }
     resetShareIntent();
-  }, [hasShareIntent, shareIntent, resetShareIntent]);
+    if (!file?.path) {
+      toast("That share didn't include a picture ExpenseMonster can read", { tone: 'error' });
+      return;
+    }
+    const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
+    if (file.fileName?.endsWith('.emx')) return setPending({ kind: 'backup', uri, extra: 0 });
+    // Copy now: the share library reuses the sender's file name, so the next share would overwrite it.
+    stageImage(uri).then((staged) => setPending({ kind: 'image', uri: staged, extra: files.length - 1 }));
+  }, [hasShareIntent, shareIntent, resetShareIntent, setPending]);
+
+  useEffect(() => {
+    if (error) toast(`Couldn't receive the shared screenshot: ${error}`, { tone: 'error' });
+  }, [error]);
+
+  return null;
+}
+
+/** Deep links from notifications, and opening a shared screenshot once the app is unlocked. */
+function Router() {
+  const lastResponse = Notifications.useLastNotificationResponse();
+  const pending = usePendingShare((s) => s.pending);
+  const clearPending = usePendingShare((s) => s.clear);
+
+  useEffect(() => {
+    if (!pending) return;
+    clearPending();
+    if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
+    else {
+      router.push({ pathname: '/scan', params: { uri: pending.uri } });
+      if (pending.extra) toast('Scanning the first screenshot; share the others one at a time');
+    }
+  }, [pending, clearPending]);
 
   useEffect(() => {
     if (!lastResponse) return;
