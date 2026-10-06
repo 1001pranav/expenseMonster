@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '@/db/store';
 import { usePendingShare } from '@/services/pendingShare';
 import { verifyPin } from '@/services/secure';
-import { logShare } from '@/services/shareLog';
+import { logError, logInfo } from '@/services/diagnostics';
 import { markBiometricPrompt } from '@/services/unlock';
 import { eraseEverything } from '@/services/wipe';
 import { Aurora, BrandMark } from './components/Aurora';
@@ -64,7 +64,7 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
           cancelLabel: hasPin ? 'Use PIN' : 'Cancel',
           disableDeviceFallback: hasPin,
         });
-        logShare(`fingerprint: ${res.success ? 'ok' : res.error}${auto ? ' (automatic)' : ''}`);
+        logInfo(`fingerprint: ${res.success ? 'ok' : res.error}${auto ? ' (automatic)' : ''}`);
         if (res.success) return onUnlock();
         if (!mounted.current || id !== attempt.current) return;
         const userChoice = res.error === 'user_cancel' || res.error === 'user_fallback' || res.error === 'authentication_failed' || res.error === 'lockout';
@@ -73,7 +73,7 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
         if (auto && !userChoice) return 'retry';
         if (!userChoice || !hasPin) setHint('Tap "Use fingerprint / face" to unlock');
       } catch (e) {
-        logShare(`fingerprint error: ${(e as Error).message}`);
+        logError(`fingerprint error: ${(e as Error).message}`);
         if (mounted.current && id === attempt.current) setHint('Tap "Use fingerprint / face" to unlock');
       } finally {
         if (id === attempt.current) {

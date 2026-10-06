@@ -23,7 +23,7 @@ import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
-import { logShare } from '@/services/shareLog';
+import { installErrorCapture, logError, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
@@ -31,6 +31,7 @@ import { ToastHost, toast } from '@/ui/components/feedback';
 import { LockScreen } from '@/ui/LockScreen';
 import { space, useTheme } from '@/ui/theme';
 
+installErrorCapture();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -59,25 +60,25 @@ function App() {
   const [pinSet, setPinSet] = useState(false);
   const backgroundedAt = useRef<number | null>(null);
   const unlock = useCallback(() => {
-    logShare('unlocked');
+    logInfo('unlocked');
     setLocked(false);
   }, []);
 
   const start = useCallback(() => {
-    logShare('app starting');
+    logInfo('opening data');
     bootstrap()
       .then(async () => {
         const pin = await hasPin();
         setPinSet(pin);
         const st = useStore.getState();
         const lockNow = st.identity.onboarded && (pin || st.settings.biometric);
-        logShare(`app ready (${!st.identity.onboarded ? 'not set up yet' : lockNow ? 'locked' : 'no lock'})`);
+        logInfo(`app ready (${!st.identity.onboarded ? 'not set up yet' : lockNow ? 'locked' : 'no lock'})`);
         setLocked(lockNow);
         // Reminders are important but must never stop the app from opening.
         await configureNotifications().catch(() => {});
       })
       .catch((e: Error) => {
-        logShare(`app failed to open: ${e.message}`);
+        logError(`app failed to open: ${e.message}`);
         setError(e.message);
       });
   }, []);
@@ -91,7 +92,7 @@ function App() {
   // Lock again after the configured time in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'inactive') logShare(`app ${state === 'active' ? 'in front' : 'in background'}${isOwnBiometricTransition() ? ' (fingerprint dialog)' : ''}`);
+      if (state !== 'inactive') logInfo(`app ${state === 'active' ? 'in front' : 'in background'}${isOwnBiometricTransition() ? ' (fingerprint dialog)' : ''}`);
       // The fingerprint dialog itself can background the app on some phones: that isn't leaving.
       if (isOwnBiometricTransition()) return;
       if (state === 'background') backgroundedAt.current = Date.now();
@@ -99,7 +100,7 @@ function App() {
         const away = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
         backgroundedAt.current = null;
         if ((pinSet || settings.biometric) && away > settings.autoLockMinutes * 60_000) {
-          logShare(`locking (away ${Math.round(away / 1000)}s)`);
+          logInfo(`locking (away ${Math.round(away / 1000)}s)`);
           setLocked(true);
         }
         // A new month may have started while the app was in the background.
@@ -207,7 +208,7 @@ function ShareCatcher() {
   const handled = useRef<typeof shareIntent | null>(null);
 
   useEffect(() => {
-    logShare(`share module ${isReady ? 'ready' : 'NOT ready (share sheet cannot reach the app)'}`);
+    logInfo(`share module ${isReady ? 'ready' : 'NOT ready (share sheet cannot reach the app)'}`);
   }, [isReady]);
 
   useEffect(() => {
@@ -215,14 +216,14 @@ function ShareCatcher() {
     handled.current = shareIntent;
     const files = shareIntent.files ?? [];
     const scheme = (p?: string | null) => p?.match(/^[a-z]+:/)?.[0] ?? (p ? 'path' : 'none');
-    logShare(
+    logInfo(
       `share received: type=${shareIntent.type ?? '?'} files=${files.length}${files.map((f) => ` [${f.mimeType ?? 'no-mime'} ${scheme(f.path)}]`).join('')}${shareIntent.text ? ' +text' : ''}`,
     );
     const isImage = (f: (typeof files)[number]) => f.mimeType?.startsWith('image/') || /\.(?:png|jpe?g|webp|heic)$/i.test(f.fileName ?? f.path ?? '');
     const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find(isImage);
     resetShareIntent();
     if (!file?.path) {
-      logShare('no readable picture in the share');
+      logInfo('no readable picture in the share');
       toast("That share didn't include a picture ExpenseMonster can read", { tone: 'error' });
       return;
     }
@@ -230,15 +231,15 @@ function ShareCatcher() {
     if (file.fileName?.endsWith('.emx')) return setPending({ kind: 'backup', uri, extra: 0 });
     // Copy now: the share library reuses the sender's file name, so the next share would overwrite it.
     stageImage(uri).then((staged) => {
-      logShare(staged === uri ? 'copy failed: using the shared file as is' : 'screenshot copied');
+      logInfo(staged === uri ? 'copy failed: using the shared file as is' : 'screenshot copied');
       setPending({ kind: 'image', uri: staged, extra: files.length - 1 });
-      logShare('waiting to open Scan (opens when unlocked)');
+      logInfo('waiting to open Scan (opens when unlocked)');
     });
   }, [hasShareIntent, shareIntent, resetShareIntent, setPending]);
 
   useEffect(() => {
     if (!error) return;
-    logShare(`share module error: ${error}`);
+    logError(`share module error: ${error}`);
     toast(`Couldn't receive the shared screenshot: ${error}`, { tone: 'error' });
   }, [error]);
 
@@ -254,7 +255,7 @@ function Router() {
   useEffect(() => {
     if (!pending) return;
     clearPending();
-    logShare(`opening ${pending.kind === 'backup' ? 'Sync' : 'Scan'}`);
+    logInfo(`opening ${pending.kind === 'backup' ? 'Sync' : 'Scan'}`);
     if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
     else {
       router.push({ pathname: '/scan', params: { uri: pending.uri } });
