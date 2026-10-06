@@ -158,10 +158,10 @@ export default function Scan() {
 
   return (
     <Screen title="Scan screenshot" subtitle="Read on this phone — nothing is uploaded" back>
-      {uri ? (
+      {uri && phase !== 'confirm' ? (
         <Image
           source={{ uri }}
-          style={{ width: '100%', height: phase === 'confirm' ? 420 : 300, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt }}
+          style={{ width: '100%', height: 300, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt }}
           resizeMode="contain"
           accessibilityLabel="Selected screenshot"
         />
@@ -208,7 +208,7 @@ export default function Scan() {
           <Txt variant="bodyStrong">{payment.amount ? 'Is this the right amount?' : "Couldn't read the amount"}</Txt>
           <Txt tone="muted">
             {payment.amount
-              ? "The ₹ sign wasn't read clearly, so a digit may be off. Check it against the screenshot above."
+              ? "The ₹ sign wasn't read clearly, so a digit may be off. Check it against the screenshot below."
               : 'Type the amount shown on the screenshot. Everything else that was found is kept.'}
           </Txt>
           {payment.payee || payment.date ? (
@@ -222,6 +222,10 @@ export default function Scan() {
             <Button title="Cancel" variant="secondary" onPress={goBack} />
           </Row>
         </Card>
+      ) : null}
+      {/* While confirming, the amount box comes first so the keyboard never covers it; the screenshot to compare with is below. */}
+      {uri && phase === 'confirm' ? (
+        <Image source={{ uri }} style={{ width: '100%', height: 260, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt }} resizeMode="contain" accessibilityLabel="Selected screenshot" />
       ) : null}
 
       {phase === 'failed' ? (

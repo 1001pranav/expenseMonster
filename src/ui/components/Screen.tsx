@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { type ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { space, useTheme } from '../theme';
 import { IconButton, Txt } from './core';
@@ -72,7 +72,9 @@ export function Screen({
   const content = [{ padding: space(2), paddingBottom: bottom, gap: space(2.5) }, contentStyle];
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    // Android too: edge-to-edge is mandatory (Android 16; Expo no longer lets it be turned off), so
+    // the window no longer shrinks for the keyboard and without this it covers inputs and the footer.
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }} behavior="padding">
       {title ? <Header title={title} subtitle={subtitle} back={back} right={right} large={large} /> : null}
       {header}
       {scroll ? (
