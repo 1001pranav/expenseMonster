@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, View } from 'react-native';
 import { captureImage } from '@/services/capture';
 import { stageImage } from '@/services/files';
+import { logShare } from '@/services/shareLog';
 import { Button, Card, EmptyState, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { Screen, goBack } from '@/ui/components/Screen';
@@ -24,11 +25,13 @@ export default function Scan() {
     setPhase('reading');
     setError(null);
     setShowRead(false);
+    logShare('scan: reading');
     try {
       const imageUri = await stageImage(incoming);
       setUri(imageUri);
       const res = await captureImage(imageUri);
       setReadText(res.text);
+      logShare(`scan: ${res.status}${res.transactionId ? ', added to Review' : res.duplicateOf ? ', already recorded' : ''} (${res.text.length} characters read)`);
       if (res.status === 'failed') return setPhase('failed');
       if (res.status === 'unreadable') return setPhase('unreadable');
       if (res.status === 'bill') {
@@ -47,6 +50,7 @@ export default function Scan() {
         goBack();
       }
     } catch (e) {
+      logShare(`scan failed: ${(e as Error).message}`);
       setError((e as Error).message);
       setPhase('idle');
     }

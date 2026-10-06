@@ -92,6 +92,8 @@ export default function Settings() {
             onPress={() => router.push('/settings/sms')}
           />
           <Divider inset={space(9)} />
+          <ListRow icon="bug-outline" iconColor={colors.info} title="Share log" subtitle="What happened to recently shared screenshots" chevron onPress={() => router.push('/settings/share-log')} />
+          <Divider inset={space(9)} />
           <ListRow
             icon="notifications"
             iconColor={colors.warn}
