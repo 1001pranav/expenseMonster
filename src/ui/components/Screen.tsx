@@ -7,10 +7,19 @@ import { IconButton, Txt } from './core';
 
 export const TAB_BAR_SPACE = 96;
 
+/**
+ * Back within the app. A screen opened from the share sheet can be the only one in the stack, and a
+ * plain back there closes the app and drops the user into GPay / PhonePe / BHIM.
+ */
+export function goBack() {
+  if (router.canGoBack()) router.back();
+  else router.replace('/');
+}
+
 export function Header({ title, subtitle, back, right, large }: { title: string; subtitle?: string; back?: boolean; right?: ReactNode; large?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space(1), paddingVertical: space(0.75), gap: 4, minHeight: 56 }}>
-      {back ? <IconButton name="chevron-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} /> : <View style={{ width: space(1) }} />}
+      {back ? <IconButton name="chevron-back" label="Back" onPress={goBack} /> : <View style={{ width: space(1) }} />}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt variant={large ? 'h1' : 'h2'} numberOfLines={1} accessibilityRole="header">
           {title}

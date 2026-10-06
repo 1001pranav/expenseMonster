@@ -81,13 +81,13 @@ function stripFlag(flags: string | null, prefix: string) {
 }
 
 /** Create a pending capture unless it's a duplicate of something already recorded. */
-export async function addCapture(draft: TxnDraft): Promise<{ row: Transaction | null; duplicate: boolean }> {
+export async function addCapture(draft: TxnDraft): Promise<{ row: Transaction | null; duplicate: boolean; duplicateOf: string | null }> {
   const base = blankTxn({ ...draft, status: 'pending' });
   const dup = findDuplicate(base as Transaction, allTransactionsIncludingRejected());
-  if (dup?.kind === 'exact') return { row: null, duplicate: true };
+  if (dup?.kind === 'exact') return { row: null, duplicate: true, duplicateOf: dup.existing.id };
   const flags = dup ? [base.flags, `duplicate:${dup.existing.id}`].filter(Boolean).join(',') : base.flags;
   const row = await insert('transactions', { ...base, flags });
-  return { row, duplicate: Boolean(dup) };
+  return { row, duplicate: Boolean(dup), duplicateOf: dup?.existing.id ?? null };
 }
 
 /** In-memory store hides deleted rows but keeps rejected ones, which is what de-duplication needs. */

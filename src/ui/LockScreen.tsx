@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '@/db/store';
@@ -26,24 +26,48 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const inFlight = useRef(false);
+
   const tryBiometric = useCallback(async () => {
-    const available = settings.biometric && (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync());
-    if (!available) {
-      // No PIN and no usable biometrics: nothing to unlock with, so don't trap the user.
-      if (!hasPin) onUnlock();
-      return;
+    try {
+      const available = settings.biometric && (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync());
+      if (!available) {
+        // No PIN and no usable biometrics: nothing to unlock with, so don't trap the user.
+        if (!hasPin) onUnlock();
+        return;
+      }
+      // A prompt that Android dropped (app switching from the share sheet) stays "in progress" and
+      // blocks every later attempt, so cancel it before asking again.
+      if (inFlight.current) await LocalAuthentication.cancelAuthenticate().catch(() => {});
+      inFlight.current = true;
+      const res = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock ExpenseMonster',
+        cancelLabel: hasPin ? 'Use PIN' : 'Cancel',
+        disableDeviceFallback: hasPin,
+      });
+      if (res.success) onUnlock();
+    } catch {
+      // The button below lets the user try again.
+    } finally {
+      inFlight.current = false;
     }
-    const res = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Unlock ExpenseMonster',
-      cancelLabel: hasPin ? 'Use PIN' : 'Cancel',
-      disableDeviceFallback: hasPin,
-    });
-    if (res.success) onUnlock();
   }, [settings.biometric, hasPin, onUnlock]);
 
+  // Prompt once per lock, and only once the app is in front: a prompt shown while the app is still
+  // coming up from GPay / PhonePe / BHIM's share sheet is cancelled by Android.
   useEffect(() => {
-    tryBiometric();
-  }, [tryBiometric]);
+    if (AppState.currentState === 'active') {
+      tryBiometric();
+      return;
+    }
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      sub.remove();
+      tryBiometric();
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async (value: string) => {
     setBusy(true);

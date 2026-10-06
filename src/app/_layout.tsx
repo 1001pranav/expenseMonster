@@ -54,6 +54,7 @@ function App() {
   const [locked, setLocked] = useState(true);
   const [pinSet, setPinSet] = useState(false);
   const backgroundedAt = useRef<number | null>(null);
+  const unlock = useCallback(() => setLocked(false), []);
 
   const start = useCallback(() => {
     bootstrap()
@@ -152,7 +153,7 @@ function App() {
       <ToastHost />
       {locked && identity.onboarded ? (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-          <LockScreen hasPin={pinSet} onUnlock={() => setLocked(false)} />
+          <LockScreen hasPin={pinSet} onUnlock={unlock} />
         </View>
       ) : null}
     </View>
@@ -178,9 +179,13 @@ function OnboardingRedirect() {
 function Router() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastResponse = Notifications.useLastNotificationResponse();
+  // resetShareIntent is a new function every render, so this effect re-runs until the reset lands:
+  // remember the share already handled so one screenshot doesn't open two Scan screens.
+  const handled = useRef<typeof shareIntent | null>(null);
 
   useEffect(() => {
-    if (!hasShareIntent) return;
+    if (!hasShareIntent || handled.current === shareIntent) return;
+    handled.current = shareIntent;
     const files = shareIntent.files ?? [];
     const isImage = (f: (typeof files)[number]) => f.mimeType?.startsWith('image/') || /\.(?:png|jpe?g|webp|heic)$/i.test(f.fileName ?? f.path ?? '');
     const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find(isImage);

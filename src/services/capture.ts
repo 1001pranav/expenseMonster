@@ -172,6 +172,8 @@ export async function captureText(text: string, sender = ''): Promise<CaptureSum
 export interface ImageCapture {
   summary: CaptureSummary;
   transactionId: string | null;
+  /** The earlier entry this screenshot was already recorded as. */
+  duplicateOf: string | null;
   status: 'success' | 'failed' | 'pending' | 'unknown' | 'bill' | 'unreadable';
   /** What OCR read, shown when nothing usable was found so the user can see why. */
   text: string;
@@ -186,19 +188,24 @@ export async function captureImage(uri: string): Promise<ImageCapture> {
 
   if (looksLikeBill(text)) {
     const bill = parseBillDocument(text, today);
-    if (!bill) return { summary, transactionId: null, status: 'unreadable', text };
+    if (!bill) return { summary, transactionId: null, duplicateOf: null, status: 'unreadable', text };
     await saveDraftBill(bill, text, hash, today, await saveAttachment(uri), summary);
-    return { summary, transactionId: null, status: 'bill', text };
+    return { summary, transactionId: null, duplicateOf: null, status: 'bill', text };
   }
 
-  const parsed = parsePaymentScreenshot(text, today, { prominent });
-  if (!parsed) return { summary, transactionId: null, status: 'unreadable', text };
-  if (parsed.status === 'failed') return { summary, transactionId: null, status: 'failed', text };
+  const { tables, identity } = getState();
+  const self = tables.members.find((m) => m.id === identity.selfMemberId)?.name;
+  const parsed = parsePaymentScreenshot(text, today, { prominent, selfNames: self ? [self] : [] });
+  if (!parsed) return { summary, transactionId: null, duplicateOf: null, status: 'unreadable', text };
+  if (parsed.status === 'failed') return { summary, transactionId: null, duplicateOf: null, status: 'failed', text };
   const attachment = await saveAttachment(uri);
   const draft = toDraft(parsed, 'ocr', hash, text, attachment);
-  if (parsed.status === 'pending') draft.flags = [draft.flags, 'payment-pending'].filter(Boolean).join(',');
-  const { row, duplicate } = await addCapture(draft);
+  const extra = [parsed.status === 'pending' ? 'payment-pending' : null, parsed.amountSure ? null : 'amount-unsure'];
+  draft.flags = [draft.flags, ...extra].filter(Boolean).join(',') || null;
+  // Never let "approve all confident" take an amount whose ₹ sign wasn't read.
+  if (!parsed.amountSure) draft.confidence = Math.min(draft.confidence ?? 0, 0.6);
+  const { row, duplicate, duplicateOf } = await addCapture(draft);
   if (row) summary.added++;
   else if (duplicate) summary.duplicates++;
-  return { summary, transactionId: row?.id ?? null, status: parsed.status, text };
+  return { summary, transactionId: row?.id ?? null, duplicateOf: row ? null : duplicateOf, status: parsed.status, text };
 }

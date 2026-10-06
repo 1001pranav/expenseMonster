@@ -86,6 +86,31 @@ describe('payment screenshot OCR parser', () => {
     expect(parsePaymentScreenshot(text, T)!.app).toBe('Google Pay');
   });
 
+  it('never takes a word as the UPI reference (it made every later screenshot a duplicate)', () => {
+    const text = ['BHIM', '₹10.00', 'Paid Successfully', 'To', 'Tea Stall', 'UPI Ref No.', 'Completed', '12 Sep 2026, 07:45 PM'].join('\n');
+    expect(parsePaymentScreenshot(text, T)!.ref).toBeNull();
+  });
+
+  it('your own name as the "other party" flips the direction', () => {
+    // A layout that lists the sender first: without the self check this would read as money received.
+    const text = ['₹250.00', 'From', 'PRANAV N', 'XXXX1234', 'To', 'Ravi Kumar', 'ravi@upi', '12 Sep 2026, 07:45 PM', 'UPI Ref No: 425612345675'].join('\n');
+    expect(parsePaymentScreenshot(text, T)!.direction).toBe('credit');
+    const p = parsePaymentScreenshot(text, T, { selfNames: ['Pranav Nair'] })!;
+    expect(p).toMatchObject({ direction: 'debit', payee: 'Ravi Kumar', vpa: 'ravi@upi' });
+  });
+
+  it('"paid" anywhere keeps a From-first screen an expense', () => {
+    const text = ['₹40.00', 'Paid', 'From', 'My Account', 'To', 'Ravi Kumar', '12 Sep 2026'].join('\n');
+    expect(parsePaymentScreenshot(text, T)!.direction).toBe('debit');
+  });
+
+  it('marks the amount unsure when no ₹ sign was read', () => {
+    const withSign = ['To Ravi', '₹10', 'Completed', '12 Sep 2026'].join('\n');
+    const bare = ['To Ravi', '70', 'Completed', '12 Sep 2026'].join('\n');
+    expect(parsePaymentScreenshot(withSign, T)!.amountSure).toBe(true);
+    expect(parsePaymentScreenshot(bare, T)!.amountSure).toBe(false);
+  });
+
   it('detects and parses an electricity bill', () => {
     const text = ['BANGALORE ELECTRICITY SUPPLY COMPANY', 'Electricity Bill', 'Consumer No: 1234567890', 'Bill Date: 05-09-2026', 'Units Consumed: 270', 'Amount Payable: Rs. 1,840.00', 'Due Date: 20-09-2026'].join('\n');
     expect(looksLikeBill(text)).toBe(true);

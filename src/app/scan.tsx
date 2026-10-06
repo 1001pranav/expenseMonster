@@ -3,9 +3,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, View } from 'react-native';
 import { captureImage } from '@/services/capture';
+import { stageImage } from '@/services/files';
 import { Button, Card, EmptyState, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
-import { Screen } from '@/ui/components/Screen';
+import { Screen, goBack } from '@/ui/components/Screen';
 import { radius, space, useTheme } from '@/ui/theme';
 
 type Phase = 'idle' | 'reading' | 'failed' | 'unreadable';
@@ -19,12 +20,13 @@ export default function Scan() {
   const [readText, setReadText] = useState('');
   const [showRead, setShowRead] = useState(false);
 
-  const process = useCallback(async (imageUri: string) => {
-    setUri(imageUri);
+  const process = useCallback(async (incoming: string) => {
     setPhase('reading');
     setError(null);
     setShowRead(false);
     try {
+      const imageUri = await stageImage(incoming);
+      setUri(imageUri);
       const res = await captureImage(imageUri);
       setReadText(res.text);
       if (res.status === 'failed') return setPhase('failed');
@@ -35,10 +37,14 @@ export default function Scan() {
         return;
       }
       if (res.transactionId) {
-        router.replace(`/txn/${res.transactionId}`);
+        router.replace({ pathname: '/txn/[id]', params: { id: res.transactionId, ocr: res.text } });
+      } else if (res.duplicateOf) {
+        // Show the earlier entry rather than silently going back (which could leave the app).
+        toast('Already recorded — this is the earlier entry');
+        router.replace(`/txn/${res.duplicateOf}`);
       } else {
-        toast('Already recorded — this payment was captured before');
-        router.back();
+        toast('Nothing to record in this screenshot');
+        goBack();
       }
     } catch (e) {
       setError((e as Error).message);

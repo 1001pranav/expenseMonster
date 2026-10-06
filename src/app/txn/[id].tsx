@@ -5,7 +5,7 @@ import { Screen } from '@/ui/components/Screen';
 import { TxnForm } from '@/ui/forms/TxnForm';
 
 export default function EditTxn() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, ocr } = useLocalSearchParams<{ id: string; ocr?: string }>();
   const txn = useTable('transactions').find((t) => t.id === id);
   if (!txn) {
     return (
@@ -14,5 +14,5 @@ export default function EditTxn() {
       </Screen>
     );
   }
-  return <TxnForm key={txn.id} existing={txn} />;
+  return <TxnForm key={txn.id} existing={txn} ocrText={ocr} />;
 }
