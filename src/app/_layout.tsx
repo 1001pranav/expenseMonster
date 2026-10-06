@@ -22,6 +22,7 @@ import { bootstrap } from '@/services/bootstrap';
 import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { hasPin } from '@/services/secure';
+import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
 import { ToastHost, toast } from '@/ui/components/feedback';
 import { LockScreen } from '@/ui/LockScreen';
@@ -78,6 +79,8 @@ function App() {
   // Lock again after the configured time in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      // The fingerprint dialog itself can background the app on some phones: that isn't leaving.
+      if (isOwnBiometricTransition()) return;
       if (state === 'background') backgroundedAt.current = Date.now();
       if (state === 'active') {
         const away = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;

@@ -7,6 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '@/db/store';
 import { verifyPin } from '@/services/secure';
+import { markBiometricPrompt } from '@/services/unlock';
 import { eraseEverything } from '@/services/wipe';
 import { Aurora, BrandMark } from './components/Aurora';
 import { Txt } from './components/core';
@@ -26,46 +27,81 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [hint, setHint] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const attempt = useRef(0);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+      // Unlocked with the PIN while the fingerprint dialog was still up: close it.
+      if (inFlight.current) LocalAuthentication.cancelAuthenticate().catch(() => {});
+      markBiometricPrompt(false);
+    },
+    [],
+  );
 
-  const tryBiometric = useCallback(async () => {
-    try {
-      const available = settings.biometric && (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync());
-      if (!available) {
-        // No PIN and no usable biometrics: nothing to unlock with, so don't trap the user.
-        if (!hasPin) onUnlock();
-        return;
+  const tryBiometric = useCallback(
+    async (auto = false): Promise<'retry' | void> => {
+      const id = ++attempt.current;
+      setHint(null);
+      try {
+        const available = settings.biometric && (await LocalAuthentication.hasHardwareAsync()) && (await LocalAuthentication.isEnrolledAsync());
+        if (!available) {
+          // No PIN and no usable biometrics: nothing to unlock with, so don't trap the user.
+          if (!hasPin) onUnlock();
+          return;
+        }
+        // A prompt Android dropped stays "in progress" and blocks the next one, so cancel it first.
+        if (inFlight.current) await LocalAuthentication.cancelAuthenticate().catch(() => {});
+        inFlight.current = true;
+        markBiometricPrompt(true);
+        const res = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Unlock ExpenseMonster',
+          cancelLabel: hasPin ? 'Use PIN' : 'Cancel',
+          disableDeviceFallback: hasPin,
+        });
+        if (res.success) return onUnlock();
+        if (!mounted.current || id !== attempt.current) return;
+        const userChoice = res.error === 'user_cancel' || res.error === 'user_fallback' || res.error === 'authentication_failed' || res.error === 'lockout';
+        // Android cancels a prompt raised while the window is still coming up from the share sheet
+        // (BHIM / GPay / PhonePe → ExpenseMonster): ask once more when the app has settled.
+        if (auto && !userChoice) return 'retry';
+        if (!userChoice || !hasPin) setHint('Tap "Use fingerprint / face" to unlock');
+      } catch {
+        if (mounted.current && id === attempt.current) setHint('Tap "Use fingerprint / face" to unlock');
+      } finally {
+        if (id === attempt.current) {
+          inFlight.current = false;
+          markBiometricPrompt(false);
+        }
       }
-      // A prompt that Android dropped (app switching from the share sheet) stays "in progress" and
-      // blocks every later attempt, so cancel it before asking again.
-      if (inFlight.current) await LocalAuthentication.cancelAuthenticate().catch(() => {});
-      inFlight.current = true;
-      const res = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock ExpenseMonster',
-        cancelLabel: hasPin ? 'Use PIN' : 'Cancel',
-        disableDeviceFallback: hasPin,
-      });
-      if (res.success) onUnlock();
-    } catch {
-      // The button below lets the user try again.
-    } finally {
-      inFlight.current = false;
-    }
-  }, [settings.biometric, hasPin, onUnlock]);
+    },
+    [settings.biometric, hasPin, onUnlock],
+  );
 
-  // Prompt once per lock, and only once the app is in front: a prompt shown while the app is still
-  // coming up from GPay / PhonePe / BHIM's share sheet is cancelled by Android.
+  // Prompt once per lock, after the app is in front and its window has settled: a prompt raised
+  // during the switch from another app's share sheet is silently cancelled by Android.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const start = () => {
+      timer = setTimeout(async () => {
+        if ((await tryBiometric(true)) === 'retry') timer = setTimeout(() => mounted.current && tryBiometric(false), 800);
+      }, 400);
+    };
     if (AppState.currentState === 'active') {
-      tryBiometric();
-      return;
+      start();
+      return () => clearTimeout(timer);
     }
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
       sub.remove();
-      tryBiometric();
+      start();
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -114,14 +150,14 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
             ))}
           </Animated.View>
         ) : null}
-        <Txt variant="small" style={{ minHeight: 18, color: '#FFB3C7' }}>
-          {error ?? ''}
+        <Txt variant="small" style={{ minHeight: 18, color: error ? '#FFB3C7' : 'rgba(255,255,255,0.85)' }}>
+          {error ?? hint ?? ''}
         </Txt>
       </View>
       {hasPin ? <Keypad onKey={onKey} onDark /> : null}
       {settings.biometric ? (
         <Pressable
-          onPress={tryBiometric}
+          onPress={() => tryBiometric(false)}
           accessibilityRole="button"
           style={({ pressed }) => ({ height: 52, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: pressed ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' })}
         >
