@@ -1,3 +1,6 @@
+// jest.mock calls below are hoisted above this import.
+import { clearDiagnostics, diagnosticsText, installErrorCapture, logInfo, useDiagnostics } from '../diagnostics';
+
 const mockFiles = new Map<string, string>();
 jest.mock('expo-file-system', () => ({
   Paths: { document: 'doc' },
@@ -30,7 +33,6 @@ jest.mock('expo-device', () => ({ manufacturer: 'Test', modelName: 'Phone' }));
 jest.mock('expo-constants', () => ({ expoConfig: { version: '1.0.0' } }));
 jest.mock('../files', () => ({ writeCacheFile: jest.fn(() => ({ uri: 'file://log.txt' })) }));
 
-import { clearDiagnostics, diagnosticsText, installErrorCapture, logInfo, useDiagnostics } from '../diagnostics';
 
 describe('diagnostics log', () => {
   const previousHandler = jest.fn();
