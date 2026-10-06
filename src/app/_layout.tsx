@@ -7,7 +7,7 @@ import { Sora_600SemiBold } from '@expo-google-fonts/sora/600SemiBold';
 import { Sora_700Bold } from '@expo-google-fonts/sora/700Bold';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useNavigationContainerRef } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
@@ -189,10 +189,15 @@ function onCloudResult(r: CloudResult) {
 }
 
 function OnboardingRedirect() {
+  const navReady = useNavigationReady();
   useEffect(() => {
-    const t = setTimeout(() => router.replace('/onboarding'), 0);
-    return () => clearTimeout(t);
-  }, []);
+    if (!navReady) return;
+    try {
+      router.replace('/onboarding');
+    } catch (e) {
+      logError(`couldn't open onboarding: ${(e as Error).message}`);
+    }
+  }, [navReady]);
   return null;
 }
 
@@ -246,37 +251,85 @@ function ShareCatcher() {
   return null;
 }
 
+/** Navigate without letting a navigation error crash the app (it is logged instead). */
+function safePush(href: Parameters<typeof router.push>[0]) {
+  try {
+    router.push(href);
+  } catch (e) {
+    logError(`navigation failed: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * True once Expo Router can navigate. Navigating earlier throws "Attempted to navigate before
+ * mounting the Root Layout component", and a throw inside an effect crashes a release build: that
+ * crash is what made shared screenshots "do nothing" right after unlocking.
+ */
+function useNavigationReady(): boolean {
+  const navigation = useNavigationContainerRef();
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (ready) return;
+    const check = () => {
+      if (navigation.isReady()) setReady(true);
+    };
+    const timer = setInterval(check, 100);
+    const first = setTimeout(check, 0);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(first);
+    };
+  }, [ready, navigation]);
+  return ready;
+}
+
 /** Deep links from notifications, and opening a shared screenshot once the app is unlocked. */
 function Router() {
   const lastResponse = Notifications.useLastNotificationResponse();
   const pending = usePendingShare((s) => s.pending);
   const clearPending = usePendingShare((s) => s.clear);
+  const navReady = useNavigationReady();
 
   useEffect(() => {
     if (!pending) return;
-    clearPending();
-    logInfo(`opening ${pending.kind === 'backup' ? 'Sync' : 'Scan'}`);
-    if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
-    else {
-      router.push({ pathname: '/scan', params: { uri: pending.uri } });
-      if (pending.extra) toast('Scanning the first screenshot; share the others one at a time');
+    if (!navReady) {
+      logInfo('screenshot waiting for navigation to be ready');
+      return;
     }
-  }, [pending, clearPending]);
+    logInfo(`opening ${pending.kind === 'backup' ? 'Sync' : 'Scan'}`);
+    try {
+      if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
+      else router.push({ pathname: '/scan', params: { uri: pending.uri } });
+    } catch (e) {
+      // Keep the screenshot and try again shortly, rather than crash the app and lose it.
+      const attempts = (pending.attempts ?? 0) + 1;
+      logError(`couldn't open ${pending.kind === 'backup' ? 'Sync' : 'Scan'} (try ${attempts}): ${(e as Error).message}`);
+      if (attempts >= 10) {
+        clearPending();
+        toast("Couldn't open the shared screenshot. Open Scan and pick it from the gallery.", { tone: 'error' });
+        return;
+      }
+      const retry = setTimeout(() => usePendingShare.getState().set({ ...pending, attempts }), 500);
+      return () => clearTimeout(retry);
+    }
+    clearPending();
+    if (pending.kind === 'image' && pending.extra) toast('Scanning the first screenshot; share the others one at a time');
+  }, [pending, clearPending, navReady]);
 
   useEffect(() => {
-    if (!lastResponse) return;
+    if (!lastResponse || !navReady) return;
     const data = lastResponse.notification.request.content.data as { href?: string; dueKey?: string } | undefined;
     if (lastResponse.actionIdentifier === ACTION_SNOOZE) {
       snooze(lastResponse.notification.request).then(() => toast('Snoozed for a day'));
     } else if (lastResponse.actionIdentifier === ACTION_PAID && data?.dueKey) {
-      router.push({ pathname: '/pay', params: { due: data.dueKey } });
+      safePush({ pathname: '/pay', params: { due: data.dueKey } });
     } else if (data?.dueKey && lastResponse.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
-      router.push({ pathname: '/pay', params: { due: data.dueKey, upi: '1' } });
+      safePush({ pathname: '/pay', params: { due: data.dueKey, upi: '1' } });
     } else if (data?.href) {
-      router.push(data.href as never);
+      safePush(data.href as never);
     }
     Notifications.clearLastNotificationResponseAsync().catch(() => {});
-  }, [lastResponse]);
+  }, [lastResponse, navReady]);
 
   return null;
 }

@@ -5,6 +5,8 @@ export interface PendingShare {
   uri: string;
   /** More than one screenshot was shared; only the first is scanned. */
   extra: number;
+  /** Times opening it has failed (it is retried, then given up). */
+  attempts?: number;
 }
 
 /**
