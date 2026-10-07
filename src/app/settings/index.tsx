@@ -92,6 +92,8 @@ export default function Settings() {
             onPress={() => router.push('/settings/sms')}
           />
           <Divider inset={space(9)} />
+          <ListRow icon="bug-outline" iconColor={colors.info} title="Error log" subtitle="Errors, warnings and shared screenshots · share it to report a problem" chevron onPress={() => router.push('/settings/diagnostics')} />
+          <Divider inset={space(9)} />
           <ListRow
             icon="notifications"
             iconColor={colors.warn}

@@ -1,4 +1,4 @@
-import { looksLikeBill, parseBillDocument, parsePaymentScreenshot } from '../parsers/ocr';
+import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, parsePaymentScreenshot } from '../parsers/ocr';
 
 const T = '2026-09-20';
 
@@ -159,6 +159,21 @@ describe('payment screenshot OCR parser', () => {
     it('icon read as a stray character before the banner word', () => {
       const text = ['BHIM', 'e Received', '₹50.00', 'Banking Name', 'MAHESH SANGEET', 'Payment received by PRANAV R'].join('\n');
       expect(parsePaymentScreenshot(text, T)!.direction).toBe('credit');
+    });
+  });
+
+  describe('analyzePaymentScreenshot (amount may be missing)', () => {
+    const noAmount = ["BHIM - Bharat's Own Payments App", 'Paid', 'Banking Name', 'DEEPAK KUMAR', 'Transaction ID', 'Date & Time', '133715389297', '5th Oct 26,', '01:37 pm', 'Payment received by DEEPAK KUMAR'].join('\n');
+
+    it('keeps payee, date and reference when no amount was read, so only the amount is asked', () => {
+      const a = analyzePaymentScreenshot(noAmount, T);
+      expect(a).toMatchObject({ amount: null, amountSure: false, direction: 'debit', payee: 'Deepak Kumar', ref: '133715389297', date: '2026-10-05' });
+      expect(parsePaymentScreenshot(noAmount, T)).toBeNull();
+    });
+
+    it('matches parsePaymentScreenshot when the amount is there', () => {
+      const text = ['To Ravi', '₹10', 'Completed', '12 Sep 2026'].join('\n');
+      expect(analyzePaymentScreenshot(text, T)).toEqual(parsePaymentScreenshot(text, T));
     });
   });
 

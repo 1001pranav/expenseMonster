@@ -1,0 +1,25 @@
+diff --git a/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt b/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
+index ff5b100..2f75dc6 100644
+--- a/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
++++ b/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
+@@ -112,15 +112,11 @@ class ExpoShareIntentModule : Module() {
+         }
+ 
+         fun handleShareIntent(intent: Intent) {
+-            val activity = instance?.currentActivity
+-            if (activity != null && !activity.isTaskRoot) {
+-                val newIntent = Intent(intent).apply {
+-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+-                }
+-                activity.startActivity(newIntent)
+-                activity.finish()
+-                return
+-            }
++            // ExpenseMonster patch: the upstream code restarted the activity in a new task when it
++            // wasn't the task root (finish + startActivity). With the app's singleTask MainActivity that
++            // recreated the activity while the JS runtime kept running, leaving two React trees sharing
++            // Expo Router's navigation queue, which crashed ("Attempted to navigate before mounting the
++            // Root Layout"). Handle the share in the current activity instead.
+             if (intent.type == null) return
+             if (intent.type!!.startsWith("text/plain")) {
+                 // text / urls

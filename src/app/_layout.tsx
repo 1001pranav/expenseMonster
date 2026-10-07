@@ -7,7 +7,7 @@ import { Sora_600SemiBold } from '@expo-google-fonts/sora/600SemiBold';
 import { Sora_700Bold } from '@expo-google-fonts/sora/700Bold';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useNavigationContainerRef } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
@@ -23,6 +23,7 @@ import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
+import { installErrorCapture, logError, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
@@ -30,6 +31,7 @@ import { ToastHost, toast } from '@/ui/components/feedback';
 import { LockScreen } from '@/ui/LockScreen';
 import { space, useTheme } from '@/ui/theme';
 
+installErrorCapture();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -46,7 +48,15 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * Each mount of the app's React tree gets a number. If Android recreates the activity while the JS
+ * runtime keeps running, an old tree can linger briefly next to the new one, and both share Expo
+ * Router's global navigation queue: only the newest may navigate.
+ */
+let latestRoot = 0;
+
 function App() {
+  const [rootId] = useState(() => ++latestRoot);
   const { colors, dark } = useTheme();
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Sora_600SemiBold, Sora_700Bold });
   const ready = useStore((s) => s.ready);
@@ -57,20 +67,29 @@ function App() {
   const [locked, setLocked] = useState(true);
   const [pinSet, setPinSet] = useState(false);
   const backgroundedAt = useRef<number | null>(null);
-  const unlock = useCallback(() => setLocked(false), []);
+  const unlock = useCallback(() => {
+    logInfo('unlocked');
+    setLocked(false);
+  }, []);
 
   const start = useCallback(() => {
+    logInfo(`opening data${rootId > 1 ? ` (screen recreated, copy ${rootId})` : ''}`);
     bootstrap()
       .then(async () => {
         const pin = await hasPin();
         setPinSet(pin);
         const st = useStore.getState();
-        setLocked(st.identity.onboarded && (pin || st.settings.biometric));
+        const lockNow = st.identity.onboarded && (pin || st.settings.biometric);
+        logInfo(`app ready (${!st.identity.onboarded ? 'not set up yet' : lockNow ? 'locked' : 'no lock'})`);
+        setLocked(lockNow);
         // Reminders are important but must never stop the app from opening.
         await configureNotifications().catch(() => {});
       })
-      .catch((e: Error) => setError(e.message));
-  }, []);
+      .catch((e: Error) => {
+        logError(`app failed to open: ${e.message}`);
+        setError(e.message);
+      });
+  }, [rootId]);
 
   useEffect(start, [start]);
 
@@ -81,13 +100,17 @@ function App() {
   // Lock again after the configured time in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'inactive') logInfo(`app ${state === 'active' ? 'in front' : 'in background'}${isOwnBiometricTransition() ? ' (fingerprint dialog)' : ''}`);
       // The fingerprint dialog itself can background the app on some phones: that isn't leaving.
       if (isOwnBiometricTransition()) return;
       if (state === 'background') backgroundedAt.current = Date.now();
       if (state === 'active') {
         const away = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
         backgroundedAt.current = null;
-        if ((pinSet || settings.biometric) && away > settings.autoLockMinutes * 60_000) setLocked(true);
+        if ((pinSet || settings.biometric) && away > settings.autoLockMinutes * 60_000) {
+          logInfo(`locking (away ${Math.round(away / 1000)}s)`);
+          setLocked(true);
+        }
         // A new month may have started while the app was in the background.
         generateFixedBills().catch(() => {});
         cloudSyncSoon(0, onCloudResult);
@@ -154,7 +177,7 @@ function App() {
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
       </Stack>
       <ShareCatcher />
-      {identity.onboarded && !locked ? <Router /> : null}
+      {identity.onboarded && !locked ? <Router rootId={rootId} /> : null}
       {!identity.onboarded ? <OnboardingRedirect /> : null}
       <ToastHost />
       {locked && identity.onboarded ? (
@@ -174,10 +197,11 @@ function onCloudResult(r: CloudResult) {
 }
 
 function OnboardingRedirect() {
+  const navReady = useNavigationReady();
   useEffect(() => {
-    const t = setTimeout(() => router.replace('/onboarding'), 0);
-    return () => clearTimeout(t);
-  }, []);
+    if (!navReady) return;
+    router.replace('/onboarding');
+  }, [navReady]);
   return null;
 }
 
@@ -186,54 +210,102 @@ function OnboardingRedirect() {
  * locked, copies it to its own file and holds it until Router can open it.
  */
 function ShareCatcher() {
-  const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
+  const { isReady, hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
   const setPending = usePendingShare((s) => s.set);
   // resetShareIntent is a new function every render, so this effect re-runs until the reset lands:
   // remember the share already taken so one screenshot isn't queued twice.
   const handled = useRef<typeof shareIntent | null>(null);
 
   useEffect(() => {
+    logInfo(`share module ${isReady ? 'ready' : 'NOT ready (share sheet cannot reach the app)'}`);
+  }, [isReady]);
+
+  useEffect(() => {
     if (!hasShareIntent || handled.current === shareIntent) return;
     handled.current = shareIntent;
     const files = shareIntent.files ?? [];
+    const scheme = (p?: string | null) => p?.match(/^[a-z]+:/)?.[0] ?? (p ? 'path' : 'none');
+    logInfo(
+      `share received: type=${shareIntent.type ?? '?'} files=${files.length}${files.map((f) => ` [${f.mimeType ?? 'no-mime'} ${scheme(f.path)}]`).join('')}${shareIntent.text ? ' +text' : ''}`,
+    );
     const isImage = (f: (typeof files)[number]) => f.mimeType?.startsWith('image/') || /\.(?:png|jpe?g|webp|heic)$/i.test(f.fileName ?? f.path ?? '');
     const file = files.find((f) => f.fileName?.endsWith('.emx')) ?? files.find(isImage);
     resetShareIntent();
     if (!file?.path) {
+      logInfo('no readable picture in the share');
       toast("That share didn't include a picture ExpenseMonster can read", { tone: 'error' });
       return;
     }
     const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
     if (file.fileName?.endsWith('.emx')) return setPending({ kind: 'backup', uri, extra: 0 });
     // Copy now: the share library reuses the sender's file name, so the next share would overwrite it.
-    stageImage(uri).then((staged) => setPending({ kind: 'image', uri: staged, extra: files.length - 1 }));
+    stageImage(uri).then((staged) => {
+      logInfo(staged === uri ? 'copy failed: using the shared file as is' : 'screenshot copied');
+      setPending({ kind: 'image', uri: staged, extra: files.length - 1 });
+      logInfo('waiting to open Scan (opens when unlocked)');
+    });
   }, [hasShareIntent, shareIntent, resetShareIntent, setPending]);
 
   useEffect(() => {
-    if (error) toast(`Couldn't receive the shared screenshot: ${error}`, { tone: 'error' });
+    if (!error) return;
+    logError(`share module error: ${error}`);
+    toast(`Couldn't receive the shared screenshot: ${error}`, { tone: 'error' });
   }, [error]);
 
   return null;
 }
 
+/**
+ * True once Expo Router can navigate. Navigating earlier throws "Attempted to navigate before
+ * mounting the Root Layout component", and a throw inside an effect crashes a release build: that
+ * crash is what made shared screenshots "do nothing" right after unlocking.
+ */
+function useNavigationReady(): boolean {
+  const navigation = useNavigationContainerRef();
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (ready) return;
+    const check = () => {
+      if (navigation.isReady()) setReady(true);
+    };
+    const timer = setInterval(check, 100);
+    const first = setTimeout(check, 0);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(first);
+    };
+  }, [ready, navigation]);
+  return ready;
+}
+
 /** Deep links from notifications, and opening a shared screenshot once the app is unlocked. */
-function Router() {
+function Router({ rootId }: { rootId: number }) {
   const lastResponse = Notifications.useLastNotificationResponse();
   const pending = usePendingShare((s) => s.pending);
   const clearPending = usePendingShare((s) => s.clear);
+  const navReady = useNavigationReady();
 
   useEffect(() => {
     if (!pending) return;
-    clearPending();
-    if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
-    else {
-      router.push({ pathname: '/scan', params: { uri: pending.uri } });
-      if (pending.extra) toast('Scanning the first screenshot; share the others one at a time');
+    if (rootId !== latestRoot) {
+      logInfo('an older copy of the app left the screenshot for the current one');
+      return;
     }
-  }, [pending, clearPending]);
+    if (!navReady) {
+      logInfo('screenshot waiting for navigation to be ready');
+      return;
+    }
+    logInfo(`opening ${pending.kind === 'backup' ? 'Sync' : 'Scan'}`);
+    // router.push only queues: Expo Router checks readiness later, in its own effect, where a throw
+    // can't be caught here and crashes the app. Hence the navReady / newest-tree checks above.
+    if (pending.kind === 'backup') router.push({ pathname: '/sync', params: { file: pending.uri } });
+    else router.push({ pathname: '/scan', params: { uri: pending.uri } });
+    clearPending();
+    if (pending.kind === 'image' && pending.extra) toast('Scanning the first screenshot; share the others one at a time');
+  }, [pending, clearPending, navReady, rootId]);
 
   useEffect(() => {
-    if (!lastResponse) return;
+    if (!lastResponse || !navReady || rootId !== latestRoot) return;
     const data = lastResponse.notification.request.content.data as { href?: string; dueKey?: string } | undefined;
     if (lastResponse.actionIdentifier === ACTION_SNOOZE) {
       snooze(lastResponse.notification.request).then(() => toast('Snoozed for a day'));
@@ -245,7 +317,7 @@ function Router() {
       router.push(data.href as never);
     }
     Notifications.clearLastNotificationResponseAsync().catch(() => {});
-  }, [lastResponse]);
+  }, [lastResponse, navReady, rootId]);
 
   return null;
 }

@@ -5,7 +5,7 @@ import { billerMeta, viewBill } from '@/domain/bills';
 import { formatDay, isoToYMD, toISO, type YMD } from '@/domain/dates';
 import { formatINR, type Paise } from '@/domain/money';
 import { parseIds } from '@/domain/settle';
-import { flagsOf, suggestCategory } from '@/domain/transactions';
+import { categoryHistory, flagsOf, suggestCategory } from '@/domain/transactions';
 import type { PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { restore } from '@/db/repo';
 import { approveCapture, deleteTransaction, learnRule, rejectCapture, saveTransaction } from '@/data/actions';
@@ -99,6 +99,16 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
       setAutoCat(false);
     }
   };
+  // Categories this payee was filed under before (matched across spellings and its UPI ID).
+  const pastCats = useMemo(
+    () =>
+      type === 'transfer'
+        ? []
+        : categoryHistory(payee.trim() || null, existing?.vpa ?? null, type, txns, existing?.id)
+            .filter((c) => categories.some((x) => x.id === c.categoryId))
+            .slice(0, 3),
+    [payee, existing?.vpa, existing?.id, type, txns, categories],
+  );
   const amount = Math.round(Number(amountStr || '0') * 100);
   const cardHint = flags.find((f) => f.startsWith('card-hint:'))?.split(':')[1];
 
@@ -289,6 +299,33 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         </Field>
       ) : (
         <Field label="Category">
+          {pastCats.length ? (
+            <View style={{ gap: 6, marginBottom: space(1) }}>
+              <Txt variant="small" tone="muted">
+                {pastCats.length > 1
+                  ? `${payee.trim() || 'This payee'} was filed two ways before — pick the one for this payment:`
+                  : `${payee.trim() || 'This payee'} was filed here ${pastCats[0].count === 1 ? 'last time' : `the last ${pastCats[0].count} times`}:`}
+              </Txt>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {pastCats.map((p) => {
+                  const c = categories.find((x) => x.id === p.categoryId)!;
+                  return (
+                    <Chip
+                      key={p.categoryId}
+                      label={`${c.name} ×${p.count}`}
+                      icon={c.icon as IconName}
+                      color={c.color}
+                      selected={categoryId === p.categoryId}
+                      onPress={() => {
+                        setCategoryId(p.categoryId);
+                        setAutoCat(false);
+                      }}
+                    />
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {shownCats.map((c) => (
               <Chip
