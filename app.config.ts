@@ -1,6 +1,25 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
+ * Which build this is, shown in the diagnostics log so a log can be matched to its code: CI sets
+ * BUILD_REF (e.g. "pr15", "main") and BUILD_SHA; a local build falls back to the checked-out commit.
+ */
+function buildId(): string {
+  let sha = process.env.BUILD_SHA ?? '';
+  if (!sha) {
+    try {
+      // Config files run in Node; the app's TypeScript setup has no Node types, hence require.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { execSync } = require('child_process') as { execSync: (cmd: string, opts: object) => { toString(): string } };
+      sha = execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    } catch {
+      sha = 'unknown';
+    }
+  }
+  return [process.env.BUILD_REF ?? 'local', sha.slice(0, 7)].join(' ');
+}
+
+/**
  * INTERNET is kept for the optional Supabase cloud sync (project in src/config/supabase.ts) and the
  * optional assistant model download. Both are off until the user turns them on; the sync server
  * only ever receives end-to-end encrypted bundles.
@@ -14,6 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: 'ExpenseMonster',
   slug: 'expense-monster',
   version: '1.0.0',
+  extra: { ...config.extra, build: buildId() },
   scheme: 'expensemonster',
   orientation: 'portrait',
   icon: './assets/icon.png',
@@ -61,6 +81,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-camera', { cameraPermission: 'Used only to scan the pairing QR code of a family member’s phone.', recordAudioAndroid: false }],
     ['expo-image-picker', { photosPermission: 'Used to read payment screenshots you choose. Images stay on this phone.', cameraPermission: 'Used only to scan the pairing QR code.', microphonePermission: false }],
     // Galleries and file managers often share even a single picture as SEND_MULTIPLE, so register for both.
+    // Shares arrive in a small native activity that forwards them to the running app. Listed before
+    // expo-share-intent because manifest mods run last-listed first: this moves the filters it adds.
+    './plugins/withShareReceiver',
     ['expo-share-intent', { androidIntentFilters: ['image/*'], androidMultiIntentFilters: ['image/*'], disableIOS: true }],
     // On-device assistant runtime (LiteRT-LM, ~21 MB). The Gemma weights are not bundled: the
     // user downloads them from Settings → On-device assistant, so the APK stays small.

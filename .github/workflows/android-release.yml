@@ -35,6 +35,9 @@ jobs:
     # Secrets and variables come from this GitHub environment (repo-level ones still apply).
     environment: DEV
     env:
+      # Shown in the app's diagnostics log ("App v1.0.0 (pr15 3f2a9c1)"), read by app.config.ts.
+      BUILD_REF: ${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.ref_name }}
+      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
     steps:
       - uses: actions/checkout@v7
