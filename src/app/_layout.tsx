@@ -12,7 +12,7 @@ import * as ScreenCapture from 'expo-screen-capture';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -35,13 +35,28 @@ installErrorCapture();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
+  const [rootId] = useState(() => ++latestRoot);
+  const newest = useSyncExternalStore(subscribeRoots, () => newestMountedRoot);
+  useEffect(() => {
+    if (rootId > 1) logInfo(`screen recreated (copy ${rootId}): older copies close their screens`);
+    mountedRoots.add(rootId);
+    setNewestMounted();
+    return () => {
+      mountedRoots.delete(rootId);
+      setNewestMounted();
+    };
+  }, [rootId]);
+  // An older copy keeps running in the background while the new one opens: its screens (Scan among
+  // them) would still call router.replace when a scan finishes, and that lands in the new copy's
+  // navigation queue before it is ready, crashing the app. So an older copy renders nothing at all.
+  if (rootId < newest) return null;
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         {/* Not reset on background: the biometric unlock prompt can background the app on some phones and
             would drop a screenshot shared from GPay / PhonePe / BHIM. Router clears it once handled. */}
         <ShareIntentProvider options={{ resetOnBackground: false }}>
-          <App />
+          <App rootId={rootId} />
         </ShareIntentProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -54,9 +69,19 @@ export default function RootLayout() {
  * Router's global navigation queue: only the newest may navigate.
  */
 let latestRoot = 0;
+const mountedRoots = new Set<number>();
+let newestMountedRoot = 0;
+const rootListeners = new Set<() => void>();
+function subscribeRoots(notify: () => void) {
+  rootListeners.add(notify);
+  return () => rootListeners.delete(notify);
+}
+function setNewestMounted() {
+  newestMountedRoot = Math.max(0, ...mountedRoots);
+  for (const notify of rootListeners) notify();
+}
 
-function App() {
-  const [rootId] = useState(() => ++latestRoot);
+function App({ rootId }: { rootId: number }) {
   const { colors, dark } = useTheme();
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Sora_600SemiBold, Sora_700Bold });
   const ready = useStore((s) => s.ready);
