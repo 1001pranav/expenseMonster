@@ -1,8 +1,10 @@
 import { buildCardLedger } from './creditCard';
-import { addMonths, monthKey, type YMD } from './dates';
+import { addMonths, isoToYMD, monthKey, shortMonth, type YMD } from './dates';
 import { budgetUsage } from './budget';
+import { loanEmisPaid } from './dues';
+import { loanProgress, scheduleFor } from './emi';
 import { formatINR, type Paise } from './money';
-import { monthTotals } from './transactions';
+import { isLive, monthTotals } from './transactions';
 import type { Budget, CardStatementOverride, CreditCard, Loan, Transaction } from './types';
 
 export type HealthStatus = 'good' | 'watch' | 'risk' | 'unknown';
@@ -34,10 +36,21 @@ function lastCompleteMonths(today: YMD, count: number): string[] {
   return Array.from({ length: count }, (_, i) => monthKey(addMonths(`${monthKey(today)}-01`, -(i + 1))));
 }
 
-/** Monthly EMI owed on open borrowed loans with a schedule. */
-export function monthlyEmi(loans: Loan[]): Paise {
-  return loans.filter((l) => !l.deletedAt && !l.closed && l.direction === 'borrowed' && l.emi > 0).reduce((a, l) => a + l.emi, 0);
+/**
+ * Monthly EMI owed on open borrowed loans. A loan whose every EMI is paid no longer costs anything,
+ * even if nobody marked it closed. Pass `today` to apply that check (needs the transactions).
+ */
+export function monthlyEmi(loans: Loan[], transactions: Transaction[] = [], today?: YMD): Paise {
+  const live = transactions.filter(isLive);
+  const owing = (l: Loan) => !today || l.tenureMonths <= 0 || loanProgress(scheduleFor(l), loanEmisPaid(l, live), today).emisLeft > 0;
+  return loans.filter((l) => !l.deletedAt && !l.closed && l.direction === 'borrowed' && l.emi > 0 && owing(l)).reduce((a, l) => a + l.emi, 0);
 }
+
+/**
+ * Money that is really earned. Repayments of money you lent are saved as income so the account
+ * balance is right, but the loan going out was never spending: counting them would inflate income.
+ */
+const isEarning = (t: Transaction) => !(t.type === 'income' && t.linkType === 'loan');
 
 /**
  * Rule-based financial health. Plain arithmetic with conventional thresholds, so it is exact,
@@ -45,17 +58,29 @@ export function monthlyEmi(loans: Loan[]): Paise {
  * `money` formats amounts in the reasons; screens pass useMoneyText() so "Hide amounts" masks them.
  */
 export function financialHealth(input: HealthInput, today: YMD, money: (p: Paise) => string = formatINR): HealthMetric[] {
-  const months = lastCompleteMonths(today, HEALTH_MONTHS);
-  const totals = months.map((m) => monthTotals(input.transactions, m));
+  // Only months since tracking began: averaging over months with no entries at all would make a
+  // new user's income look a third of what it is (and their EMIs three times as heavy).
+  const live = input.transactions.filter(isLive);
+  const first = live.reduce<string | null>((a, t) => (a === null || t.occurredAt < a ? t.occurredAt : a), null);
+  const since = first ? monthKey(isoToYMD(first)) : null;
+  const months = since ? lastCompleteMonths(today, HEALTH_MONTHS).filter((m) => m >= since) : [];
+  const earning = live.filter(isEarning);
+  const totals = months.map((m) => monthTotals(earning, m));
   const income = totals.reduce((a, t) => a + t.income, 0);
   const expense = totals.reduce((a, t) => a + t.expense, 0);
-  const avgIncome = Math.round(income / HEALTH_MONTHS);
-  const span = `the last ${HEALTH_MONTHS} full months`;
+  const avgIncome = months.length ? Math.round(income / months.length) : 0;
+  const span = months.length === 1 ? `${shortMonth(months[0])} (the only full month tracked)` : `the last ${months.length} full months`;
+  // Why there is no figure: nothing recorded yet, or tracking began this month.
+  const noData = !since
+    ? 'No entries yet.'
+    : !months.length
+      ? `Tracking started in ${shortMonth(since)}: this needs one full month of entries.`
+      : `No income recorded in ${span}.`;
   const out: HealthMetric[] = [];
 
   // Savings rate: share of income not spent.
   if (income <= 0) {
-    out.push({ key: 'savings_rate', label: 'Savings rate', value: '—', status: 'unknown', reason: `No income recorded in ${span}.` });
+    out.push({ key: 'savings_rate', label: 'Savings rate', value: '—', status: 'unknown', reason: noData });
   } else {
     const rate = (income - expense) / income;
     out.push({
@@ -68,11 +93,11 @@ export function financialHealth(input: HealthInput, today: YMD, money: (p: Paise
   }
 
   // EMI-to-income (lenders' FOIR): above ~50% most banks stop lending.
-  const emi = monthlyEmi(input.loans);
+  const emi = monthlyEmi(input.loans, input.transactions, today);
   if (!emi) {
     out.push({ key: 'emi_to_income', label: 'EMIs vs income', value: '0%', status: 'good', reason: 'No open loan EMIs.' });
   } else if (avgIncome <= 0) {
-    out.push({ key: 'emi_to_income', label: 'EMIs vs income', value: '—', status: 'unknown', reason: `EMIs of ${money(emi)} a month, but no income recorded in ${span}.` });
+    out.push({ key: 'emi_to_income', label: 'EMIs vs income', value: '—', status: 'unknown', reason: `EMIs of ${money(emi)} a month. ${noData}` });
   } else {
     const ratio = emi / avgIncome;
     out.push({
