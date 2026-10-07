@@ -1,11 +1,26 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
- * Which build this is, shown in the diagnostics log so a log can be matched to its code: CI sets
- * BUILD_REF (e.g. "pr15", "main") and BUILD_SHA; a local build falls back to the checked-out commit.
+ * Which build this is, shown in the diagnostics log so a log can be matched to its code, e.g.
+ * "pr15 3f2a9c1". On GitHub Actions it comes from the run's own variables (a pull request's head
+ * commit, not the temporary merge commit); a local build uses the checked-out commit.
  */
 function buildId(): string {
-  let sha = process.env.BUILD_SHA ?? '';
+  const env = process.env;
+  let sha = '';
+  let ref = 'local';
+  if (env.GITHUB_ACTIONS) {
+    const pr = env.GITHUB_REF?.match(/^refs\/pull\/(\d+)\//)?.[1];
+    ref = pr ? `pr${pr}` : (env.GITHUB_REF_NAME ?? 'ci');
+    sha = env.GITHUB_SHA ?? '';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const event = JSON.parse(require('fs').readFileSync(env.GITHUB_EVENT_PATH ?? '', 'utf8')) as { pull_request?: { head?: { sha?: string } } };
+      sha = event.pull_request?.head?.sha ?? sha;
+    } catch {
+      // Not a pull request event, or no event file: keep GITHUB_SHA.
+    }
+  }
   if (!sha) {
     try {
       // Config files run in Node; the app's TypeScript setup has no Node types, hence require.
@@ -16,17 +31,8 @@ function buildId(): string {
       sha = 'unknown';
     }
   }
-  return [process.env.BUILD_REF ?? 'local', sha.slice(0, 7)].join(' ');
+  return `${ref} ${sha.slice(0, 7)}`;
 }
-
-/**
- * INTERNET is kept for the optional Supabase cloud sync (project in src/config/supabase.ts) and the
- * optional assistant model download. Both are off until the user turns them on; the sync server
- * only ever receives end-to-end encrypted bundles.
- *
- * The app never reads SMS: bank messages come in only when the user pastes one. The SMS
- * permissions are blocked so no library can merge them back into the manifest.
- */
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
