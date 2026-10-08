@@ -11,6 +11,8 @@ const KEYS = {
   pinHash: 'emx.pinHash',
   pinSalt: 'emx.pinSalt',
   failed: 'emx.failedPins',
+  vaultKey: 'emx.vaultKey',
+  vaultToken: 'emx.vaultToken',
 } as const;
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
@@ -31,6 +33,25 @@ export async function getHouseholdKey(): Promise<Uint8Array | null> {
 
 export async function setHouseholdKey(key: Uint8Array): Promise<void> {
   await SecureStore.setItemAsync(KEYS.household, toBase64(key), OPTS);
+}
+
+/**
+ * Personal cloud backup secrets: the key derived from the user's password (the password itself is
+ * never stored) and the random write token. Both are re-created from the password on a new phone.
+ */
+export async function getVaultSecrets(): Promise<{ key: Uint8Array; token: string } | null> {
+  const [key, token] = await Promise.all([SecureStore.getItemAsync(KEYS.vaultKey, OPTS), SecureStore.getItemAsync(KEYS.vaultToken, OPTS)]);
+  return key && token ? { key: fromBase64(key), token } : null;
+}
+
+export async function setVaultSecrets(key: Uint8Array, token: string): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.vaultKey, toBase64(key), OPTS);
+  await SecureStore.setItemAsync(KEYS.vaultToken, token, OPTS);
+}
+
+export async function clearVaultSecrets(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEYS.vaultKey, OPTS);
+  await SecureStore.deleteItemAsync(KEYS.vaultToken, OPTS);
 }
 
 export async function hasPin(): Promise<boolean> {

@@ -58,6 +58,19 @@ Setup:
 
 The anon key ships inside the APK, so anyone can call the two functions. They can't read anything they don't hold the key for, junk uploads fail to decrypt and are skipped, and `emx_push` caps uploads per mailbox per hour.
 
+## Optional cloud backup (password-encrypted)
+
+Off by default. Settings → *Cloud backup* keeps a copy of **everything on the phone, private entries included**, on the same Supabase project, so a lost or replaced phone can be restored. It is separate from household cloud sync and works without pairing.
+
+- **Password stays on the phone.** The key is derived on the phone (PBKDF2-SHA256, 300k rounds, random salt) and the snapshot is sealed with AES-256-GCM before upload. Neither the password nor the key is sent or stored on the server. The derived key is kept in the Keystore so background backups don't ask for the password; the password itself is never saved.
+- **Recovery code.** Each backup gets a random 24-character code (`XXXX-XXXX-…`, 120 bits). The server finds the backup by this code, never by the password, so equal passwords never collide and the server can't be probed with password guesses. Restoring on a new phone needs the code **and** the password. Forget the password and the backup cannot be opened by anyone.
+- **What the server stores** (`emx_vaults`): the code, the salt and round count, the ciphertext, a version number, and `sha256` of a random write token. The token travels inside the encrypted payload, so only phones that opened the backup can overwrite or delete it.
+- **When it runs:** with the same triggers as cloud sync (app opened, about 10 s after an edit, *Back up now*). Each run checks the version; if another phone changed the backup it downloads, merges (newest edit wins) and then uploads one snapshot if anything changed. Writes are compare-and-swap on the version, so two phones never overwrite each other's edits.
+- **Change password:** asks for the current one, re-encrypts with a new salt. Other phones using the backup ask for the new password once.
+- **Turn off:** forgets the key on this phone; optionally deletes the backup from the cloud.
+
+Setup: run `supabase/migrations/20261008000000_emx_vault.sql` as well. It only adds a new table and functions and leaves the household mailbox alone.
+
 ## Financial health and the optional on-device assistant
 
 **Financial health** (Insights) is plain code, so it works on every phone. It shows the savings rate and EMIs as a share of income (both averaged over the last 3 complete months), credit card utilisation, and this month's budgets. Each is rated good / watch / risk against common thresholds: saving 20%+, EMIs ≤30% (≤50% at most), utilisation ≤30%. Source: `src/domain/health.ts`.
@@ -83,7 +96,7 @@ Both are deep links on `expensemonster://`, so Expo Router opens the screen and 
 
 - App lock: biometrics and/or a 6-digit PIN. The PIN is stored as a salted PBKDF2 hash in the Keystore. Auto-lock timeout is configurable, and you can opt in to an erase after 10 wrong PINs.
 - `FLAG_SECURE` blocks screenshots and the recent-apps preview. You can turn it off.
-- Nothing is sent over the network unless you turn on cloud sync, and then only end-to-end encrypted household rows. ML Kit's bundled model works offline.
+- Nothing is sent over the network unless you turn on cloud sync (end-to-end encrypted household rows) or cloud backup (everything, encrypted with your password). ML Kit's bundled model works offline.
 - Raw SMS text is never stored, only the parsed fields plus a hash. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
 - Backups are encrypted with your passphrase (PBKDF2-SHA256 → AES-GCM). CSV export escapes formula characters.
 

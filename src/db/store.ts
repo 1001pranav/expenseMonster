@@ -16,6 +16,8 @@ export interface Settings {
   setupDismissed: boolean;
   /** Upload encrypted household changes to the Supabase mailbox. Off by default: data stays on the phone. */
   cloudSync: boolean;
+  /** Personal cloud backup, sealed with the user's password (services/vault.ts). Off by default. */
+  vaultSync: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   syncConflictPolicy: 'ask',
   setupDismissed: false,
   cloudSync: false,
+  vaultSync: false,
 };
 
 export interface Identity {

@@ -77,7 +77,19 @@ export async function loadConflicts(): Promise<PendingConflict[]> {
 
 const saveConflicts = (list: PendingConflict[]) => setMeta(CONFLICTS_KEY, JSON.stringify(list));
 
-async function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
+let mergeQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Merges read the local rows and then write; household cloud sync, the personal backup and file
+ * imports can all run at once, so they take turns.
+ */
+export function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
+  const run = mergeQueue.then(() => mergeBundleNow(bundle, policy));
+  mergeQueue = run.catch(() => {});
+  return run;
+}
+
+async function mergeBundleNow(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
   const peers = await listPeers();
   const lastSync = peers.find((p) => p.deviceId === bundle.fromDeviceId)?.lastReceivedAt ?? null;
   const totals = { inserted: 0, updated: 0, skipped: 0, autoResolved: 0, pendingConflicts: 0 };

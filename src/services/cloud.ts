@@ -22,7 +22,8 @@ export const cloudConfigured = Boolean(URL && KEY);
 const PAGE = 20;
 const TIMEOUT_MS = 20_000;
 
-async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+/** Call one of the SECURITY DEFINER functions; also used by the personal backup (vault.ts). */
+export async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {

@@ -20,6 +20,7 @@ import { generateFixedBills } from '@/data/actions';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
+import { vaultSyncSoon } from '@/services/vault';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
@@ -114,6 +115,7 @@ function App() {
         // A new month may have started while the app was in the background.
         generateFixedBills().catch(() => {});
         cloudSyncSoon(0, onCloudResult);
+        vaultSyncSoon(0);
       }
     });
     return () => sub.remove();
@@ -133,8 +135,10 @@ function App() {
 
   // Optional cloud sync: upload edits shortly after they happen (no-op unless the user turned it on).
   useEffect(() => {
-    if (ready && identity.onboarded && !locked) cloudSyncSoon(10_000, onCloudResult);
-  }, [ready, version, identity.onboarded, locked, settings.cloudSync]);
+    if (!ready || !identity.onboarded || locked) return;
+    cloudSyncSoon(10_000, onCloudResult);
+    vaultSyncSoon(10_000);
+  }, [ready, version, identity.onboarded, locked, settings.cloudSync, settings.vaultSync]);
 
   useEffect(() => {
     if (!ready || locked || !identity.onboarded) return;
