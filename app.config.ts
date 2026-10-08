@@ -1,19 +1,45 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /**
- * INTERNET is kept for the optional Supabase cloud sync (project in src/config/supabase.ts) and the
- * optional assistant model download. Both are off until the user turns them on; the sync server
- * only ever receives end-to-end encrypted bundles.
- *
- * The app never reads SMS: bank messages come in only when the user pastes one. The SMS
- * permissions are blocked so no library can merge them back into the manifest.
+ * Which build this is, shown in the diagnostics log so a log can be matched to its code, e.g.
+ * "pr15 3f2a9c1". On GitHub Actions it comes from the run's own variables (a pull request's head
+ * commit, not the temporary merge commit); a local build uses the checked-out commit.
  */
+function buildId(): string {
+  const env = process.env;
+  let sha = '';
+  let ref = 'local';
+  if (env.GITHUB_ACTIONS) {
+    const pr = env.GITHUB_REF?.match(/^refs\/pull\/(\d+)\//)?.[1];
+    ref = pr ? `pr${pr}` : (env.GITHUB_REF_NAME ?? 'ci');
+    sha = env.GITHUB_SHA ?? '';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const event = JSON.parse(require('fs').readFileSync(env.GITHUB_EVENT_PATH ?? '', 'utf8')) as { pull_request?: { head?: { sha?: string } } };
+      sha = event.pull_request?.head?.sha ?? sha;
+    } catch {
+      // Not a pull request event, or no event file: keep GITHUB_SHA.
+    }
+  }
+  if (!sha) {
+    try {
+      // Config files run in Node; the app's TypeScript setup has no Node types, hence require.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { execSync } = require('child_process') as { execSync: (cmd: string, opts: object) => { toString(): string } };
+      sha = execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    } catch {
+      sha = 'unknown';
+    }
+  }
+  return `${ref} ${sha.slice(0, 7)}`;
+}
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'ExpenseMonster',
   slug: 'expense-monster',
   version: '1.0.0',
+  extra: { ...config.extra, build: buildId() },
   scheme: 'expensemonster',
   orientation: 'portrait',
   icon: './assets/icon.png',
@@ -61,6 +87,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-camera', { cameraPermission: 'Used only to scan the pairing QR code of a family member’s phone.', recordAudioAndroid: false }],
     ['expo-image-picker', { photosPermission: 'Used to read payment screenshots you choose. Images stay on this phone.', cameraPermission: 'Used only to scan the pairing QR code.', microphonePermission: false }],
     // Galleries and file managers often share even a single picture as SEND_MULTIPLE, so register for both.
+    // Shares arrive in a small native activity that forwards them to the running app. Listed before
+    // expo-share-intent because manifest mods run last-listed first: this moves the filters it adds.
+    './plugins/withShareReceiver',
     ['expo-share-intent', { androidIntentFilters: ['image/*'], androidMultiIntentFilters: ['image/*'], disableIOS: true }],
     // On-device assistant runtime (LiteRT-LM, ~21 MB). The Gemma weights are not bundled: the
     // user downloads them from Settings → On-device assistant, so the APK stays small.

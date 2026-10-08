@@ -30,7 +30,7 @@ jest.mock('expo-file-system', () => ({
 jest.mock('react-native-web/dist/exports/Platform', () => ({ __esModule: true, default: { OS: 'android', Version: 34 } }), { virtual: true });
 jest.mock('expo-sharing', () => ({ shareAsync: jest.fn() }));
 jest.mock('expo-device', () => ({ manufacturer: 'Test', modelName: 'Phone' }));
-jest.mock('expo-constants', () => ({ expoConfig: { version: '1.0.0' } }));
+jest.mock('expo-constants', () => ({ expoConfig: { version: '1.0.0', extra: { build: 'pr15 3f2a9c1' } } }));
 jest.mock('../files', () => ({ writeCacheFile: jest.fn(() => ({ uri: 'file://log.txt' })) }));
 
 
@@ -66,6 +66,6 @@ describe('diagnostics log', () => {
     expect(lines).toHaveLength(300);
     expect(lines.at(-1)).toMatch(/INFO  step 309$/);
     expect(mockFiles.get('doc/diagnostics.log')?.split('\n')).toHaveLength(300);
-    expect(diagnosticsText()).toMatch(/^ExpenseMonster diagnostics\nApp 1\.0\.0 · Test Phone/);
+    expect(diagnosticsText()).toMatch(/^ExpenseMonster diagnostics\nApp v1\.0\.0 \(pr15 3f2a9c1\) · Test Phone/);
   });
 });

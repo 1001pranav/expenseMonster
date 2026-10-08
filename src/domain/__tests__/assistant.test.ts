@@ -91,6 +91,41 @@ describe('financial health', () => {
     expect(all.find((m) => m.key === 'card_utilisation')!.status).toBe('unknown');
   });
 
+  it('averages income only over the months since tracking started', () => {
+    // Tracking began in August: one full month, not three.
+    const transactions = [salary('2026-08', 60_000_00), salary('2026-09', 60_000_00)];
+    const all = financialHealth({ transactions, loans: [loan({ emi: 15_000_00 })], cards: [], cardOverrides: [], budgets: [] }, TODAY);
+    const emi = all.find((m) => m.key === 'emi_to_income')!;
+    expect(emi.value).toBe('25%');
+    expect(emi.status).toBe('good');
+    expect(all.find((m) => m.key === 'savings_rate')!.reason).toContain('Aug (the only full month tracked)');
+  });
+
+  it('says it needs a full month when tracking started this month', () => {
+    const rate = financialHealth({ transactions: [salary('2026-09')], loans: [], cards: [], cardOverrides: [], budgets: [] }, TODAY).find((m) => m.key === 'savings_rate')!;
+    expect(rate.status).toBe('unknown');
+    expect(rate.reason).toBe('Tracking started in Sep: this needs one full month of entries.');
+  });
+
+  it('does not count repayments of money you lent as income', () => {
+    const transactions = [
+      ...months.map((m) => salary(m, 50_000_00)),
+      ...months.map((m) => txn({ amount: 40_000_00, occurredAt: `${m}-10T06:00:00.000Z` })),
+      txn({ type: 'income', amount: 1_00_000_00, linkType: 'loan', linkId: 'lent-1', occurredAt: '2026-08-15T06:00:00.000Z' }),
+    ];
+    const rate = financialHealth({ transactions, loans: [], cards: [], cardOverrides: [], budgets: [] }, TODAY).find((m) => m.key === 'savings_rate')!;
+    expect(rate.value).toBe('20%');
+  });
+
+  it('stops counting the EMI of a loan whose EMIs are all paid', () => {
+    const done = loan({ id: 'done', emi: 10_000_00, principal: 30_000_00, ratePa: 0, interestType: 'none', tenureMonths: 3, firstEmiDate: '2026-01-05', paidBeforeTracking: 3 });
+    expect(monthlyEmi([done, loan({ emi: 100 })], [], TODAY)).toBe(100);
+    // Paid through the app instead of before tracking.
+    const paid = [1, 2, 3].map((i) => txn({ amount: 10_000_00, linkType: 'loan', linkId: 'done', occurredAt: `2026-0${i}-05T06:00:00.000Z` }));
+    expect(monthlyEmi([{ ...done, paidBeforeTracking: 0 }], paid, TODAY)).toBe(0);
+    expect(monthlyEmi([{ ...done, paidBeforeTracking: 0 }], [], TODAY)).toBe(10_000_00);
+  });
+
   it('computes card utilisation from the ledger', () => {
     const transactions = [txn({ amount: 40_000_00, method: 'card', cardId: 'card-1', occurredAt: '2026-09-18T06:00:00.000Z' })];
     const util = financialHealth({ transactions, loans: [], cards: [card({ createdAt: '2026-01-01T00:00:00.000Z' })], cardOverrides: [], budgets: [] }, TODAY).find((m) => m.key === 'card_utilisation')!;

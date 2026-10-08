@@ -103,13 +103,19 @@ export function installErrorCapture() {
     });
   }
 
-  logInfo(`app started · v${Constants.expoConfig?.version ?? '?'} · ${Device.manufacturer ?? ''} ${Device.modelName ?? ''} · Android ${Platform.Version}`);
+  logInfo(`app started · ${appVersion()} · ${Device.manufacturer ?? ''} ${Device.modelName ?? ''} · Android ${Platform.Version}`);
+}
+
+/** e.g. "v1.0.0 (pr15 3f2a9c1)": the build the log came from (see app.config.ts). */
+function appVersion(): string {
+  const build = (Constants.expoConfig?.extra as { build?: string } | undefined)?.build;
+  return `v${Constants.expoConfig?.version ?? '?'}${build ? ` (${build})` : ''}`;
 }
 
 export function diagnosticsText(): string {
   const header = [
     'ExpenseMonster diagnostics',
-    `App ${Constants.expoConfig?.version ?? '?'} · ${Device.manufacturer ?? ''} ${Device.modelName ?? ''} · ${Platform.OS} ${Platform.Version}`,
+    `App ${appVersion()} · ${Device.manufacturer ?? ''} ${Device.modelName ?? ''} · ${Platform.OS} ${Platform.Version}`,
     `Shared ${new Date().toISOString()}`,
     '',
   ];
