@@ -1,5 +1,5 @@
-import { buildBundle, validateBundle } from '@/domain/sync/bundle';
-import { DecryptError, keyFromPassphrase, safeEqual, toBase64 } from '@/domain/sync/crypto';
+import { buildBundle, validateBundle, type Bundle } from '@/domain/sync/bundle';
+import { DecryptError, fromBase64, keyFromPassphrase, safeEqual, toBase64 } from '@/domain/sync/crypto';
 import {
   VAULT_ITERATIONS,
   VAULT_MIN_PASSWORD,
@@ -13,12 +13,13 @@ import {
   saltBytes,
   sealVault,
   type VaultContents,
+  type VaultHousehold,
 } from '@/domain/sync/vault';
-import { getMeta, loadTables, saveSettings, setMeta } from '@/db/repo';
+import { getMeta, listPeers, loadTables, saveIdentity, saveSettings, setMeta } from '@/db/repo';
 import { getState } from '@/db/store';
 import { cloudConfigured, rpc } from './cloud';
-import { logFailure } from './diagnostics';
-import { clearVaultSecrets, getVaultSecrets, setVaultSecrets } from './secure';
+import { logFailure, logInfo, logWarn } from './diagnostics';
+import { clearVaultSecrets, getHouseholdKey, getVaultSecrets, setHouseholdKey, setVaultSecrets } from './secure';
 import { collectRows, mergeBundle, type ImportResult } from './sync';
 
 /**
@@ -100,6 +101,42 @@ export async function recoveryCode(): Promise<string | null> {
   return id ? formatRecoveryCode(id) : null;
 }
 
+async function contents(token: string, bundle: Bundle): Promise<VaultContents> {
+  const { identity, settings } = getState();
+  const key = await getHouseholdKey();
+  const household: VaultHousehold | undefined = key
+    ? { id: identity.householdId, name: identity.householdName, key: toBase64(key), selfMemberId: identity.selfMemberId, cloudSync: settings.cloudSync }
+    : undefined;
+  return { v: 1, token, bundle, household };
+}
+
+/**
+ * After a restore: put this phone back in the backed-up household, so family sync works without a
+ * new QR scan. Skipped when this phone is already paired with other phones in another household;
+ * moving it silently would cut it off from them.
+ */
+async function adoptHousehold(h: VaultHousehold | undefined): Promise<string | null> {
+  if (!h) return null;
+  const { identity } = getState();
+  let joined: string | null = null;
+  if (h.id !== identity.householdId) {
+    if ((await listPeers()).length) {
+      logWarn('cloud backup: restored data, but kept this phone in its current household (it has paired phones)');
+    } else {
+      await setHouseholdKey(fromBase64(h.key));
+      await saveIdentity({ householdId: h.id, householdName: h.name });
+      if (h.cloudSync && cloudConfigured) await saveSettings({ cloudSync: true });
+      logInfo('cloud backup: rejoined the household from the backup');
+      joined = h.name;
+    }
+  }
+  if (!identity.selfMemberId && h.selfMemberId && getState().tables.members.some((m) => m.id === h.selfMemberId)) {
+    const me = getState().tables.members.find((m) => m.id === h.selfMemberId)!;
+    await saveIdentity({ selfMemberId: h.selfMemberId, ...(identity.deviceName === 'My phone' ? { deviceName: `${me.name}'s phone` } : {}) });
+  }
+  return joined;
+}
+
 function checkPassword(password: string) {
   if (password.length < VAULT_MIN_PASSWORD) throw new Error(`Use at least ${VAULT_MIN_PASSWORD} characters`);
 }
@@ -118,7 +155,7 @@ export async function enableVault(password: string): Promise<string> {
     p_token: token,
     p_salt: salt,
     p_iterations: VAULT_ITERATIONS,
-    p_payload: sealVault({ v: 1, token, bundle }, key, id),
+    p_payload: sealVault(await contents(token, bundle), key, id),
     p_expected: 0,
   });
   await setVaultSecrets(key, token);
@@ -133,7 +170,7 @@ export async function enableVault(password: string): Promise<string> {
  * was changed on another phone) and merge it into this phone. Newer edits win; nothing is deleted
  * unless it was deleted in the backup.
  */
-export async function restoreVault(code: string, password: string): Promise<Pick<ImportResult, 'inserted' | 'updated'>> {
+export async function restoreVault(code: string, password: string): Promise<Pick<ImportResult, 'inserted' | 'updated'> & { joined: string | null }> {
   if (!cloudConfigured) throw new Error('This build has no cloud server configured');
   const id = parseRecoveryCode(code);
   if (!id) throw new Error('That recovery code is not valid. It has 24 letters and numbers.');
@@ -155,9 +192,10 @@ export async function restoreVault(code: string, password: string): Promise<Pick
   await remember({ id, salt: row.salt, iterations: row.iterations, version: row.version, digest: contentDigest(bundle.tables) });
   await saveSettings({ vaultSync: true });
   getState().setAll(await loadTables(), getState().identity, getState().settings);
+  const joined = await adoptHousehold(contents.household);
   await setStatus({ ok: true, message: `Restored: ${result.inserted} new, ${result.updated} updated` });
   vaultSyncSoon(0);
-  return { inserted: result.inserted, updated: result.updated };
+  return { inserted: result.inserted, updated: result.updated, joined };
 }
 
 async function local() {
@@ -205,7 +243,7 @@ async function syncOnce(): Promise<VaultResult> {
         p_token: v.token,
         p_salt: v.salt,
         p_iterations: v.iterations,
-        p_payload: sealVault({ v: 1, token: v.token, bundle }, v.key, v.id),
+        p_payload: sealVault(await contents(v.token, bundle), v.key, v.id),
         p_expected: v.version,
       }),
     );
@@ -280,7 +318,7 @@ export async function changeVaultPassword(currentPassword: string, newPassword: 
       p_token: v.token,
       p_salt: salt,
       p_iterations: VAULT_ITERATIONS,
-      p_payload: sealVault({ v: 1, token: v.token, bundle }, key, v.id),
+      p_payload: sealVault(await contents(v.token, bundle), key, v.id),
       p_expected: v.version,
     }),
   );

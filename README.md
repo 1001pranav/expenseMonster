@@ -26,7 +26,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 
 ## Phone-to-phone sharing
 
-1. **Pair once:** Household → Sync → *Show my QR* on one phone, *Scan to join* on the other. The QR carries a household AES key, and both phones show the same fingerprint.
+1. **Pair once:** Household → Sync → *Show my QR* on one phone, *Scan to join* on the other. The QR carries a household AES key, and both phones show the same fingerprint. If the showing phone uses cloud sync, the joining phone turns it on as well, and nothing else needs setting up.
 2. **Send:** builds the household rows changed since the last send to that phone, gzips them, encrypts them with **AES-256-GCM** (household id as associated data) and opens the share sheet (WhatsApp, Nearby Share, Bluetooth…).
 3. **Receive:** *Receive file*, then pick the `.emx` file.
 4. **Merge:** rows changed on only one side are applied, and tombstones carry deletions. Re-importing the same file is a no-op. All timestamps are UTC ISO-8601.
@@ -43,7 +43,7 @@ Off by default. When a phone turns it on (Sync → *Sync through the cloud*), it
 
 - **The server can't read your data.** Each upload is a sealed `EMX1.` bundle, exactly like a `.emx` file. The household key never leaves the paired phones.
 - **Mailbox:** bundles are stored under `HKDF-SHA256(household key, household id)`, so only paired phones can address them. The table is closed to clients; the only way in is two `SECURITY DEFINER` functions (`emx_push`, `emx_pull`), so mailboxes can't be listed.
-- **When it syncs:** when the app opens or returns to the foreground, about 10 s after an edit, and when you tap *Sync now*. Each run downloads new bundles from other phones, merges them with your chosen conflict policy, then uploads changes made since this phone's last upload.
+- **When it syncs:** when the app opens or returns to the foreground, about 10 s after an edit, every 30 s while the app is open (download only; backs off to 5 min when offline), and when you tap *Sync now*. Nothing runs while the app is closed. Each run downloads new bundles from other phones, merges them with your chosen conflict policy, then uploads changes made since this phone's last upload.
 - **Retention:** bundles older than 90 days are deleted. Every phone re-uploads all household rows every 30 days, so a phone that joins later still gets old entries. A phone that has been offline for more than 90 days should use *Send all* / *Receive* once.
 - **What the server can see:** the mailbox id, device ids, bundle sizes and timestamps (when your household is active), but not amounts, payees or names.
 
@@ -68,6 +68,7 @@ Off by default. Settings → *Cloud backup* keeps a copy of **everything on the 
 - **When it runs:** with the same triggers as cloud sync (app opened, about 10 s after an edit, *Back up now*). Each run checks the version; if another phone changed the backup it downloads, merges (newest edit wins) and then uploads one snapshot if anything changed. Writes are compare-and-swap on the version, so two phones never overwrite each other's edits.
 - **Change password:** asks for the current one, re-encrypts with a new salt. Other phones using the backup ask for the new password once.
 - **Turn off:** forgets the key on this phone; optionally deletes the backup from the cloud.
+- **Restoring brings the family back too.** The sealed payload also holds the household id, name and key, which member is "me", and whether household cloud sync was on. A new phone (welcome screen → *Restore from cloud backup*) rejoins the household and turns on cloud sync with no QR scan and no onboarding. A phone already paired with others in a different household keeps its household and only gets the data.
 
 Setup: run `supabase/migrations/20261008000000_emx_vault.sql` as well. It only adds a new table and functions and leaves the household mailbox alone.
 

@@ -80,6 +80,22 @@ export interface VaultContents {
   v: 1;
   token: string;
   bundle: Bundle;
+  /**
+   * The household this phone belongs to, so a restored phone rejoins the family without a new QR
+   * scan. Missing in backups made before it was added.
+   */
+  household?: VaultHousehold;
+}
+
+export interface VaultHousehold {
+  id: string;
+  name: string;
+  /** Household key (base64): only ever stored inside the sealed payload. */
+  key: string;
+  /** The member who is "me" on this phone, so a restore doesn't add a second one. */
+  selfMemberId: string;
+  /** Household cloud sync was on; a restored phone turns it on too. */
+  cloudSync: boolean;
 }
 
 /** Binds the ciphertext to its vault, so a payload copied into another vault fails to open. */

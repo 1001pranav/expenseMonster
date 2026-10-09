@@ -1,7 +1,9 @@
 import * as Clipboard from 'expo-clipboard';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { formatDay, isoToYMD } from '@/domain/dates';
 import { VAULT_MIN_PASSWORD } from '@/domain/sync/vault';
+import { saveIdentity } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { changeVaultPassword, disableVault, enableVault, loadVaultStatus, recoveryCode, restoreVault, vaultAvailable, vaultSyncNow, type VaultStatus } from '@/services/vault';
 import { Button, Card, Row, Section, Txt } from '@/ui/components/core';
@@ -16,9 +18,11 @@ type Mode = 'enable' | 'restore' | 'unlock' | 'change' | 'disable' | null;
 export default function CloudBackup() {
   const { colors } = useTheme();
   const on = useStore((s) => s.settings.vaultSync);
+  // Opened from the welcome screen of a new phone: go straight to restore.
+  const params = useLocalSearchParams<{ restore?: string }>();
   const [status, setStatus] = useState<VaultStatus | null>(null);
   const [code, setCode] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>(null);
+  const [mode, setMode] = useState<Mode>(params.restore === '1' && !on ? 'restore' : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pass, setPass] = useState('');
   const [pass2, setPass2] = useState('');
@@ -63,7 +67,19 @@ export default function CloudBackup() {
         setNewCode(await enableVault(pass));
       } else if (mode === 'restore') {
         const r = await restoreVault(codeInput, pass);
-        toast(`Restored: ${r.inserted} new, ${r.updated} updated`, { tone: 'success' });
+        toast(`Restored: ${r.inserted} new, ${r.updated} updated${r.joined ? ` · back in ${r.joined}` : ''}`, { tone: 'success' });
+        const { identity } = useStore.getState();
+        if (!identity.onboarded) {
+          close();
+          // The backup says who "me" is: setup is done. Older backups don't, so finish onboarding.
+          if (identity.selfMemberId) {
+            await saveIdentity({ onboarded: true });
+            // Drop the welcome screen underneath, so Back can't return to it (same end state as finishing onboarding).
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/');
+          } else router.back();
+          return;
+        }
       } else if (mode === 'unlock') {
         await restoreVault(code ?? '', pass);
         toast('Backup unlocked', { tone: 'success' });

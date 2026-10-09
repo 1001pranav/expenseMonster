@@ -37,6 +37,14 @@ describe('sync crypto', () => {
     expect(fingerprint(k)).toBe(fingerprint(key));
     expect(() => decodePair('{"t":"other"}')).toThrow();
   });
+
+  it('carries the cloud-sync flag only when on', () => {
+    const base = { householdId: 'h1', householdName: 'Home', deviceId: 'd1', deviceName: 'Pixel' };
+    expect(decodePair(encodePair({ ...base, cloud: true }, key)).payload.cloud).toBe(true);
+    const off = encodePair({ ...base, cloud: false }, key);
+    expect(off).not.toContain('cloud');
+    expect(decodePair(off).payload.cloud).toBeUndefined();
+  });
 });
 
 describe('bundle + merge', () => {

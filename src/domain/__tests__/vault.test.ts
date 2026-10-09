@@ -45,6 +45,15 @@ describe('vault envelope', () => {
     expect(() => openVault(payload, key, newVaultId())).toThrow(DecryptError);
   });
 
+  it('carries the household so a restored phone can rejoin it', async () => {
+    const key = await keyFromPassphrase('correct horse battery', saltBytes(newSalt()), 1000);
+    const id = newVaultId();
+    const household = { id: 'h', name: 'Home', key: 'a2V5', selfMemberId: 'm1', cloudSync: true };
+    const payload = sealVault({ v: 1, token: newWriteToken(), bundle, household }, key, id);
+    expect(payload).not.toContain('a2V5');
+    expect(openVault(payload, key, id).household).toEqual(household);
+  });
+
   it('keeps private rows (a backup, not a household delta)', () => {
     expect(bundle.tables.transactions).toHaveLength(1);
   });
