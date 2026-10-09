@@ -93,11 +93,12 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
         .sort((x, y) => (x.id < y.id ? -1 : 1))
         .slice(0, limit)
         .map((r) => ({ row: { ...r }, base: db.marks.get(markKey(space, t, r.id))?.seq ?? 0 })),
-    getSyncMark: async (space: string, t: string, id: string) => db.marks.get(markKey(space, t, id)) ?? null,
+    getSyncMarks: async (space: string, t: string, ids: string[]) =>
+      new Map(ids.filter((id) => db.marks.has(markKey(space, t, id))).map((id) => [id, db.marks.get(markKey(space, t, id))!])),
     setSyncMarks: async (space: string, marks: { table: string; id: string; seq: number; updatedAt: string }[]) => {
       for (const m of marks) db.marks.set(markKey(space, m.table, m.id), { seq: m.seq, updatedAt: m.updatedAt });
     },
-    rowById: async (t: string, id: string) => (table(t).has(id) ? { ...table(t).get(id)! } : null),
+    rowsByIds: async (t: string, ids: string[]) => new Map(ids.filter((id) => table(t).has(id)).map((id) => [id, { ...table(t).get(id)! }])),
     applyRemote: async (t: string, rows: Row[]) => rows.forEach((r) => table(t).set(r.id, { ...r })),
     update: async (t: string, id: string, patch: Partial<Row>) => {
       const row = { ...table(t).get(id)!, ...patch, updatedAt: nextTime(), deviceId: device };

@@ -131,22 +131,34 @@ export async function dirtyRows<K extends TableName>(space: string, table: K, af
   return rows.map(({ __seq, ...row }) => ({ row: row as unknown as Row<K>, base: __seq ?? 0 }));
 }
 
-export async function getSyncMark(space: string, table: TableName, id: string): Promise<SyncMark | null> {
-  return getDb().getFirstAsync<SyncMark>('SELECT seq, updatedAt FROM cloud_records WHERE space = ? AND tbl = ? AND id = ?', [space, table, id]);
+/** Sync marks for many records of one table in one query (each query is a native statement; keep them few). */
+export async function getSyncMarks(space: string, table: TableName, ids: string[]): Promise<Map<string, SyncMark>> {
+  if (!ids.length) return new Map();
+  const rows = await getDb().getAllAsync<SyncMark & { id: string }>(
+    `SELECT id, seq, updatedAt FROM cloud_records WHERE space = ? AND tbl = ? AND id IN (${ids.map(() => '?').join(', ')})`,
+    [space, table, ...ids],
+  );
+  return new Map(rows.map((r) => [r.id, { seq: r.seq, updatedAt: r.updatedAt }]));
 }
 
 export async function setSyncMarks(space: string, marks: { table: TableName; id: string; seq: number; updatedAt: string }[]): Promise<void> {
   if (!marks.length) return;
   await getDb().withTransactionAsync(async () => {
-    for (const m of marks) {
-      await getDb().runAsync('INSERT OR REPLACE INTO cloud_records (space, tbl, id, seq, updatedAt) VALUES (?, ?, ?, ?, ?)', [space, m.table, m.id, m.seq, m.updatedAt]);
+    // One prepared statement for the whole batch rather than one per row.
+    const stmt = await getDb().prepareAsync('INSERT OR REPLACE INTO cloud_records (space, tbl, id, seq, updatedAt) VALUES (?, ?, ?, ?, ?)');
+    try {
+      for (const m of marks) await stmt.executeAsync([space, m.table, m.id, m.seq, m.updatedAt]);
+    } finally {
+      await stmt.finalizeAsync();
     }
   });
 }
 
-/** A row including tombstones (the in-memory store only holds live rows). */
-export async function rowById<K extends TableName>(table: K, id: string): Promise<Row<K> | null> {
-  return getDb().getFirstAsync<Row<K>>(`SELECT * FROM "${table}" WHERE id = ?`, [id]);
+/** Rows by id including tombstones (the in-memory store only holds live rows), in one query. */
+export async function rowsByIds<K extends TableName>(table: K, ids: string[]): Promise<Map<string, Row<K>>> {
+  if (!ids.length) return new Map();
+  const rows = await getDb().getAllAsync<Row<K>>(`SELECT * FROM "${table}" WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+  return new Map(rows.map((r) => [r.id, r]));
 }
 
 // ── meta (device-local key/value, never synced) ────────────────────────────

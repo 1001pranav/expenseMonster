@@ -7,7 +7,7 @@ import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sy
 import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
 import { openRecord, planRecord, type Space } from '@/domain/sync/records';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
-import { allRows, applyRemote, getMeta, getSyncMark, listPeers, loadTables, rowById, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
+import { allRows, applyRemote, getMeta, getSyncMarks, listPeers, loadTables, rowsByIds, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
 import { logFailure, logWarn } from './diagnostics';
 import { writeCacheFile } from './files';
@@ -117,22 +117,29 @@ export function applyRecords(space: Space, page: PulledRecord[]): Promise<{ rece
     const marks: { table: TableName; id: string; seq: number; updatedAt: string }[] = [];
     let received = 0;
     let unreadable = 0;
+    // Decrypt the page first, then look up local state per table in one query each.
+    const opened: { seq: number; table: TableName; incoming: BaseRow }[] = [];
     for (const raw of page) {
       const seq = Number(raw.seq);
-      let rec: ReturnType<typeof openRecord>;
       try {
-        rec = openRecord(space, raw.record_key, raw.payload);
+        const rec = openRecord(space, raw.record_key, raw.payload);
         if (!SYNC_TABLES.includes(rec.t)) throw new Error(`unknown table ${rec.t}`);
+        opened.push({ seq, table: rec.t, incoming: rec.r });
       } catch (e) {
         logWarn(`cloud sync: skipped record #${seq} this household key can't open (${(e as Error).message})`);
         unreadable++;
-        continue;
       }
-      const { t: table, r: incoming } = rec;
-      const mark = await getSyncMark(space.id, table, incoming.id);
+    }
+    const state = new Map<TableName, { marks: Awaited<ReturnType<typeof getSyncMarks>>; rows: Map<string, BaseRow> }>();
+    for (const table of new Set(opened.map((o) => o.table))) {
+      const ids = opened.filter((o) => o.table === table).map((o) => o.incoming.id);
+      state.set(table, { marks: await getSyncMarks(space.id, table, ids), rows: (await rowsByIds(table, ids)) as Map<string, BaseRow> });
+    }
+    for (const { seq, table, incoming } of opened) {
+      const mark = state.get(table)!.marks.get(incoming.id);
       // Already have this version: it was pushed from this phone, or seen before.
       if (mark && mark.seq >= seq) continue;
-      const local = (await rowById(table, incoming.id)) ?? undefined;
+      const local = state.get(table)!.rows.get(incoming.id);
       const dirty = Boolean(local) && (!mark || mark.updatedAt !== local!.updatedAt);
       const action = planRecord(local, incoming, dirty, policy);
       if (action.kind === 'insert' || action.kind === 'update') {
