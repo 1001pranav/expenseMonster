@@ -240,6 +240,18 @@ export function vaultSyncNow(): Promise<VaultResult> {
   return inFlight;
 }
 
+/**
+ * Cheap check while the app is open: one tiny request for the server version, and a full sync
+ * only when another phone changed the backup.
+ */
+export async function vaultCheckNow(): Promise<VaultResult | null> {
+  if (!cloudConfigured || !getState().settings.vaultSync || inFlight) return null;
+  const [id, version] = await Promise.all([getMeta(META.id), getMeta(META.version)]);
+  if (!id) return null;
+  const head = Number(await rpc<number>('emx_vault_head', { p_vault: id }));
+  return head === Number(version ?? 0) ? null : vaultSyncNow();
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 /** Debounced background backup; errors land in the status shown on the backup screen. */

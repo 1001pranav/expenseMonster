@@ -163,6 +163,27 @@ export function cloudSyncNow(): Promise<CloudResult> {
   return inFlight;
 }
 
+/**
+ * Cheap check for family edits while the app is open: download only, no upload (local edits
+ * already trigger cloudSyncSoon). Returns null when there was nothing to do or a sync is running.
+ */
+export function cloudPullNow(): Promise<CloudResult | null> {
+  if (!cloudConfigured || !getState().settings.cloudSync || inFlight) return Promise.resolve(null);
+  const run = (async () => {
+    try {
+      const key = await getHouseholdKey();
+      if (!key) throw new Error('Household key missing');
+      const { identity } = getState();
+      return { ...(await pull(mailboxId(key, identity.householdId), identity.deviceId)), sent: 0 };
+    } finally {
+      inFlight = null;
+    }
+  })();
+  // Shares the guard with cloudSyncNow so two pulls never read the same cursor at once.
+  inFlight = run;
+  return run;
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 /** Debounced background sync; errors are kept in the status shown on the Sync screen. */

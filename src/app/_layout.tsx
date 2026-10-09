@@ -20,6 +20,7 @@ import { generateFixedBills } from '@/data/actions';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
+import { startLiveSync } from '@/services/livesync';
 import { vaultSyncSoon } from '@/services/vault';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { stageImage } from '@/services/files';
@@ -139,6 +140,12 @@ function App() {
     cloudSyncSoon(10_000, onCloudResult);
     vaultSyncSoon(10_000);
   }, [ready, version, identity.onboarded, locked, settings.cloudSync, settings.vaultSync]);
+
+  // While the app is open, pick up other phones' edits without waiting for a foreground or an edit here.
+  useEffect(() => {
+    if (!ready || !identity.onboarded || locked || !(settings.cloudSync || settings.vaultSync)) return;
+    return startLiveSync(onCloudResult);
+  }, [ready, identity.onboarded, locked, settings.cloudSync, settings.vaultSync]);
 
   useEffect(() => {
     if (!ready || locked || !identity.onboarded) return;
