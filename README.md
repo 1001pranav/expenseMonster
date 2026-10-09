@@ -40,24 +40,25 @@ Rows marked **private** never leave the phone.
 
 ## Optional cloud sync (Supabase)
 
-Off by default. When a phone turns it on (Sync → *Sync through the cloud*), it swaps the same encrypted bundles automatically instead of you sending files:
+Off by default. When a phone turns it on (Sync → *Sync through the cloud*, or automatically when it scans the QR of a phone that uses it), household entries sync through the cloud without files:
 
-- **The server can't read your data.** Each upload is a sealed `EMX1.` bundle, exactly like a `.emx` file. The household key never leaves the paired phones.
-- **Mailbox:** bundles are stored under `HKDF-SHA256(household key, household id)`, so only paired phones can address them. The table is closed to clients; the only way in is two `SECURITY DEFINER` functions (`emx_push`, `emx_pull`), so mailboxes can't be listed.
-- **When it syncs:** when the app opens or returns to the foreground, about 10 s after an edit, every 30 s while the app is open (download only; backs off to 5 min when offline), and when you tap *Sync now*. Nothing runs while the app is closed. Each run downloads new bundles from other phones, merges them with your chosen conflict policy, then uploads changes made since this phone's last upload.
-- **Retention:** bundles older than 90 days are deleted. Every phone re-uploads all household rows every 30 days, so a phone that joins later still gets old entries. A phone that has been offline for more than 90 days should use *Send all* / *Receive* once.
-- **What the server can see:** the mailbox id, device ids, bundle sizes and timestamps (when your household is active), but not amounts, payees or names.
+- **The server can't read your data.** Each household record (one expense, one loan…) is one server row, sealed on the phone with AES-256-GCM under the household key. The household key never leaves the paired phones.
+- **One sequence number for the family.** Every saved record takes the next number of the household's counter (`emx_spaces.head_seq`). Each phone remembers how far it has read, so *"anything new?"* is one tiny request, and syncing downloads only the records saved after that point: never a whole database, however old the household gets.
+- **Conflicts are detected exactly, without clocks.** A phone uploads an edit together with the number of the version it edited. If someone else saved that record in between, the server refuses it, the phone downloads the other version and applies your conflict policy (Ask me / Newest edit / File wins), then uploads again. Nothing is silently overwritten. "Newest edit" compares edit times on the server-corrected clock (see Data storage).
+- **Only changes are uploaded.** The phone keeps, per record, the version it last synced (`cloud_records`); a record is uploaded only when it was changed on this phone since. Records received from family phones are never echoed back.
+- **When it syncs:** on app start (while the lock screen is up; after unlock a short "Getting your family's latest entries" screen waits for it, 8 s at most), when the app returns to the foreground, about 10 s after an edit, every 30 s while the app is open, and when you tap *Sync now*. Syncing pauses while a shared screenshot is scanned and approved, then resumes. Nothing runs while the app is closed.
+- **What the server can see:** an id for the household and one for each record (both HMACs under the household key: it can't tell a loan from an expense), sequence numbers, sizes and write times. Not amounts, payees or names. Only phones holding the household key can read or write the household's records (a write token derived from it; the server stores its hash).
 
 Setup:
 
-1. Create a Supabase project and run `supabase/migrations/20261002000000_emx_cloud_sync.sql` (SQL editor, or `supabase db push`).
+1. Create a Supabase project and run `supabase/migrations/20261010000000_emx_records.sql` (household sync) and `20261008000000_emx_vault.sql` (password backup) in the SQL editor, or `supabase db push`. The older `20261002000000_emx_cloud_sync.sql` (bundle mailbox) is no longer used by the app.
 2. Give the build the project URL and the **publishable / anon** key (never the `service_role` / secret key). They are compiled into the APK; nothing is fetched at runtime:
    - **Local builds:** `cp .env.example .env.local` and fill it in. The file is git-ignored.
    - **GitHub Actions:** the build job uses the `DEV` environment (**Settings → Environments → DEV**). Add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` there as variables (they end up in the APK anyway, so they aren't secret), or add one secret `APP_ENV` holding the same lines as `.env.local`. If both are set, the separate values win. Repository-level secrets and variables still work too.
 
    Without them, the cloud option is hidden. A test fails the build if a secret / service_role key is set.
 
-The anon key ships inside the APK, so anyone can call the two functions. They can't read anything they don't hold the key for, junk uploads fail to decrypt and are skipped, and `emx_push` caps uploads per mailbox per hour.
+The anon key ships inside the APK, so anyone can call the functions. Without the household key they can neither read nor write a household's records.
 
 ## Optional cloud backup (password-encrypted)
 
@@ -71,7 +72,7 @@ Off by default. Settings → *Cloud backup* keeps a copy of **everything on the 
 - **Turn off:** forgets the key on this phone; optionally deletes the backup from the cloud.
 - **Restoring brings the family back too.** The sealed payload also holds the household id, name and key, which member is "me", and whether household cloud sync was on. A new phone (welcome screen → *Restore from cloud backup*) rejoins the household and turns on cloud sync with no QR scan and no onboarding. A phone already paired with others in a different household keeps its household and only gets the data.
 
-Setup: run `supabase/migrations/20261008000000_emx_vault.sql` as well. It only adds a new table and functions and leaves the household mailbox alone.
+Setup: run `supabase/migrations/20261008000000_emx_vault.sql` (see cloud sync setup above).
 
 ## Financial health and the optional on-device assistant
 
@@ -152,5 +153,5 @@ src/ui/             theme, components, charts, forms
 
 - Native features (OCR, biometrics, notifications, UPI, SQLCipher) have to be tested on a device. CI covers the domain logic and type/lint checks only.
 - OCR and SMS parsing are heuristic. That is why everything goes through Review. Bank SMS formats change, so add new samples to `src/domain/__tests__/sms.test.ts` when one isn't recognised.
-- Sync is manual (file based), not real-time.
+- Without cloud sync, sync is manual (file based). With it, changes arrive within about 30 s while the app is open, not while it is closed.
 - Receiving `.emx` files works through *Receive file*. The app only registers for shared images so it doesn't clutter every share sheet.

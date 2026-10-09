@@ -14,7 +14,7 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   syncConflictPolicy: ConflictPolicy;
   setupDismissed: boolean;
-  /** Upload encrypted household changes to the Supabase mailbox. Off by default: data stays on the phone. */
+  /** Sync encrypted household records through Supabase (services/cloud.ts). Off by default: data stays on the phone. */
   cloudSync: boolean;
   /** Personal cloud backup, sealed with the user's password (services/vault.ts). Off by default. */
   vaultSync: boolean;

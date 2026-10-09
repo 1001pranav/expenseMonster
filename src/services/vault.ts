@@ -257,6 +257,9 @@ async function syncOnce(): Promise<VaultResult> {
 }
 
 let inFlight: Promise<VaultResult> | null = null;
+// Same idea as cloud.ts: bumped on every change, recorded by a backup that succeeds.
+let generation = 1;
+let syncedGeneration = 0;
 
 /** Merge the backup if another phone changed it, then upload this phone's snapshot if anything changed. */
 export function vaultSyncNow(): Promise<VaultResult> {
@@ -265,7 +268,9 @@ export function vaultSyncNow(): Promise<VaultResult> {
     try {
       if (!cloudConfigured) throw new Error('This build has no cloud server configured');
       if (!getState().settings.vaultSync) throw new Error('Cloud backup is turned off');
+      const started = generation;
       const r = await syncOnce();
+      syncedGeneration = Math.max(syncedGeneration, started);
       await setStatus({ ok: true, message: r.sent ? `Backed up${r.received ? `, ${r.received} received` : ''}` : r.received ? `${r.received} received, up to date` : 'Up to date' });
       return r;
     } catch (e) {
@@ -285,6 +290,8 @@ export function vaultSyncNow(): Promise<VaultResult> {
  */
 export async function vaultCheckNow(): Promise<VaultResult | null> {
   if (!cloudConfigured || !getState().settings.vaultSync || inFlight) return null;
+  // Changes not backed up yet (made offline, or the last attempt failed): back up now.
+  if (syncedGeneration < generation) return vaultSyncNow();
   const [id, version] = await Promise.all([getMeta(META.id), getMeta(META.version)]);
   if (!id) return null;
   const head = Number(await rpc<number>('emx_vault_head', { p_vault: id }));
@@ -296,6 +303,7 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 /** Debounced background backup; errors land in the status shown on the backup screen. */
 export function vaultSyncSoon(delayMs = 10_000) {
   if (!cloudConfigured || !getState().settings.vaultSync) return;
+  generation++;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;

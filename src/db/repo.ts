@@ -111,6 +111,44 @@ export async function loadTables() {
   return tables;
 }
 
+// ── per-record cloud sync state (services/cloud.ts) ────────────────────────
+
+export interface SyncMark {
+  seq: number;
+  updatedAt: string;
+}
+
+/**
+ * Household rows changed on this phone since they were last synced to `space` (or never synced),
+ * with the seq of the server version they were edited from (0 = new). Paged by id.
+ */
+export async function dirtyRows<K extends TableName>(space: string, table: K, afterId: string, limit: number): Promise<{ row: Row<K>; base: number }[]> {
+  const rows = await getDb().getAllAsync<Row<K> & { __seq: number | null }>(
+    `SELECT t.*, c.seq AS __seq FROM "${table}" t LEFT JOIN cloud_records c ON c.space = ? AND c.tbl = ? AND c.id = t.id
+     WHERE t.scope = 'household' AND t.id > ? AND (c.id IS NULL OR c.updatedAt <> t.updatedAt) ORDER BY t.id LIMIT ?`,
+    [space, table, afterId, limit],
+  );
+  return rows.map(({ __seq, ...row }) => ({ row: row as unknown as Row<K>, base: __seq ?? 0 }));
+}
+
+export async function getSyncMark(space: string, table: TableName, id: string): Promise<SyncMark | null> {
+  return getDb().getFirstAsync<SyncMark>('SELECT seq, updatedAt FROM cloud_records WHERE space = ? AND tbl = ? AND id = ?', [space, table, id]);
+}
+
+export async function setSyncMarks(space: string, marks: { table: TableName; id: string; seq: number; updatedAt: string }[]): Promise<void> {
+  if (!marks.length) return;
+  await getDb().withTransactionAsync(async () => {
+    for (const m of marks) {
+      await getDb().runAsync('INSERT OR REPLACE INTO cloud_records (space, tbl, id, seq, updatedAt) VALUES (?, ?, ?, ?, ?)', [space, m.table, m.id, m.seq, m.updatedAt]);
+    }
+  });
+}
+
+/** A row including tombstones (the in-memory store only holds live rows). */
+export async function rowById<K extends TableName>(table: K, id: string): Promise<Row<K> | null> {
+  return getDb().getFirstAsync<Row<K>>(`SELECT * FROM "${table}" WHERE id = ?`, [id]);
+}
+
 // ── meta (device-local key/value, never synced) ────────────────────────────
 
 export async function getMeta(key: string): Promise<string | null> {

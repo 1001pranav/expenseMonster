@@ -5,10 +5,11 @@ import { randomBytes } from '@/domain/ids';
 import { buildBundle, bundleSize, validateBundle, type Bundle } from '@/domain/sync/bundle';
 import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sync/crypto';
 import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
+import { openRecord, planRecord, type Space } from '@/domain/sync/records';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
-import { allRows, applyRemote, getMeta, listPeers, loadTables, saveIdentity, setMeta, update, upsertPeer } from '@/db/repo';
+import { allRows, applyRemote, getMeta, getSyncMark, listPeers, loadTables, rowById, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
-import { logFailure } from './diagnostics';
+import { logFailure, logWarn } from './diagnostics';
 import { writeCacheFile } from './files';
 import { getHouseholdKey, setHouseholdKey } from './secure';
 
@@ -86,10 +87,69 @@ let mergeQueue: Promise<unknown> = Promise.resolve();
  * Merges read the local rows and then write; household cloud sync, the personal backup and file
  * imports can all run at once, so they take turns.
  */
-export function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
-  const run = mergeQueue.then(() => mergeBundleNow(bundle, policy));
+function serialMerge<T>(fn: () => Promise<T>): Promise<T> {
+  const run = mergeQueue.then(fn);
   mergeQueue = run.catch(() => {});
   return run;
+}
+
+export function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
+  return serialMerge(() => mergeBundleNow(bundle, policy));
+}
+
+export interface PulledRecord {
+  record_key: string;
+  seq: number | string;
+  payload: string;
+}
+
+/**
+ * Apply one page of household records pulled from the cloud (services/cloud.ts). A record is a
+ * conflict only if this phone also changed it since it last synced it; everything else the server
+ * has is simply newer. Remembers each record's seq so the next push edits from the right version.
+ */
+export function applyRecords(space: Space, page: PulledRecord[]): Promise<{ received: number; unreadable: number }> {
+  return serialMerge(async () => {
+    const policy = getState().settings.syncConflictPolicy;
+    const pending = new Map((await loadConflicts()).map((c) => [`${c.table}:${c.local.id}`, c]));
+    const names = new Map((await listPeers()).map((p) => [p.deviceId, p.name]));
+    const writes = new Map<TableName, BaseRow[]>();
+    const marks: { table: TableName; id: string; seq: number; updatedAt: string }[] = [];
+    let received = 0;
+    let unreadable = 0;
+    for (const raw of page) {
+      const seq = Number(raw.seq);
+      let rec: ReturnType<typeof openRecord>;
+      try {
+        rec = openRecord(space, raw.record_key, raw.payload);
+        if (!SYNC_TABLES.includes(rec.t)) throw new Error(`unknown table ${rec.t}`);
+      } catch (e) {
+        logWarn(`cloud sync: skipped record #${seq} this household key can't open (${(e as Error).message})`);
+        unreadable++;
+        continue;
+      }
+      const { t: table, r: incoming } = rec;
+      const mark = await getSyncMark(space.id, table, incoming.id);
+      // Already have this version: it was pushed from this phone, or seen before.
+      if (mark && mark.seq >= seq) continue;
+      const local = (await rowById(table, incoming.id)) ?? undefined;
+      const dirty = Boolean(local) && (!mark || mark.updatedAt !== local!.updatedAt);
+      const action = planRecord(local, incoming, dirty, policy);
+      if (action.kind === 'insert' || action.kind === 'update') {
+        writes.set(table, [...(writes.get(table) ?? []), incoming]);
+        received++;
+      }
+      if (action.kind === 'conflict') {
+        pending.set(`${table}:${incoming.id}`, { table, from: names.get(incoming.deviceId) ?? 'another phone', local: local!, incoming });
+      }
+      // "same": the local row already matches; anything else: the server's version is now the base.
+      marks.push({ table, id: incoming.id, seq, updatedAt: action.kind === 'same' ? local!.updatedAt : incoming.updatedAt });
+    }
+    for (const [table, rows] of writes) await applyRemote(table, rows as never[]);
+    await setSyncMarks(space.id, marks);
+    await saveConflicts([...pending.values()]);
+    return { received, unreadable };
+  });
 }
 
 async function mergeBundleNow(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
@@ -137,7 +197,7 @@ export async function importChanges(uri: string): Promise<ImportResult> {
   return importSealed(await new File(uri).text());
 }
 
-/** Decrypt and merge one sealed delta, whether it came from a file or the cloud mailbox. */
+/** Decrypt and merge one sealed delta from a .emx file. */
 export async function importSealed(text: string): Promise<ImportResult> {
   const key = await getHouseholdKey();
   if (!key) throw new Error('Household key missing');
