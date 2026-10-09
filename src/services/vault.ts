@@ -20,6 +20,7 @@ import { getState } from '@/db/store';
 import { cloudConfigured, rpc } from './cloud';
 import { logFailure, logInfo, logWarn } from './diagnostics';
 import { clearVaultSecrets, getHouseholdKey, getVaultSecrets, setHouseholdKey, setVaultSecrets } from './secure';
+import { whenSyncReleased } from './syncHold';
 import { collectRows, mergeBundle, type ImportResult } from './sync';
 
 /**
@@ -298,7 +299,7 @@ export function vaultSyncSoon(delayMs = 10_000) {
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    vaultSyncNow().catch(() => {});
+    whenSyncReleased(() => vaultSyncNow().catch(() => {}));
   }, delayMs);
 }
 

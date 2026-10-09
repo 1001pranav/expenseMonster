@@ -6,6 +6,7 @@ import { getState } from '@/db/store';
 import { SUPABASE } from '@/config/supabase';
 import { logFailure, logWarn } from './diagnostics';
 import { getHouseholdKey } from './secure';
+import { whenSyncReleased } from './syncHold';
 import { collectRows, importSealed, loadConflicts } from './sync';
 
 /**
@@ -192,6 +193,7 @@ export function cloudSyncSoon(delayMs = 10_000, onResult?: (r: CloudResult) => v
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    cloudSyncNow().then(onResult, () => {});
+    // Waits while a shared screenshot is being scanned; runs right after.
+    whenSyncReleased(() => cloudSyncNow().then(onResult, () => {}));
   }, delayMs);
 }

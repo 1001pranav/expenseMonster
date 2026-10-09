@@ -7,7 +7,7 @@ import { Sora_600SemiBold } from '@expo-google-fonts/sora/600SemiBold';
 import { Sora_700Bold } from '@expo-google-fonts/sora/700Bold';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
-import { Stack, router, useNavigationContainerRef } from 'expo-router';
+import { Stack, router, useNavigationContainerRef, usePathname } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import * as SplashScreen from 'expo-splash-screen';
@@ -17,10 +17,12 @@ import { ActivityIndicator, AppState, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { generateFixedBills } from '@/data/actions';
+import { listPeers } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
-import { cloudSyncSoon, type CloudResult } from '@/services/cloud';
+import { cloudConfigured, cloudSyncNow, cloudSyncSoon, type CloudResult } from '@/services/cloud';
 import { startLiveSync } from '@/services/livesync';
+import { holdSync, isSyncHeld, releaseSync, useSyncHold } from '@/services/syncHold';
 import { vaultSyncSoon } from '@/services/vault';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { stageImage } from '@/services/files';
@@ -69,6 +71,9 @@ function App() {
   const [locked, setLocked] = useState(true);
   const [pinSet, setPinSet] = useState(false);
   const backgroundedAt = useRef<number | null>(null);
+  const held = useSyncHold((s) => s.held);
+  // First family sync of a cold start: running → the wait screen may show after unlock.
+  const [startupSync, setStartupSync] = useState<'idle' | 'running' | 'done'>('idle');
   const unlock = useCallback(() => {
     logInfo('unlocked');
     setLocked(false);
@@ -115,8 +120,9 @@ function App() {
         }
         // A new month may have started while the app was in the background.
         generateFixedBills().catch((e) => logFailure('bills: creating this cycle failed', e));
-        cloudSyncSoon(0, onCloudResult);
-        vaultSyncSoon(0);
+        // A short delay lets a screenshot shared from GPay / PhonePe arrive first and pause syncing.
+        cloudSyncSoon(1500, onCloudResult);
+        vaultSyncSoon(1500);
       }
     });
     return () => sub.remove();
@@ -140,6 +146,32 @@ function App() {
     cloudSyncSoon(10_000, onCloudResult);
     vaultSyncSoon(10_000);
   }, [ready, version, identity.onboarded, locked, settings.cloudSync, settings.vaultSync]);
+
+  // Cold start with family phones paired: fetch their latest entries while the lock screen is up,
+  // so the first screen after unlock is current. Skipped when a screenshot was shared (it syncs after).
+  useEffect(() => {
+    if (!ready || !identity.onboarded || startupSync !== 'idle') return;
+    (async () => {
+      const family = settings.cloudSync && cloudConfigured && (await listPeers()).length > 0;
+      if (!family || isSyncHeld()) return setStartupSync('done');
+      setStartupSync('running');
+      logInfo('startup: syncing with family');
+      await cloudSyncNow().then(onCloudResult, () => {});
+      setStartupSync('done');
+    })();
+  }, [ready, identity.onboarded, startupSync, settings.cloudSync]);
+
+  // Screenshot approved or abandoned: sync what was held back.
+  const wasHeld = useRef(false);
+  useEffect(() => {
+    if (held) wasHeld.current = true;
+    else if (wasHeld.current) {
+      wasHeld.current = false;
+      logInfo('screenshot flow done: syncing');
+      cloudSyncSoon(0, onCloudResult);
+      vaultSyncSoon(0);
+    }
+  }, [held]);
 
   // While the app is open, pick up other phones' edits without waiting for a foreground or an edit here.
   useEffect(() => {
@@ -189,8 +221,10 @@ function App() {
       </Stack>
       <ShareCatcher />
       {identity.onboarded && !locked ? <Router rootId={rootId} /> : null}
+      {identity.onboarded && !locked ? <ShareHoldWatcher /> : null}
       {!identity.onboarded ? <OnboardingRedirect /> : null}
       <ToastHost />
+      {startupSync === 'running' && identity.onboarded && !locked && !held ? <SyncGate /> : null}
       {locked && identity.onboarded ? (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
           <LockScreen hasPin={pinSet} onUnlock={unlock} />
@@ -205,6 +239,44 @@ function onCloudResult(r: CloudResult) {
   const grew = r.pendingConflicts > knownConflicts;
   knownConflicts = r.pendingConflicts;
   if (grew) toast(`${r.pendingConflicts} entries changed on two phones. Resolve them in Sync.`, { tone: 'error' });
+}
+
+/** Shown after unlock while the startup family sync runs: at most 8 s, and skippable. */
+function SyncGate() {
+  const { colors } = useTheme();
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGone(true), 8_000);
+    return () => clearTimeout(t);
+  }, []);
+  if (gone) return null;
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: space(4), gap: space(2) }}>
+      <ActivityIndicator color={colors.primary} size="large" />
+      <Txt variant="bodyStrong">Getting your family's latest entries…</Txt>
+      <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
+        Encrypted on their phones, opened only on yours.
+      </Txt>
+      <Button title="Skip" variant="ghost" size="sm" onPress={() => setGone(true)} />
+    </View>
+  );
+}
+
+/** Ends the sync pause once the user leaves the shared-screenshot flow (scan → approve), saved or not. */
+function ShareHoldWatcher() {
+  const held = useSyncHold((s) => s.held);
+  const path = usePathname();
+  const entered = useRef(false);
+  useEffect(() => {
+    if (!held) {
+      entered.current = false;
+      return;
+    }
+    const inFlow = path === '/scan' || path === '/review' || path.startsWith('/txn/');
+    if (inFlow) entered.current = true;
+    else if (entered.current) releaseSync();
+  }, [held, path]);
+  return null;
 }
 
 function OnboardingRedirect() {
@@ -247,6 +319,8 @@ function ShareCatcher() {
       toast("That share didn't include a picture ExpenseMonster can read", { tone: 'error' });
       return;
     }
+    // Pause automatic syncing until this screenshot is approved, so scanning gets the phone's full attention.
+    if (!file.fileName?.endsWith('.emx')) holdSync();
     const uri = file.path.startsWith('file://') || file.path.startsWith('content://') ? file.path : `file://${file.path}`;
     if (file.fileName?.endsWith('.emx')) return setPending({ kind: 'backup', uri, extra: 0 });
     // Copy now: the share library reuses the sender's file name, so the next share would overwrite it.

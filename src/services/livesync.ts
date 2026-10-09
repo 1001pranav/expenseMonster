@@ -1,6 +1,7 @@
 import { AppState } from 'react-native';
 import { cloudPullNow, type CloudResult } from './cloud';
 import { logFailure } from './diagnostics';
+import { isSyncHeld } from './syncHold';
 import { vaultCheckNow } from './vault';
 
 const EVERY_MS = 30_000;
@@ -19,7 +20,7 @@ export function startLiveSync(onCloudResult: (r: CloudResult) => void): () => vo
 
   const tick = async () => {
     if (stopped) return;
-    if (AppState.currentState === 'active') {
+    if (AppState.currentState === 'active' && !isSyncHeld()) {
       try {
         const r = await cloudPullNow();
         if (r && !stopped) onCloudResult(r);
