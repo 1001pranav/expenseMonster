@@ -1,3 +1,4 @@
+import { clockOffsetMs, offsetFromResponse, setClockOffset, syncedNowISO, worthUpdating } from '@/domain/clock';
 import { buildBundle, bundleSize } from '@/domain/sync/bundle';
 import { describeRpcError, fullPushDue, mailboxId } from '@/domain/sync/cloud';
 import { DecryptError, seal } from '@/domain/sync/crypto';
@@ -24,11 +25,23 @@ export const cloudConfigured = Boolean(URL && KEY);
 const PAGE = 20;
 const TIMEOUT_MS = 20_000;
 
+export const CLOCK_META = 'clock.offsetMs';
+
+/** Keep this phone's clock correction current from the server's Date header (see domain/clock.ts). */
+function learnServerTime(sentAt: number, receivedAt: number, header: string | null) {
+  const measured = offsetFromResponse(sentAt, receivedAt, header);
+  if (measured === null || !worthUpdating(measured)) return;
+  setClockOffset(measured);
+  if (Math.abs(measured) > 120_000) logWarn(`phone clock is ${Math.round(measured / 1000)} s ${measured > 0 ? 'behind' : 'ahead of'} the server; edits are stamped with server time`);
+  setMeta(CLOCK_META, String(clockOffsetMs())).catch((e) => logFailure('clock: could not save correction', e, 'warn'));
+}
+
 /** Call one of the SECURITY DEFINER functions; also used by the personal backup (vault.ts). */
 export async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
+    const sentAt = Date.now();
     const res = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: {
@@ -40,6 +53,7 @@ export async function rpc<T>(fn: string, args: Record<string, unknown>): Promise
       body: JSON.stringify(args),
       signal: ctrl.signal,
     });
+    learnServerTime(sentAt, Date.now(), res.headers.get('date'));
     if (!res.ok) {
       const body = await res.text();
       // The raw server answer is what explains a failure; it never contains plaintext data.
@@ -121,7 +135,7 @@ async function push(mailbox: string, key: Uint8Array): Promise<number> {
   const fullAt = await getMeta(metaKey(mailbox, 'fullAt'));
   const full = fullPushDue(fullAt);
   const since = full ? null : await getMeta(metaKey(mailbox, 'pushedAt'));
-  const startedAt = new Date().toISOString();
+  const startedAt = syncedNowISO();
   const bundle = buildBundle(await collectRows(), {
     householdId: identity.householdId,
     deviceId: identity.deviceId,

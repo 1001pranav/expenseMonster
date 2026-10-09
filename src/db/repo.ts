@@ -1,3 +1,4 @@
+import { syncedNowISO } from '@/domain/clock';
 import { uuidv7 } from '@/domain/ids';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableMap, type TableName } from '@/domain/types';
 import { getDb } from './client';
@@ -8,7 +9,8 @@ import { logFailure } from '@/services/diagnostics';
 type Row<K extends TableName> = TableMap[K];
 export type NewRow<K extends TableName> = Omit<Row<K>, keyof BaseRow> & Partial<BaseRow>;
 
-const now = () => new Date().toISOString();
+// Bookkeeping times use the server-corrected clock, so every phone orders edits the same way.
+const now = syncedNowISO;
 
 function pick(table: TableName, row: Record<string, unknown>) {
   const cols = columnsOf(table);

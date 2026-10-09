@@ -1,5 +1,6 @@
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system';
+import { syncedNowISO, syncedNowMs } from '@/domain/clock';
 import { randomBytes } from '@/domain/ids';
 import { buildBundle, bundleSize, validateBundle, type Bundle } from '@/domain/sync/bundle';
 import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sync/crypto';
@@ -33,7 +34,7 @@ export async function sendChanges(peer: Peer | null): Promise<{ rows: number }> 
   if (!key) throw new Error('Household key missing');
   const { identity } = getState();
   const since = peer?.lastSentAt ?? null;
-  const startedAt = new Date().toISOString();
+  const startedAt = syncedNowISO();
   const bundle = buildBundle(await collectRows(), {
     householdId: identity.householdId,
     deviceId: identity.deviceId,
@@ -147,7 +148,7 @@ export async function importSealed(text: string): Promise<ImportResult> {
   const result = await mergeBundle(bundle, getState().settings.syncConflictPolicy);
   await upsertPeer({ deviceId: bundle.fromDeviceId, name: bundle.fromName, lastReceivedAt: bundle.createdAt });
   // All timestamps are UTC, so only a wrong phone clock can make "newest" pick the wrong edit.
-  const clockAheadMinutes = Math.max(0, Math.round((Date.parse(bundle.createdAt) - Date.now()) / 60_000));
+  const clockAheadMinutes = Math.max(0, Math.round((Date.parse(bundle.createdAt) - syncedNowMs()) / 60_000));
   return { from: bundle.fromName, ...result, clockAheadMinutes };
 }
 

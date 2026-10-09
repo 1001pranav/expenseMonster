@@ -21,6 +21,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 
 - SQLite with **SQLCipher**. The 256-bit key is generated on first launch and kept in the Android Keystore (`expo-secure-store`).
 - Money is stored as **integer paise**. Calendar dates are local `YYYY-MM-DD` strings.
+- **Sync clock.** `createdAt` / `updatedAt` / `deletedAt` and sync marks are UTC on a server-corrected clock: every cloud response's `Date` header tells the phone how far its own clock is off, and edits are stamped with phone time plus that correction (also offline, using the last known one). So a phone with a wrong clock can't win "newest edit" conflicts it shouldn't. Stamps never go backwards on a phone. When something was *spent* (`occurredAt`, "today") stays phone time, which is what the user sees. Source: `src/domain/clock.ts`.
 - Every row has `id` (UUID v7), `createdAt`, `updatedAt`, `deletedAt` (soft delete, so deletions sync), `deviceId` and `scope` (`personal` | `household`).
 - Schema lives in `src/db/schema.ts` and migrations are append-only (`PRAGMA user_version`).
 

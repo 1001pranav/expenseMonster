@@ -1,3 +1,4 @@
+import { syncedNowISO } from '../clock';
 import { SYNC_TABLES, type BaseRow, type TableName } from '../types';
 import { fromBase64, toBase64 } from './crypto';
 
@@ -34,7 +35,8 @@ export function buildBundle(
     householdId: opts.householdId,
     fromDeviceId: opts.deviceId,
     fromName: opts.deviceName,
-    createdAt: opts.now ?? new Date().toISOString(),
+    // Becomes the receiver's "last synced with this phone" mark, compared with updatedAt: same clock.
+    createdAt: opts.now ?? syncedNowISO(),
     since: opts.since,
     tables,
   };
