@@ -108,9 +108,8 @@ export interface PulledRecord {
  * conflict only if this phone also changed it since it last synced it; everything else the server
  * has is simply newer. Remembers each record's seq so the next push edits from the right version.
  */
-export function applyRecords(space: Space, page: PulledRecord[]): Promise<{ received: number; unreadable: number }> {
+export function applyRecords(space: Space, page: PulledRecord[], policy: ConflictPolicy): Promise<{ received: number; unreadable: number }> {
   return serialMerge(async () => {
-    const policy = getState().settings.syncConflictPolicy;
     const pending = new Map((await loadConflicts()).map((c) => [`${c.table}:${c.local.id}`, c]));
     const names = new Map((await listPeers()).map((p) => [p.deviceId, p.name]));
     const writes = new Map<TableName, BaseRow[]>();

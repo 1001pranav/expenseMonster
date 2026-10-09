@@ -2,7 +2,8 @@ import { clockOffsetMs, offsetFromResponse, setClockOffset, worthUpdating } from
 import { describeRpcError } from '@/domain/sync/cloud';
 import { householdSpace, recordKey, sealRecord, type Space } from '@/domain/sync/records';
 import { SYNC_TABLES } from '@/domain/types';
-import { dirtyRows, getMeta, setMeta, setSyncMarks } from '@/db/repo';
+import type { ConflictPolicy } from '@/domain/sync/merge';
+import { clearSyncMarks, dirtyRows, getMeta, setMeta, setSyncMarks } from '@/db/repo';
 import { getState } from '@/db/store';
 import { SUPABASE } from '@/config/supabase';
 import { logFailure, logWarn } from './diagnostics';
@@ -98,6 +99,31 @@ const STATUS_KEY = 'cloud.status';
 // The cursor is per space, so joining another household starts fresh.
 const cursorKey = (space: Space) => `cloud.space.${space.id.slice(0, 16)}.cursor`;
 
+/** How a space is synced: which rows go in, and how a record edited on both sides is settled. */
+export interface SpaceRules {
+  /** Household rows only (family), or everything including private entries (personal backup). */
+  scope: 'household' | 'all';
+  policy: () => ConflictPolicy;
+  /** Keep rows with a conflict waiting for the user's choice out of uploads. */
+  holdConflicts: boolean;
+}
+
+export const FAMILY: SpaceRules = { scope: 'household', policy: () => getState().settings.syncConflictPolicy, holdConflicts: true };
+/** One person's own phones: the latest edit wins, nothing to ask. */
+export const BACKUP: SpaceRules = { scope: 'all', policy: () => 'newest', holdConflicts: false };
+
+/** Forget this phone's read position and sync marks for a space (deleted, or turned off). */
+export async function forgetSpace(space: Space): Promise<void> {
+  await setMeta(cursorKey(space), null);
+  await clearSyncMarks(space.id);
+}
+
+/** True when the space has records this phone hasn't read: one small request. */
+export async function spaceHasNews(space: Space): Promise<boolean> {
+  const head = Number(await rpc<number>('emx_space_head', { p_space: space.id, p_token: space.token }));
+  return head > Number((await getMeta(cursorKey(space))) ?? 0);
+}
+
 export async function loadCloudStatus(): Promise<CloudStatus | null> {
   try {
     return JSON.parse((await getMeta(STATUS_KEY)) ?? 'null');
@@ -113,15 +139,15 @@ async function currentSpace(): Promise<Space> {
   return householdSpace(key, getState().identity.householdId);
 }
 
-/** Download every record the family saved after this phone's cursor, page by page. */
-async function pull(space: Space): Promise<Omit<CloudResult, 'sent'>> {
+/** Download every record saved after this phone's cursor, page by page. */
+async function pull(space: Space, rules: SpaceRules): Promise<Omit<CloudResult, 'sent'>> {
   let cursor = Number((await getMeta(cursorKey(space))) ?? 0);
   let received = 0;
   let unreadable = 0;
   for (;;) {
     const page = await rpc<PulledRecord[]>('emx_records_pull', { p_space: space.id, p_token: space.token, p_after: cursor, p_limit: PAGE });
     if (!page.length) break;
-    const r = await applyRecords(space, page);
+    const r = await applyRecords(space, page, rules.policy());
     received += r.received;
     unreadable += r.unreadable;
     cursor = Number(page[page.length - 1].seq);
@@ -132,18 +158,18 @@ async function pull(space: Space): Promise<Omit<CloudResult, 'sent'>> {
 }
 
 /**
- * Upload household rows changed on this phone, each naming the version it was edited from.
- * Records someone else changed in the meantime come back as conflicts and stay dirty.
+ * Upload rows changed on this phone, each naming the version it was edited from. Records someone
+ * else changed in the meantime come back as conflicts and stay dirty.
  */
-async function push(space: Space): Promise<{ sent: number; conflicts: number }> {
-  const waiting = new Set((await loadConflicts()).map((c) => `${c.table}:${c.local.id}`));
+async function push(space: Space, rules: SpaceRules): Promise<{ sent: number; conflicts: number }> {
+  const waiting = new Set(rules.holdConflicts ? (await loadConflicts()).map((c) => `${c.table}:${c.local.id}`) : []);
   let cursor = Number((await getMeta(cursorKey(space))) ?? 0);
   let sent = 0;
   let conflicts = 0;
   for (const table of SYNC_TABLES) {
     let after = '';
     for (;;) {
-      const batch = await dirtyRows(space.id, table, after, PAGE);
+      const batch = await dirtyRows(space.id, table, after, PAGE, rules.scope);
       if (!batch.length) break;
       after = batch[batch.length - 1].row.id;
       const items = [];
@@ -192,13 +218,13 @@ interface PushResult {
 }
 
 /** Pull, push, and when someone changed the same records meanwhile: pull their versions, merge, push again. */
-async function syncSpace(space: Space): Promise<CloudResult> {
-  const total = { ...(await pull(space)), sent: 0 };
+export async function syncSpace(space: Space, rules: SpaceRules): Promise<CloudResult> {
+  const total = { ...(await pull(space, rules)), sent: 0 };
   for (let round = 0; round < 3; round++) {
-    const pushed = await push(space);
+    const pushed = await push(space, rules);
     total.sent += pushed.sent;
     if (!pushed.conflicts) break;
-    const again = await pull(space);
+    const again = await pull(space, rules);
     total.received += again.received;
     total.unreadable += again.unreadable;
     total.pendingConflicts = again.pendingConflicts;
@@ -227,7 +253,7 @@ export function cloudSyncNow(): Promise<CloudResult> {
       // Never read the same cursor twice at once: let a running check finish first.
       if (checking) await checking.catch(() => {});
       const started = generation;
-      const result = await syncSpace(await currentSpace());
+      const result = await syncSpace(await currentSpace(), FAMILY);
       syncedGeneration = Math.max(syncedGeneration, started);
       await setMeta(STATUS_KEY, JSON.stringify({ at: new Date().toISOString(), ok: true, message: `Received ${result.received}, sent ${result.sent}` } satisfies CloudStatus));
       return result;
@@ -254,9 +280,8 @@ export function cloudPullNow(): Promise<CloudResult | null> {
   checking = (async () => {
     try {
       const space = await currentSpace();
-      const head = Number(await rpc<number>('emx_space_head', { p_space: space.id, p_token: space.token }));
-      if (head <= Number((await getMeta(cursorKey(space))) ?? 0)) return null;
-      return { ...(await pull(space)), sent: 0 };
+      if (!(await spaceHasNews(space))) return null;
+      return { ...(await pull(space, FAMILY)), sent: 0 };
     } finally {
       checking = null;
     }

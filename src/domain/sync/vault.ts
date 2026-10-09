@@ -1,7 +1,6 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/ciphers/utils.js';
 import { randomBytes } from '../ids';
-import { SYNC_TABLES } from '../types';
 import type { Bundle } from './bundle';
 import { fromBase64, open, seal, toBase64 } from './crypto';
 
@@ -75,7 +74,20 @@ export function parseRecoveryCode(code: string): string | null {
   return bytes && bytes.length === CODE_BYTES ? hex(bytes) : null;
 }
 
-/** What is inside the sealed payload. The write token travels with the data so a restored phone can keep updating the vault. */
+/**
+ * The sealed header (emx_vaults.payload), opened with the password key. It holds the random data
+ * key the backup's records are sealed with (records live in their own space, see records.ts), so a
+ * password change re-seals only this header. The write token lets a restored phone keep updating it.
+ */
+export interface VaultHeader {
+  v: 2;
+  token: string;
+  /** base64, 32 bytes. */
+  dataKey: string;
+  household?: VaultHousehold;
+}
+
+/** Before records: the whole backup as one snapshot. Read only, to upgrade such a backup. */
 export interface VaultContents {
   v: 1;
   token: string;
@@ -101,25 +113,13 @@ export interface VaultHousehold {
 /** Binds the ciphertext to its vault, so a payload copied into another vault fails to open. */
 const aad = (vaultId: string) => `emx-vault-v1:${vaultId}`;
 
-export const sealVault = (contents: VaultContents, key: Uint8Array, vaultId: string) => seal(contents, key, aad(vaultId));
-export const openVault = (payload: string, key: Uint8Array, vaultId: string) => open<VaultContents>(payload, key, aad(vaultId));
+export const sealVault = (header: VaultHeader, key: Uint8Array, vaultId: string) => seal(header, key, aad(vaultId));
+export const openVault = (payload: string, key: Uint8Array, vaultId: string) => open<VaultHeader | VaultContents>(payload, key, aad(vaultId));
+
+/** Changes when the household info in the header should be rewritten. */
+export const householdFingerprint = (h: VaultHousehold | undefined) =>
+  hex(sha256(utf8ToBytes(JSON.stringify(h ? [h.id, h.name, h.key, h.selfMemberId, h.cloudSync] : null))));
 
 export const newWriteToken = () => toBase64(randomBytes(32));
 export const newSalt = () => toBase64(randomBytes(16));
 export const saltBytes = (salt: string) => fromBase64(salt);
-
-/**
- * Order-independent digest of the rows in a bundle, used to skip uploads when nothing changed.
- * Bookkeeping fields of the bundle itself (createdAt, device) are left out on purpose.
- */
-export function contentDigest(tables: Bundle['tables']): string {
-  const h = sha256.create();
-  for (const name of SYNC_TABLES) {
-    const rows = [...(tables[name] ?? [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    for (const r of rows) {
-      const keys = Object.keys(r).sort();
-      h.update(utf8ToBytes(`${name}\u0000${JSON.stringify(keys.map((k) => [k, (r as unknown as Record<string, unknown>)[k] ?? null]))}\n`));
-    }
-  }
-  return hex(h.digest());
-}

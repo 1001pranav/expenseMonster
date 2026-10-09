@@ -3,7 +3,9 @@
  * supabase/migrations/20261010000000_emx_records.sql (shared seq, compare-and-swap on the base seq,
  * write token). Each phone gets its own copy of the services and its own in-memory "database".
  */
-import { newKey } from '@/domain/sync/crypto';
+import { buildBundle } from '@/domain/sync/bundle';
+import { keyFromPassphrase, newKey, seal } from '@/domain/sync/crypto';
+import { formatRecoveryCode, newSalt, newVaultId, newWriteToken, saltBytes } from '@/domain/sync/vault';
 import type { ConflictPolicy } from '@/domain/sync/merge';
 import type { BaseRow, TableName } from '@/domain/types';
 import { DEFAULT_SETTINGS, EMPTY_TABLES } from '@/db/store';
@@ -18,6 +20,7 @@ const nextTime = () => new Date(Date.UTC(2026, 0, 1) + ++tick * 1000).toISOStrin
 
 const server = {
   spaces: new Map<string, { token: string; head: number }>(),
+  vaults: new Map<string, { salt: string; iterations: number; payload: string; token: string; version: number }>(),
   records: new Map<string, Map<string, { seq: number; payload: string }>>(),
   calls: [] as string[],
   offline: false,
@@ -25,6 +28,7 @@ const server = {
     this.offline = false;
     this.spaces.clear();
     this.records.clear();
+    this.vaults.clear();
     this.calls = [];
   },
   check(space: string, token: string) {
@@ -35,6 +39,31 @@ const server = {
   handle(fn: string, a: Record<string, never>): unknown {
     this.calls.push(fn);
     if (fn === 'emx_space_head') return this.check(a.p_space, a.p_token);
+    // Backup header (supabase/migrations/20261008000000_emx_vault.sql).
+    if (fn === 'emx_vault_put') {
+      const v = this.vaults.get(a.p_vault);
+      if (!v) {
+        if (a.p_expected !== 0) throw new Error('Backup not found');
+        this.vaults.set(a.p_vault, { salt: a.p_salt, iterations: a.p_iterations, payload: a.p_payload, token: a.p_token, version: 1 });
+        return 1;
+      }
+      if (v.token !== a.p_token) throw new Error('Not allowed');
+      if (v.version !== a.p_expected) return 0;
+      Object.assign(v, { salt: a.p_salt, iterations: a.p_iterations, payload: a.p_payload, version: v.version + 1 });
+      return v.version;
+    }
+    if (fn === 'emx_vault_head') return this.vaults.get(a.p_vault)?.version ?? 0;
+    if (fn === 'emx_vault_get') {
+      const v = this.vaults.get(a.p_vault);
+      return v ? [{ salt: v.salt, iterations: v.iterations, payload: v.payload, version: v.version }] : [];
+    }
+    if (fn === 'emx_vault_delete') return this.vaults.get(a.p_vault)?.token === a.p_token && this.vaults.delete(a.p_vault);
+    if (fn === 'emx_space_delete') {
+      if (this.spaces.get(a.p_space)?.token !== a.p_token) return false;
+      this.spaces.delete(a.p_space);
+      this.records.delete(a.p_space);
+      return true;
+    }
     if (fn === 'emx_records_pull') {
       this.check(a.p_space, a.p_token);
       return [...(this.records.get(a.p_space) ?? new Map()).entries()]
@@ -82,13 +111,16 @@ globalThis.fetch = (async (url: string, init: { body: string }) => {
 
 // ── a phone ────────────────────────────────────────────────────────────────
 
-function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string, { seq: number; updatedAt: string }>; meta: Map<string, string> }, device: string) {
+// The phone's own store instance, filled in after it loads.
+type StoreRef = { get?: () => ReturnType<typeof import('@/db/store').getState> };
+
+function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string, { seq: number; updatedAt: string }>; meta: Map<string, string> }, device: string, store: StoreRef) {
   const table = (t: string) => db.tables.get(t) ?? db.tables.set(t, new Map()).get(t)!;
   const markKey = (space: string, t: string, id: string) => `${space}|${t}|${id}`;
   return {
-    dirtyRows: async (space: string, t: TableName, afterId: string, limit: number) =>
+    dirtyRows: async (space: string, t: TableName, afterId: string, limit: number, scope: 'household' | 'all' = 'household') =>
       [...table(t).values()]
-        .filter((r) => r.scope === 'household' && r.id > afterId)
+        .filter((r) => (scope === 'all' || r.scope === 'household') && r.id > afterId)
         .filter((r) => db.marks.get(markKey(space, t, r.id))?.updatedAt !== r.updatedAt)
         .sort((x, y) => (x.id < y.id ? -1 : 1))
         .slice(0, limit)
@@ -110,28 +142,42 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
     listPeers: async () => [],
     allRows: async (t: string) => [...table(t).values()],
     loadTables: async () => EMPTY_TABLES,
-    saveIdentity: async () => {},
+    saveIdentity: async (patch: object) => store.get!().setIdentity(patch),
+    saveSettings: async (patch: object) => store.get!().setSettings(patch),
     upsertPeer: async () => {},
+    clearSyncMarks: async (space: string) => [...db.marks.keys()].filter((k) => k.startsWith(`${space}|`)).forEach((k) => db.marks.delete(k)),
   };
 }
 
 function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
   const db = { tables: new Map<string, Map<string, Row>>(), marks: new Map(), meta: new Map<string, string>() };
-  const repo = fakeRepo(db, device);
+  const store: StoreRef = {};
+  const repo = fakeRepo(db, device, store);
+  // Keystore stand-in: household key plus the backup's secrets.
+  const secrets: { household: Uint8Array; vault: { key: Uint8Array; token: string; dataKey: Uint8Array } | null } = { household: key, vault: null };
   let cloud!: typeof import('../cloud');
   let sync!: typeof import('../sync');
+  let vault!: typeof import('../vault');
   jest.isolateModules(() => {
     jest.doMock('expo-sharing', () => ({}));
     jest.doMock('expo-file-system', () => ({ File: class {}, Paths: {} }));
     jest.doMock('@/config/supabase', () => ({ SUPABASE: { url: 'https://test.supabase.co', anonKey: 'sb_publishable_test' } }));
     jest.doMock('../diagnostics', () => ({ logFailure: jest.fn(), logWarn: jest.fn(), logInfo: jest.fn(), logError: jest.fn() }));
     jest.doMock('../files', () => ({ writeCacheFile: jest.fn() }));
-    jest.doMock('../secure', () => ({ getHouseholdKey: async () => key, setHouseholdKey: async () => {} }));
+    jest.doMock('../secure', () => ({
+      getHouseholdKey: async () => secrets.household,
+      setHouseholdKey: async (k: Uint8Array) => void (secrets.household = k),
+      getVaultSecrets: async () => secrets.vault,
+      setVaultSecrets: async (k: Uint8Array, token: string, dataKey: Uint8Array) => void (secrets.vault = { key: k, token, dataKey }),
+      clearVaultSecrets: async () => void (secrets.vault = null),
+    }));
     jest.doMock('@/db/repo', () => repo);
     /* eslint-disable @typescript-eslint/no-require-imports -- each phone needs its own module instances */
     cloud = require('../cloud');
     sync = require('../sync');
+    vault = require('../vault');
     const { getState } = require('@/db/store');
+    store.get = getState;
     /* eslint-enable @typescript-eslint/no-require-imports */
     getState().setAll(EMPTY_TABLES, { deviceId: device, deviceName: device, householdId: 'house', householdName: 'Home', selfMemberId: '', onboarded: true }, { ...DEFAULT_SETTINGS, cloudSync: true, syncConflictPolicy: policy });
   });
@@ -148,6 +194,9 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     },
     edit: (id: string, patch: Partial<Row>) => repo.update('transactions', id, patch),
     get: (id: string) => txns().get(id),
+    vault,
+    secrets,
+    rows: () => [...txns().values()],
     conflicts: () => sync.loadConflicts(),
     resolve: (keys: string[], choice: 'mine' | 'theirs') => sync.resolveConflicts(keys, choice),
   };
@@ -284,5 +333,111 @@ describe('per-record cloud sync between two phones', () => {
     // A different key means a different space: nothing crosses over.
     expect(server.spaces.size).toBe(2);
     expect((await a.sync()).received).toBe(0);
+  });
+});
+
+describe('personal backup, per entry, between one person\'s phones', () => {
+  // Each key derivation is 300,000 PBKDF2 rounds on purpose.
+  jest.setTimeout(60_000);
+  const PASSWORD = 'correct horse battery';
+  const spaceSize = (id: string | undefined) => (id ? (server.records.get(id)?.size ?? 0) : 0);
+  // The backup's space is the one whose id isn't the household's.
+  const backupSpaceId = () => [...server.spaces.keys()].find((id) => !familyIds.has(id));
+  let familyIds: Set<string>;
+
+  beforeEach(() => {
+    server.reset();
+    familyIds = new Set();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  it('backs up every entry, private ones too, restores them on a new phone and keeps both in step', async () => {
+    const a = makePhone('A', newKey(), 'ask');
+    const priv = a.add({ amount: 111, scope: 'personal' });
+    a.add({ amount: 222 });
+    const code = await a.vault.enableVault(PASSWORD);
+    expect((await a.vault.vaultSyncNow()).sent).toBe(true);
+    expect(spaceSize(backupSpaceId())).toBe(2);
+
+    // New phone: recovery code + password brings everything back, private entry included.
+    const b = makePhone('B', newKey(), 'ask');
+    expect((await b.vault.restoreVault(code, PASSWORD)).received).toBe(2);
+    expect(b.get(priv.id)?.amount).toBe(111);
+
+    // An edit on B reaches A on its next 30 s check, as one entry, not a snapshot.
+    await b.edit(priv.id, { amount: 333 });
+    server.calls = [];
+    await b.vault.vaultSyncNow();
+    expect(server.calls.filter((c) => c === 'emx_records_push')).toHaveLength(1);
+    expect(server.calls).not.toContain('emx_vault_put');
+    expect((await a.vault.vaultCheckNow())?.received).toBe(1);
+    expect(a.get(priv.id)?.amount).toBe(333);
+
+    // Nothing changed: one tiny request, no download, no upload.
+    server.calls = [];
+    expect(await a.vault.vaultCheckNow()).toBeNull();
+    expect(server.calls).toEqual(['emx_space_head']);
+
+    // A and B are in different households (B kept its own key): full syncs in turn must not
+    // take turns rewriting the header.
+    server.calls = [];
+    await a.vault.vaultSyncNow();
+    await b.vault.vaultSyncNow();
+    await a.vault.vaultSyncNow();
+    expect(server.calls).not.toContain('emx_vault_put');
+  });
+
+  it('a password change re-seals only the header; the other phone keeps syncing entries', async () => {
+    const a = makePhone('A', newKey(), 'ask');
+    const r1 = a.add({ amount: 100 });
+    const code = await a.vault.enableVault(PASSWORD);
+    await a.vault.vaultSyncNow();
+    const b = makePhone('B', newKey(), 'ask');
+    await b.vault.restoreVault(code, PASSWORD);
+
+    const before = spaceSize(backupSpaceId());
+    await a.vault.changeVaultPassword(PASSWORD, 'a brand new passphrase');
+    expect(spaceSize(backupSpaceId())).toBe(before); // no entry re-uploaded
+
+    await b.edit(r1.id, { amount: 150 });
+    await expect(b.vault.vaultSyncNow()).rejects.toThrow('password was changed on another phone');
+    expect((await b.vault.loadVaultStatus())?.needsPassword).toBe(true);
+    await a.vault.vaultCheckNow();
+    expect(a.get(r1.id)?.amount).toBe(150); // B's edit still arrived
+
+    await expect(b.vault.restoreVault(code, PASSWORD)).rejects.toThrow('Wrong password');
+    await b.vault.restoreVault(code, 'a brand new passphrase');
+    await expect(b.vault.vaultSyncNow()).resolves.toBeTruthy();
+  });
+
+  it('upgrades a backup made as one snapshot', async () => {
+    // What the previous version of the app stored: the whole backup sealed in the header.
+    const id = newVaultId();
+    const salt = newSalt();
+    const token = newWriteToken();
+    const pkey = await keyFromPassphrase(PASSWORD, saltBytes(salt), 1000);
+    const old = [txn({ id: 'old-1', amount: 1, scope: 'personal' }), txn({ id: 'old-2', amount: 2 })];
+    const bundle = buildBundle({ transactions: old }, { householdId: 'h', deviceId: 'old', deviceName: 'Old', since: null, kind: 'backup' });
+    server.vaults.set(id, { salt, iterations: 1000, payload: seal({ v: 1, token, bundle }, pkey, `emx-vault-v1:${id}`), token, version: 3 });
+
+    const b = makePhone('B', newKey(), 'ask');
+    expect((await b.vault.restoreVault(formatRecoveryCode(id), PASSWORD)).received).toBe(2);
+    expect(b.get('old-1')?.amount).toBe(1);
+    // Now a records backup: header v2, every entry in the backup's space.
+    expect(server.vaults.get(id)!.version).toBe(4);
+    expect(spaceSize(backupSpaceId())).toBe(2);
+  });
+
+  it('turning off with "delete from cloud" removes the header and every entry', async () => {
+    const a = makePhone('A', newKey(), 'ask');
+    a.add({ amount: 5 });
+    await a.vault.enableVault(PASSWORD);
+    await a.vault.vaultSyncNow();
+    expect(server.vaults.size).toBe(1);
+    expect(spaceSize(backupSpaceId())).toBe(1);
+    await a.vault.disableVault(true);
+    expect(server.vaults.size).toBe(0);
+    expect(server.spaces.size).toBe(0);
+    expect(a.secrets.vault).toBeNull();
   });
 });

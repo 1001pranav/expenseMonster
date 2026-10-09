@@ -7,15 +7,16 @@ import { open, seal } from './crypto';
 import { isNewer, sameContent, type ConflictPolicy } from './merge';
 
 /**
- * Household cloud sync, one server row per record (supabase/migrations/…_emx_records.sql).
- * Everything the server sees is derived one-way from the household key, which only paired phones
- * hold: the space id (where the household's records live), the write token (proof of membership)
- * and each record's key (an HMAC of table + id, so the server can't tell record types apart or
- * read the creation time inside UUIDv7 ids).
+ * Cloud sync, one server row per record (supabase/migrations/…_emx_records.sql), in a "space":
+ * the household's shared one, or one person's backup. Everything the server sees is derived one-way
+ * from the space's key (the household key, or the backup's data key), which only its phones hold:
+ * the space id (where its records live), the write token (proof of membership) and each record's
+ * key (an HMAC of table + id, so the server can't tell record types apart or read the creation
+ * time inside UUIDv7 ids).
  */
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-const derive = (key: Uint8Array, householdId: string, label: string) => hkdf(sha256, key, utf8ToBytes(householdId), utf8ToBytes(label), 32);
+const derive = (key: Uint8Array, context: string, label: string) => hkdf(sha256, key, utf8ToBytes(context), utf8ToBytes(label), 32);
 
 export interface Space {
   id: string;
@@ -24,14 +25,20 @@ export interface Space {
   key: Uint8Array;
 }
 
-export function householdSpace(key: Uint8Array, householdId: string): Space {
+function deriveSpace(key: Uint8Array, context: string): Space {
   return {
-    id: hex(derive(key, householdId, 'emx-space-id-v1')),
-    token: hex(derive(key, householdId, 'emx-space-token-v1')),
-    macKey: derive(key, householdId, 'emx-record-key-v1'),
+    id: hex(derive(key, context, 'emx-space-id-v1')),
+    token: hex(derive(key, context, 'emx-space-token-v1')),
+    macKey: derive(key, context, 'emx-record-key-v1'),
     key,
   };
 }
+
+/** The family's shared records, under the household key. */
+export const householdSpace = (key: Uint8Array, householdId: string): Space => deriveSpace(key, householdId);
+
+/** One person's backup records (private entries included), under the backup's random data key. */
+export const backupSpace = (dataKey: Uint8Array, vaultId: string): Space => deriveSpace(dataKey, `vault:${vaultId}`);
 
 export const recordKey = (space: Space, table: TableName, id: string) => hex(hmac(sha256, space.macKey, utf8ToBytes(`${table}\u0000${id}`)));
 

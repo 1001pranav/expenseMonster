@@ -1,6 +1,6 @@
 import { buildBundle } from '../sync/bundle';
-import { DecryptError, keyFromPassphrase } from '../sync/crypto';
-import { contentDigest, formatRecoveryCode, newSalt, newVaultId, newWriteToken, openVault, parseRecoveryCode, saltBytes, sealVault } from '../sync/vault';
+import { DecryptError, keyFromPassphrase, newKey, seal, toBase64 } from '../sync/crypto';
+import { formatRecoveryCode, householdFingerprint, newSalt, newVaultId, newWriteToken, openVault, parseRecoveryCode, saltBytes, sealVault } from '../sync/vault';
 import { txn } from './fixtures';
 
 describe('recovery code', () => {
@@ -28,50 +28,38 @@ describe('recovery code', () => {
   });
 });
 
-describe('vault envelope', () => {
-  const bundle = buildBundle({ transactions: [txn({ id: 'a', scope: 'personal' })] }, { householdId: 'h', deviceId: 'd', deviceName: 'Phone', since: null, kind: 'backup' });
+describe('vault header', () => {
+  const household = { id: 'h', name: 'Home', key: 'a2V5', selfMemberId: 'm1', cloudSync: true };
 
   it('opens only with the password-derived key and only for its own vault', async () => {
     const salt = newSalt();
     const key = await keyFromPassphrase('correct horse battery', saltBytes(salt), 1000);
     const id = newVaultId();
-    const token = newWriteToken();
-    const payload = sealVault({ v: 1, token, bundle }, key, id);
-    expect(payload).not.toContain('Phone');
-    expect(openVault(payload, key, id)).toEqual({ v: 1, token, bundle });
+    const header = { v: 2 as const, token: newWriteToken(), dataKey: toBase64(newKey()), household };
+    const payload = sealVault(header, key, id);
+    expect(payload).not.toContain('a2V5');
+    expect(payload).not.toContain(header.dataKey);
+    expect(openVault(payload, key, id)).toEqual(header);
 
     const wrong = await keyFromPassphrase('correct horse battery!', saltBytes(salt), 1000);
     expect(() => openVault(payload, wrong, id)).toThrow(DecryptError);
     expect(() => openVault(payload, key, newVaultId())).toThrow(DecryptError);
   });
 
-  it('carries the household so a restored phone can rejoin it', async () => {
+  it('still opens a backup made before records, so it can be upgraded', async () => {
     const key = await keyFromPassphrase('correct horse battery', saltBytes(newSalt()), 1000);
     const id = newVaultId();
-    const household = { id: 'h', name: 'Home', key: 'a2V5', selfMemberId: 'm1', cloudSync: true };
-    const payload = sealVault({ v: 1, token: newWriteToken(), bundle, household }, key, id);
-    expect(payload).not.toContain('a2V5');
-    expect(openVault(payload, key, id).household).toEqual(household);
+    const bundle = buildBundle({ transactions: [txn({ id: 'a', scope: 'personal' })] }, { householdId: 'h', deviceId: 'd', deviceName: 'Phone', since: null, kind: 'backup' });
+    const legacy = { v: 1, token: newWriteToken(), bundle };
+    const payload = seal(legacy, key, `emx-vault-v1:${id}`);
+    const opened = openVault(payload, key, id);
+    expect(opened.v).toBe(1);
+    expect(opened.v === 1 && opened.bundle.tables.transactions).toHaveLength(1);
   });
 
-  it('keeps private rows (a backup, not a household delta)', () => {
-    expect(bundle.tables.transactions).toHaveLength(1);
-  });
-});
-
-describe('contentDigest', () => {
-  const a = txn({ id: 'a', updatedAt: '2026-01-01T00:00:00.000Z' });
-  const b = txn({ id: 'b', updatedAt: '2026-01-02T00:00:00.000Z' });
-
-  it('ignores row and key order', () => {
-    const reordered = Object.fromEntries(Object.entries(a).reverse()) as typeof a;
-    expect(contentDigest({ transactions: [a, b] })).toBe(contentDigest({ transactions: [b, reordered] }));
-  });
-
-  it('changes when a row changes or is added', () => {
-    const base = contentDigest({ transactions: [a, b] });
-    expect(contentDigest({ transactions: [a, { ...b, amount: b.amount + 1 }] })).not.toBe(base);
-    expect(contentDigest({ transactions: [a, b, txn({ id: 'c' })] })).not.toBe(base);
-    expect(contentDigest({ transactions: [a], categories: [] })).not.toBe(base);
+  it('fingerprints the household so the header is rewritten only when it changes', () => {
+    expect(householdFingerprint(household)).toBe(householdFingerprint({ ...household }));
+    expect(householdFingerprint({ ...household, cloudSync: false })).not.toBe(householdFingerprint(household));
+    expect(householdFingerprint(undefined)).not.toBe(householdFingerprint(household));
   });
 });

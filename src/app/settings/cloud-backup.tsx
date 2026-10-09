@@ -67,7 +67,7 @@ export default function CloudBackup() {
         setNewCode(await enableVault(pass));
       } else if (mode === 'restore') {
         const r = await restoreVault(codeInput, pass);
-        toast(`Restored: ${r.inserted} new, ${r.updated} updated${r.joined ? ` · back in ${r.joined}` : ''}`, { tone: 'success' });
+        toast(`Restored ${r.received} entries${r.joined ? ` · back in ${r.joined}` : ''}`, { tone: 'success' });
         const { identity } = useStore.getState();
         if (!identity.onboarded) {
           close();

@@ -1,5 +1,5 @@
 import { DecryptError, newKey, seal } from '../sync/crypto';
-import { householdSpace, openRecord, planRecord, recordKey, sealRecord } from '../sync/records';
+import { backupSpace, householdSpace, openRecord, planRecord, recordKey, sealRecord } from '../sync/records';
 import { txn } from './fixtures';
 
 describe('household space', () => {
@@ -70,5 +70,14 @@ describe('planRecord', () => {
     expect(planRecord(local, theirs, true, 'incoming')).toEqual({ kind: 'update', autoResolved: true });
     expect(planRecord(local, theirs, true, 'newest').kind).toBe('keep');
     expect(planRecord(theirs, local, true, 'newest')).toEqual({ kind: 'update', autoResolved: true });
+  });
+});
+
+describe('backup space', () => {
+  it('is separate from the household space and from other backups', () => {
+    const k = newKey();
+    expect(backupSpace(k, 'v1').id).not.toBe(householdSpace(k, 'v1').id);
+    expect(backupSpace(k, 'v1').id).not.toBe(backupSpace(k, 'v2').id);
+    expect(backupSpace(k, 'v1').id).toBe(backupSpace(k, 'v1').id);
   });
 });

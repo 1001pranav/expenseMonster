@@ -51,7 +51,7 @@ Off by default. When a phone turns it on (Sync → *Sync through the cloud*, or 
 
 Setup:
 
-1. Create a Supabase project and run `supabase/migrations/20261010000000_emx_records.sql` (household sync) and `20261008000000_emx_vault.sql` (password backup) in the SQL editor, or `supabase db push`. The older `20261002000000_emx_cloud_sync.sql` (bundle mailbox) is no longer used by the app.
+1. Create a Supabase project and run `supabase/migrations/20261010000000_emx_records.sql` (family sync and backup entries), `20261008000000_emx_vault.sql` (backup header) and `20261011000000_emx_space_delete.sql` (deleting a backup) in the SQL editor, or `supabase db push`. The older `20261002000000_emx_cloud_sync.sql` (bundle mailbox) is no longer used by the app.
 2. Give the build the project URL and the **publishable / anon** key (never the `service_role` / secret key). They are compiled into the APK; nothing is fetched at runtime:
    - **Local builds:** `cp .env.example .env.local` and fill it in. The file is git-ignored.
    - **GitHub Actions:** the build job uses the `DEV` environment (**Settings → Environments → DEV**). Add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` there as variables (they end up in the APK anyway, so they aren't secret), or add one secret `APP_ENV` holding the same lines as `.env.local`. If both are set, the separate values win. Repository-level secrets and variables still work too.
@@ -64,15 +64,17 @@ The anon key ships inside the APK, so anyone can call the functions. Without the
 
 Off by default. Settings → *Cloud backup* keeps a copy of **everything on the phone, private entries included**, on the same Supabase project, so a lost or replaced phone can be restored. It is separate from household cloud sync and works without pairing.
 
-- **Password stays on the phone.** The key is derived on the phone (PBKDF2-SHA256, 300k rounds, random salt) and the snapshot is sealed with AES-256-GCM before upload. Neither the password nor the key is sent or stored on the server. The derived key is kept in the Keystore so background backups don't ask for the password; the password itself is never saved.
+- **Password stays on the phone.** A key is derived from it on the phone (PBKDF2-SHA256, 300k rounds, random salt). Neither the password nor any key is sent or stored on the server. The derived key is kept in the Keystore so background backups don't ask for the password; the password itself is never saved.
+- **Per entry, like family sync.** Each entry (expense, loan, card…) is one server row in the backup's own space (`emx_records`), sealed with AES-256-GCM under a random **data key**. Only entries changed on this phone are uploaded, and only entries newer than this phone's read position are downloaded, so the backup never re-sends your whole history and a new phone never downloads one giant file.
+- **Header.** A small sealed header (`emx_vaults`, found by the recovery code) holds the data key, a write token and the household info, sealed with the password key. **Changing the password re-seals only the header**: no entry is re-uploaded, and other phones keep syncing entries; they ask for the new password once, only to keep the household info current.
 - **Recovery code.** Each backup gets a random 24-character code (`XXXX-XXXX-…`, 120 bits). The server finds the backup by this code, never by the password, so equal passwords never collide and the server can't be probed with password guesses. Restoring on a new phone needs the code **and** the password. Forget the password and the backup cannot be opened by anyone.
-- **What the server stores** (`emx_vaults`): the code, the salt and round count, the ciphertext, a version number, and `sha256` of a random write token. The token travels inside the encrypted payload, so only phones that opened the backup can overwrite or delete it.
-- **When it runs:** with the same triggers as cloud sync (app opened, about 10 s after an edit, *Back up now*). Each run checks the version; if another phone changed the backup it downloads, merges (newest edit wins) and then uploads one snapshot if anything changed. Writes are compare-and-swap on the version, so two phones never overwrite each other's edits.
-- **Change password:** asks for the current one, re-encrypts with a new salt. Other phones using the backup ask for the new password once.
-- **Turn off:** forgets the key on this phone; optionally deletes the backup from the cloud.
-- **Restoring brings the family back too.** The sealed payload also holds the household id, name and key, which member is "me", and whether household cloud sync was on. A new phone (welcome screen → *Restore from cloud backup*) rejoins the household and turns on cloud sync with no QR scan and no onboarding. A phone already paired with others in a different household keeps its household and only gets the data.
+- **What the server stores:** the code, salt, round count and sealed header (`emx_vaults`), and the backup's sealed entries with their sequence numbers (`emx_records`). Writing needs tokens that only phones which opened the backup have (the server keeps hashes).
+- **When it runs:** on unlock, about 10 s after an edit, when the app comes back, on *Back up now*, and a one-request check every 30 s while the app is open (which also sends anything left over from being offline). Between your own phones the newest edit wins.
+- **Turn off:** forgets the keys on this phone; *delete from cloud* also removes the header and every entry.
+- **Restoring brings the family back too.** The header holds the household id, name and key, which member is "me", and whether household cloud sync was on. A new phone (welcome screen → *Restore from cloud backup*) rejoins the household and turns on cloud sync with no QR scan and no onboarding. A phone already paired with others in a different household keeps its household and only gets the data. A phone rewrites the header's household info only when its own household changes.
+- **Older backups** (one encrypted snapshot) are upgraded on their next sync or restore: the snapshot is merged, then every entry is uploaded once.
 
-Setup: run `supabase/migrations/20261008000000_emx_vault.sql` (see cloud sync setup above).
+Setup: run `supabase/migrations/20261008000000_emx_vault.sql`, `20261010000000_emx_records.sql` and `20261011000000_emx_space_delete.sql` (see cloud sync setup above).
 
 ## Financial health and the optional on-device assistant
 

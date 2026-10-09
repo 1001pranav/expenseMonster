@@ -119,14 +119,15 @@ export interface SyncMark {
 }
 
 /**
- * Household rows changed on this phone since they were last synced to `space` (or never synced),
- * with the seq of the server version they were edited from (0 = new). Paged by id.
+ * Rows changed on this phone since they were last synced to `space` (or never synced), with the
+ * seq of the server version they were edited from (0 = new). Paged by id. `scope`: household rows
+ * only (family sync) or every row (personal backup).
  */
-export async function dirtyRows<K extends TableName>(space: string, table: K, afterId: string, limit: number): Promise<{ row: Row<K>; base: number }[]> {
+export async function dirtyRows<K extends TableName>(space: string, table: K, afterId: string, limit: number, scope: 'household' | 'all' = 'household'): Promise<{ row: Row<K>; base: number }[]> {
   const rows = await getDb().getAllAsync<Row<K> & { __seq: number | null }>(
     `SELECT t.*, c.seq AS __seq FROM "${table}" t LEFT JOIN cloud_records c ON c.space = ? AND c.tbl = ? AND c.id = t.id
-     WHERE t.scope = 'household' AND t.id > ? AND (c.id IS NULL OR c.updatedAt <> t.updatedAt) ORDER BY t.id LIMIT ?`,
-    [space, table, afterId, limit],
+     WHERE (? = 'all' OR t.scope = 'household') AND t.id > ? AND (c.id IS NULL OR c.updatedAt <> t.updatedAt) ORDER BY t.id LIMIT ?`,
+    [space, table, scope, afterId, limit],
   );
   return rows.map(({ __seq, ...row }) => ({ row: row as unknown as Row<K>, base: __seq ?? 0 }));
 }
@@ -152,6 +153,11 @@ export async function setSyncMarks(space: string, marks: { table: TableName; id:
       await stmt.finalizeAsync();
     }
   });
+}
+
+/** Forget everything synced with a space (it was deleted, or the backup turned off). */
+export async function clearSyncMarks(space: string): Promise<void> {
+  await getDb().runAsync('DELETE FROM cloud_records WHERE space = ?', [space]);
 }
 
 /** Rows by id including tombstones (the in-memory store only holds live rows), in one query. */
