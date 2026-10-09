@@ -1,5 +1,6 @@
 import * as Linking from 'expo-linking';
 import type { Paise } from '@/domain/money';
+import { logFailure } from './diagnostics';
 
 export interface UpiRequest {
   /** Payee VPA, e.g. priya@oksbi */
@@ -34,7 +35,8 @@ export async function openUpi(req: UpiRequest): Promise<boolean> {
   try {
     await Linking.openURL(url);
     return true;
-  } catch {
+  } catch (e) {
+    logFailure('upi: no app opened the payment link', e, 'warn');
     return false;
   }
 }

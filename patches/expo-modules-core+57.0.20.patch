@@ -1,0 +1,27 @@
+diff --git a/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/sharedobjects/SharedObjectRegistry.kt b/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/sharedobjects/SharedObjectRegistry.kt
+index 52ec91c..1f44b8a 100644
+--- a/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/sharedobjects/SharedObjectRegistry.kt
++++ b/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/sharedobjects/SharedObjectRegistry.kt
+@@ -94,7 +94,11 @@ class SharedObjectRegistry(runtime: Runtime) {
+   }
+ 
+   internal fun toNativeObject(id: SharedObjectId): SharedObject {
+-    val native = pairs[id.ensureWasNotRelease()]?.first
++    // ExpenseMonster patch: read under the same lock as add()/delete(). `pairs` is a plain HashMap;
++    // an unlocked read while another thread adds or releases an object (JS GC finalizing earlier
++    // SQLite statements) could miss a live entry and fail with InvalidSharedObjectIdException,
++    // seen as "NativeDatabase.prepareAsync has been rejected ... doesn't contain valid id".
++    val native = synchronized(this) { pairs[id.ensureWasNotRelease()]?.first }
+     return native ?: throw InvalidSharedObjectIdException()
+   }
+ 
+@@ -110,7 +114,8 @@ class SharedObjectRegistry(runtime: Runtime) {
+     }
+ 
+     val id = SharedObjectId(js.getProperty(sharedObjectIdPropertyName).getInt())
+-    return pairs[id]?.first
++    // ExpenseMonster patch: same lock as above.
++    return synchronized(this) { pairs[id]?.first }
+   }
+ 
+   internal fun toJavaScriptObjectOrNull(native: SharedObject): JavaScriptObject? {

@@ -5,7 +5,7 @@
  *
  * Expo inlines EXPO_PUBLIC_* variables into the JavaScript bundle, so the built APK carries the
  * values; nothing is read at runtime. Both are public by design (the server only exposes
- * emx_push / emx_pull and stores encrypted bundles). Use the publishable / anon key, NEVER the
+ * its emx_* functions and stores data it cannot read). Use the publishable / anon key, NEVER the
  * service_role / secret key: a test fails the build if one is set.
  *
  * Unset → the cloud sync option is hidden.
