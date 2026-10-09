@@ -24,7 +24,7 @@ import { vaultSyncSoon } from '@/services/vault';
 import { ACTION_PAID, ACTION_SNOOZE, configureNotifications, rescheduleAll, scheduleSoon, snooze } from '@/services/notifications';
 import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
-import { installErrorCapture, logError, logInfo } from '@/services/diagnostics';
+import { installErrorCapture, logError, logFailure, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
@@ -84,7 +84,7 @@ function App() {
         logInfo(`app ready (${!st.identity.onboarded ? 'not set up yet' : lockNow ? 'locked' : 'no lock'})`);
         setLocked(lockNow);
         // Reminders are important but must never stop the app from opening.
-        await configureNotifications().catch(() => {});
+        await configureNotifications().catch((e) => logFailure('reminders: setup failed', e));
       })
       .catch((e: Error) => {
         logError(`app failed to open: ${e.message}`);
@@ -113,7 +113,7 @@ function App() {
           setLocked(true);
         }
         // A new month may have started while the app was in the background.
-        generateFixedBills().catch(() => {});
+        generateFixedBills().catch((e) => logFailure('bills: creating this cycle failed', e));
         cloudSyncSoon(0, onCloudResult);
         vaultSyncSoon(0);
       }
@@ -124,8 +124,8 @@ function App() {
   // FLAG_SECURE: blocks screenshots and hides content in the recent-apps switcher.
   useEffect(() => {
     if (!ready) return;
-    if (settings.screenSecure) ScreenCapture.preventScreenCaptureAsync('app').catch(() => {});
-    else ScreenCapture.allowScreenCaptureAsync('app').catch(() => {});
+    if (settings.screenSecure) ScreenCapture.preventScreenCaptureAsync('app').catch((e) => logFailure('screenshot blocking could not be turned on', e));
+    else ScreenCapture.allowScreenCaptureAsync('app').catch((e) => logFailure('screenshot blocking could not be turned off', e, 'warn'));
   }, [ready, settings.screenSecure]);
 
   // Rebuild local reminders whenever data changes (debounced).
@@ -142,7 +142,7 @@ function App() {
 
   useEffect(() => {
     if (!ready || locked || !identity.onboarded) return;
-    rescheduleAll().catch(() => {});
+    rescheduleAll().catch((e) => logFailure('reminders: reschedule failed', e));
     // Only on unlock / first ready.
   }, [ready, locked, identity.onboarded]);
 

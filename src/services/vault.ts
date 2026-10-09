@@ -17,6 +17,7 @@ import {
 import { getMeta, loadTables, saveSettings, setMeta } from '@/db/repo';
 import { getState } from '@/db/store';
 import { cloudConfigured, rpc } from './cloud';
+import { logFailure } from './diagnostics';
 import { clearVaultSecrets, getVaultSecrets, setVaultSecrets } from './secure';
 import { collectRows, mergeBundle, type ImportResult } from './sync';
 
@@ -81,13 +82,14 @@ async function remember(p: { id: string; salt: string; iterations: number; versi
 }
 
 async function setStatus(s: Omit<VaultStatus, 'at'>) {
-  await setMeta(META.status, JSON.stringify({ at: new Date().toISOString(), ...s } satisfies VaultStatus)).catch(() => {});
+  await setMeta(META.status, JSON.stringify({ at: new Date().toISOString(), ...s } satisfies VaultStatus)).catch((e) => logFailure('cloud backup: could not save status', e, 'warn'));
 }
 
 export async function loadVaultStatus(): Promise<VaultStatus | null> {
   try {
     return JSON.parse((await getMeta(META.status)) ?? 'null');
-  } catch {
+  } catch (e) {
+    logFailure('cloud backup: could not read status', e, 'warn');
     return null;
   }
 }
@@ -228,6 +230,7 @@ export function vaultSyncNow(): Promise<VaultResult> {
       await setStatus({ ok: true, message: r.sent ? `Backed up${r.received ? `, ${r.received} received` : ''}` : r.received ? `${r.received} received, up to date` : 'Up to date' });
       return r;
     } catch (e) {
+      logFailure('cloud backup failed', e);
       await setStatus({ ok: false, message: (e as Error).message, needsPassword: e instanceof NeedsPasswordError || undefined });
       throw e;
     } finally {

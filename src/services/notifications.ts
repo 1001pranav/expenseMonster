@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { addDays, toDate, todayYMD } from '@/domain/dates';
 import { computeDues, computeReminders } from '@/domain/dues';
 import { getState } from '@/db/store';
+import { logFailure } from './diagnostics';
 
 const CHANNEL = 'dues';
 const CATEGORY = 'due';
@@ -108,6 +109,6 @@ export function scheduleSoon() {
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    rescheduleAll().catch(() => {});
+    rescheduleAll().catch((e) => logFailure('reminders: reschedule failed', e));
   }, 1500);
 }

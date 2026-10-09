@@ -1,9 +1,10 @@
 import { buildBundle, bundleSize } from '@/domain/sync/bundle';
-import { fullPushDue, mailboxId } from '@/domain/sync/cloud';
+import { describeRpcError, fullPushDue, mailboxId } from '@/domain/sync/cloud';
 import { DecryptError, seal } from '@/domain/sync/crypto';
 import { getMeta, setMeta } from '@/db/repo';
 import { getState } from '@/db/store';
 import { SUPABASE } from '@/config/supabase';
+import { logFailure, logWarn } from './diagnostics';
 import { getHouseholdKey } from './secure';
 import { collectRows, importSealed, loadConflicts } from './sync';
 
@@ -38,10 +39,23 @@ export async function rpc<T>(fn: string, args: Record<string, unknown>): Promise
       body: JSON.stringify(args),
       signal: ctrl.signal,
     });
-    if (!res.ok) throw new Error(`Cloud sync failed (${res.status}): ${(await res.text()).slice(0, 160)}`);
+    if (!res.ok) {
+      const body = await res.text();
+      // The raw server answer is what explains a failure; it never contains plaintext data.
+      logWarn(`cloud ${fn} → HTTP ${res.status}: ${body.slice(0, 300)}`);
+      throw new Error(describeRpcError(fn, res.status, body));
+    }
     return (await res.json()) as T;
   } catch (e) {
-    if ((e as Error).name === 'AbortError') throw new Error('Cloud sync timed out. Check your connection.');
+    if ((e as Error).name === 'AbortError') {
+      logWarn(`cloud ${fn} timed out after ${TIMEOUT_MS / 1000}s`);
+      throw new Error('Cloud sync timed out. Check your connection.');
+    }
+    // fetch() rejects with a bare TypeError when the phone can't reach the server at all.
+    if (e instanceof TypeError) {
+      logFailure(`cloud ${fn} unreachable (${URL})`, e, 'warn');
+      throw new Error(`Can't reach the cloud server (${URL}). Check your connection and EXPO_PUBLIC_SUPABASE_URL.`);
+    }
     throw e;
   } finally {
     clearTimeout(timer);
@@ -69,7 +83,8 @@ const STATUS_KEY = 'cloud.status';
 export async function loadCloudStatus(): Promise<CloudStatus | null> {
   try {
     return JSON.parse((await getMeta(STATUS_KEY)) ?? 'null');
-  } catch {
+  } catch (e) {
+    logFailure('cloud sync: could not read status', e, 'warn');
     return null;
   }
 }
@@ -89,6 +104,7 @@ async function pull(mailbox: string, deviceId: string) {
       } catch (e) {
         // Anyone with the public API key can post into a mailbox; junk simply fails to decrypt.
         if (!(e instanceof DecryptError)) throw e;
+        logWarn(`cloud sync: skipped bundle ${row.id} that this household key can't open`);
         unreadable++;
       }
       cursor = row.id;
@@ -137,7 +153,8 @@ export function cloudSyncNow(): Promise<CloudResult> {
       await setMeta(STATUS_KEY, JSON.stringify({ at: new Date().toISOString(), ok: true, message: `Received ${pulled.received}, sent ${sent}` } satisfies CloudStatus));
       return result;
     } catch (e) {
-      await setMeta(STATUS_KEY, JSON.stringify({ at: new Date().toISOString(), ok: false, message: (e as Error).message } satisfies CloudStatus)).catch(() => {});
+      logFailure('cloud sync failed', e);
+      await setMeta(STATUS_KEY, JSON.stringify({ at: new Date().toISOString(), ok: false, message: (e as Error).message } satisfies CloudStatus)).catch((m) => logFailure('cloud sync: could not save status', m, 'warn'));
       throw e;
     } finally {
       inFlight = null;

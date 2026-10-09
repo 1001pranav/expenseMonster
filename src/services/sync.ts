@@ -7,6 +7,7 @@ import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
 import { allRows, applyRemote, getMeta, listPeers, loadTables, saveIdentity, setMeta, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
+import { logFailure } from './diagnostics';
 import { writeCacheFile } from './files';
 import { getHouseholdKey, setHouseholdKey } from './secure';
 
@@ -70,7 +71,8 @@ const CONFLICTS_KEY = 'pendingConflicts';
 export async function loadConflicts(): Promise<PendingConflict[]> {
   try {
     return JSON.parse((await getMeta(CONFLICTS_KEY)) ?? '[]');
-  } catch {
+  } catch (e) {
+    logFailure('sync: pending conflicts unreadable, ignoring them', e);
     return [];
   }
 }

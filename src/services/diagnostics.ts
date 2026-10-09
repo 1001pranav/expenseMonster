@@ -58,6 +58,11 @@ export function logInfo(message: string) {
 export const logWarn = (message: string) => write('warn', message);
 export const logError = (message: string) => write('error', message);
 
+/** Log a caught error with what the app was doing, including the stack; use where an error would otherwise vanish. */
+export function logFailure(context: string, e: unknown, level: Exclude<Level, 'info'> = 'error') {
+  write(level, `${context}: ${describe(e)}`);
+}
+
 function describe(value: unknown): string {
   if (value instanceof Error) return `${value.name}: ${value.message}${value.stack ? `\n${value.stack.split('\n').slice(1, 8).join('\n')}` : ''}`;
   if (typeof value === 'string') return value;

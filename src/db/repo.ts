@@ -3,6 +3,7 @@ import { SYNC_TABLES, type BaseRow, type Peer, type TableMap, type TableName } f
 import { getDb } from './client';
 import { columnsOf } from './schema';
 import { DEFAULT_SETTINGS, EMPTY_TABLES, getState, type Identity, type Settings } from './store';
+import { logFailure } from '@/services/diagnostics';
 
 type Row<K extends TableName> = TableMap[K];
 export type NewRow<K extends TableName> = Omit<Row<K>, keyof BaseRow> & Partial<BaseRow>;
@@ -142,7 +143,8 @@ export async function loadSettings(): Promise<Settings> {
   const raw = await getMeta('settings');
   try {
     return { ...DEFAULT_SETTINGS, ...(raw ? JSON.parse(raw) : {}) };
-  } catch {
+  } catch (e) {
+    logFailure('settings unreadable, using defaults', e);
     return DEFAULT_SETTINGS;
   }
 }
