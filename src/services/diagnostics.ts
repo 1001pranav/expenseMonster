@@ -58,6 +58,11 @@ export function logInfo(message: string) {
 export const logWarn = (message: string) => write('warn', message);
 export const logError = (message: string) => write('error', message);
 
+/** Log a caught error with what the app was doing, including the stack; use where an error would otherwise vanish. */
+export function logFailure(context: string, e: unknown, level: Exclude<Level, 'info'> = 'error') {
+  write(level, `${context}: ${describe(e)}`);
+}
+
 function describe(value: unknown): string {
   if (value instanceof Error) return `${value.name}: ${value.message}${value.stack ? `\n${value.stack.split('\n').slice(1, 8).join('\n')}` : ''}`;
   if (typeof value === 'string') return value;
@@ -103,6 +108,13 @@ export function installErrorCapture() {
     });
   }
 
+  // A native crash (or the system killing the app while in front) writes nothing: detect it from
+  // how the log ended. Android closing a backgrounded app is normal and ends on "app in background".
+  const previous = useDiagnostics.getState().lines;
+  const last = previous[previous.length - 1];
+  if (last && !/ app in background| CRASH /.test(last)) {
+    write('warn', `previous run ended unexpectedly while open (native crash or killed). Last entry: ${last.slice(0, 200)}`);
+  }
   logInfo(`app started · ${appVersion()} · ${Device.manufacturer ?? ''} ${Device.modelName ?? ''} · Android ${Platform.Version}`);
 }
 

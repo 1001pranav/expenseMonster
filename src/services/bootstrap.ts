@@ -1,3 +1,4 @@
+import { setClockOffset } from '@/domain/clock';
 import { uuidv7 } from '@/domain/ids';
 import { newKey } from '@/domain/sync/crypto';
 import { openDatabase } from '@/db/client';
@@ -5,11 +6,14 @@ import { getMeta, insertMany, loadIdentity, loadSettings, loadTables, saveIdenti
 import { SEED_CATEGORIES } from '@/db/seed';
 import { getState } from '@/db/store';
 import { generateFixedBills } from '@/data/actions';
+import { CLOCK_META } from './cloud';
 import { getHouseholdKey, setHouseholdKey } from './secure';
 
 /** Open the encrypted DB, create this device's identity on first run, seed categories, load everything into memory. */
 export async function bootstrap(): Promise<void> {
   await openDatabase();
+  // Last known server clock correction (services/cloud.ts), before anything is stamped.
+  setClockOffset(Number((await getMeta(CLOCK_META)) ?? 0));
   let identity = await loadIdentity();
 
   if (!identity.deviceId) {

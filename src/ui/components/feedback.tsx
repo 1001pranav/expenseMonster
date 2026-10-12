@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 import { radius, space, useTheme } from '../theme';
 import { Txt } from './core';
+import { logWarn } from '@/services/diagnostics';
 
 interface ToastState {
   message: string | null;
@@ -29,7 +30,11 @@ export const useToast = create<ToastState>((set) => ({
 /** Snackbar with optional Undo, used instead of "Are you sure?" dialogs. */
 export const toast = (message: string, opts?: Parameters<ToastState['show']>[1]) => {
   if (opts?.tone === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-  if (opts?.tone === 'error') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+  if (opts?.tone === 'error') {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    // Every error the user sees also lands in Settings → Error log.
+    logWarn(`shown: ${message}`);
+  }
   useToast.getState().show(message, opts);
 };
 

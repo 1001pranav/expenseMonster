@@ -26,7 +26,9 @@ export async function stageImage(sourceUri: string): Promise<string> {
     const dest = new File(Paths.cache, `scan-${uuidv7()}${(src.extension || '.jpg').toLowerCase()}`);
     await src.copy(dest);
     return dest.uri;
-  } catch {
+  } catch (e) {
+    // console.warn lands in the error log (diagnostics.ts imports this file, so no direct import).
+    console.warn('files: could not copy shared image, using the original', e);
     return sourceUri;
   }
 }

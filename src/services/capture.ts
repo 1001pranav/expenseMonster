@@ -14,6 +14,7 @@ import { insert } from '@/db/repo';
 import { getState } from '@/db/store';
 import { saveAttachment } from './files';
 import { recognizeText } from './ocr';
+import { logFailure } from './diagnostics';
 
 export interface CaptureSummary {
   added: number;
@@ -201,7 +202,10 @@ export async function readScreenshot(uri: string): Promise<ScreenshotRead> {
     // The Latin model often reads ₹ as a 7 ("₹10.00" → "710.00"); ask the Devanagari model for the amount.
     const second = await recognizeText(uri, 'Devanagari')
       .then((r) => analyzePaymentScreenshot(r.text, today, { prominent: r.prominent }))
-      .catch(() => null);
+      .catch((e) => {
+        logFailure('capture: second OCR pass (Devanagari) failed', e, 'warn');
+        return null;
+      });
     if (second?.amount && second.amountSure) {
       payment.amount = second.amount;
       payment.amountSure = true;

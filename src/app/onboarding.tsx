@@ -7,6 +7,7 @@ import { insert, saveIdentity, saveSettings } from '@/db/repo';
 import { MEMBER_COLORS } from '@/db/seed';
 import { useStore } from '@/db/store';
 import { ensurePermission } from '@/services/notifications';
+import { vaultAvailable } from '@/services/vault';
 import { setPin } from '@/services/secure';
 import { Aurora, BrandMark, GradientTile } from '@/ui/components/Aurora';
 import { Button, Card, ListRow, Row, Txt, type IconName } from '@/ui/components/core';
@@ -102,6 +103,18 @@ export default function Onboarding() {
           </View>
           <TextField label="Your name" value={name} onChangeText={setName} placeholder="Pranav" autoCapitalize="words" autoFocus />
           <TextField label="Household name" value={household} onChangeText={setHousehold} placeholder="The Sharmas" autoCapitalize="words" />
+          {vaultAvailable ? (
+            <Card padded={false} style={{ overflow: 'hidden' }}>
+              <ListRow
+                icon="cloud-download-outline"
+                iconColor={colors.primary}
+                title="Restore from cloud backup"
+                subtitle="New phone? Recovery code + password brings everything back"
+                chevron
+                onPress={() => router.push({ pathname: '/settings/cloud-backup', params: { restore: '1' } })}
+              />
+            </Card>
+          ) : null}
         </>
       ) : null}
 

@@ -5,6 +5,7 @@ import { answer, type Answer, type ChatMessage, type Generate } from '@/domain/a
 import { financeTools, type FinanceSnapshot } from '@/domain/assistant/tools';
 import { todayYMD } from '@/domain/dates';
 import { getState } from '@/db/store';
+import { logFailure } from './diagnostics';
 
 /**
  * Optional on-device assistant ("model pack"). The LiteRT-LM runtime ships in the app; the
@@ -48,6 +49,7 @@ export async function packState(): Promise<PackState> {
     }
     return { kind: 'installed', sizeBytes: model.sizeBytes };
   } catch (e) {
+    logFailure('assistant: status check failed', e, 'warn');
     return { kind: 'unsupported', reason: friendly(e) };
   }
 }
