@@ -23,13 +23,18 @@ function pick(table: TableName, row: Record<string, unknown>) {
   return { cols, values };
 }
 
+const upsertSql = (table: TableName) => {
+  const cols = columnsOf(table);
+  return `INSERT OR REPLACE INTO "${table}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
+};
+
 async function writeRow<K extends TableName>(table: K, row: Row<K>): Promise<void> {
-  const { cols, values } = pick(table, row as unknown as Record<string, unknown>);
-  const placeholders = cols.map(() => '?').join(', ');
-  await getDb().runAsync(
-    `INSERT OR REPLACE INTO "${table}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-    values,
-  );
+  await getDb().runAsync(upsertSql(table), pick(table, row as unknown as Record<string, unknown>).values);
+}
+
+/** Many rows of one table in one transaction and one prepared statement. */
+async function writeRows<K extends TableName>(table: K, rows: Row<K>[]): Promise<void> {
+  await getDb().transaction((tx) => tx.runManyAsync(upsertSql(table), rows.map((r) => pick(table, r as unknown as Record<string, unknown>).values)));
 }
 
 export async function insert<K extends TableName>(table: K, data: NewRow<K>): Promise<Row<K>> {
@@ -56,9 +61,7 @@ export async function insertMany<K extends TableName>(table: K, items: NewRow<K>
     (data) =>
       ({ scope: 'household', ...data, id: data.id ?? uuidv7(), createdAt: data.createdAt ?? ts, updatedAt: data.updatedAt ?? ts, deletedAt: null, deviceId: data.deviceId ?? identity.deviceId }) as Row<K>,
   );
-  await getDb().withTransactionAsync(async () => {
-    for (const r of rows) await writeRow(table, r);
-  });
+  await writeRows(table, rows);
   getState().putRows(table, rows);
   return rows;
 }
@@ -91,9 +94,7 @@ export async function restore<K extends TableName>(table: K, id: string): Promis
 /** Rows exactly as received from another phone (keeps their updatedAt / deviceId). */
 export async function applyRemote<K extends TableName>(table: K, rows: Row<K>[]): Promise<void> {
   if (!rows.length) return;
-  await getDb().withTransactionAsync(async () => {
-    for (const r of rows) await writeRow(table, r);
-  });
+  await writeRows(table, rows);
   getState().putRows(table, rows);
 }
 
@@ -144,15 +145,12 @@ export async function getSyncMarks(space: string, table: TableName, ids: string[
 
 export async function setSyncMarks(space: string, marks: { table: TableName; id: string; seq: number; updatedAt: string }[]): Promise<void> {
   if (!marks.length) return;
-  await getDb().withTransactionAsync(async () => {
-    // One prepared statement for the whole batch rather than one per row.
-    const stmt = await getDb().prepareAsync('INSERT OR REPLACE INTO cloud_records (space, tbl, id, seq, updatedAt) VALUES (?, ?, ?, ?, ?)');
-    try {
-      for (const m of marks) await stmt.executeAsync([space, m.table, m.id, m.seq, m.updatedAt]);
-    } finally {
-      await stmt.finalizeAsync();
-    }
-  });
+  await getDb().transaction((tx) =>
+    tx.runManyAsync(
+      'INSERT OR REPLACE INTO cloud_records (space, tbl, id, seq, updatedAt) VALUES (?, ?, ?, ?, ?)',
+      marks.map((m) => [space, m.table, m.id, m.seq, m.updatedAt]),
+    ),
+  );
 }
 
 /** Forget everything synced with a space (it was deleted, or the backup turned off). */

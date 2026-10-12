@@ -108,6 +108,13 @@ export function installErrorCapture() {
     });
   }
 
+  // A native crash (or the system killing the app while in front) writes nothing: detect it from
+  // how the log ended. Android closing a backgrounded app is normal and ends on "app in background".
+  const previous = useDiagnostics.getState().lines;
+  const last = previous[previous.length - 1];
+  if (last && !/ app in background| CRASH /.test(last)) {
+    write('warn', `previous run ended unexpectedly while open (native crash or killed). Last entry: ${last.slice(0, 200)}`);
+  }
   logInfo(`app started · ${appVersion()} · ${Device.manufacturer ?? ''} ${Device.modelName ?? ''} · Android ${Platform.Version}`);
 }
 
