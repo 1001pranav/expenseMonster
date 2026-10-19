@@ -1,3 +1,4 @@
+import { syncedNowISO } from '../clock';
 import { SYNC_TABLES, type BaseRow, type TableName } from '../types';
 import { fromBase64, toBase64 } from './crypto';
 
@@ -34,7 +35,8 @@ export function buildBundle(
     householdId: opts.householdId,
     fromDeviceId: opts.deviceId,
     fromName: opts.deviceName,
-    createdAt: opts.now ?? new Date().toISOString(),
+    // Becomes the receiver's "last synced with this phone" mark, compared with updatedAt: same clock.
+    createdAt: opts.now ?? syncedNowISO(),
     since: opts.since,
     tables,
   };
@@ -64,10 +66,14 @@ export interface PairPayload {
   deviceId: string;
   deviceName: string;
   key: string;
+  /** The inviting phone uses cloud sync: the joining phone turns it on too. Absent in older codes. */
+  cloud?: boolean;
 }
 
 export function encodePair(p: Omit<PairPayload, 't' | 'v' | 'key'>, key: Uint8Array): string {
-  const payload: PairPayload = { t: 'emx-pair', v: 1, ...p, key: toBase64(key) };
+  // Omit the flag when off so the code stays the same as before; older apps ignore it anyway.
+  const { cloud, ...rest } = p;
+  const payload: PairPayload = { t: 'emx-pair', v: 1, ...rest, ...(cloud ? { cloud: true } : {}), key: toBase64(key) };
   return JSON.stringify(payload);
 }
 

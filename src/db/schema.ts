@@ -143,4 +143,9 @@ export const MIGRATIONS: string[] = [
   ].join('\n'),
   // v2: user-taught SMS formats.
   createTable('sms_formats'),
+  // v3: per-record cloud sync. For each household record: the server seq this phone last saw and
+  // the updatedAt it had then. A row whose updatedAt differs has local edits to push.
+  [
+    'CREATE TABLE IF NOT EXISTS cloud_records (space TEXT NOT NULL, tbl TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (space, tbl, id));',
+  ].join('\n'),
 ];

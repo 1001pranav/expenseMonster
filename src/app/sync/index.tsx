@@ -72,7 +72,10 @@ export default function Sync() {
   const showQr = async () => {
     const key = await getHouseholdKey();
     if (!key) return;
-    setQr({ value: encodePair({ householdId: identity.householdId, householdName: identity.householdName, deviceId: identity.deviceId, deviceName: identity.deviceName }, key), fp: fingerprint(key) });
+    setQr({
+      value: encodePair({ householdId: identity.householdId, householdName: identity.householdName, deviceId: identity.deviceId, deviceName: identity.deviceName, cloud: cloudOn && cloudConfigured }, key),
+      fp: fingerprint(key),
+    });
   };
 
   const send = async (peer: Peer | null) => {
@@ -122,7 +125,9 @@ export default function Sync() {
       <Card tone="alt" style={{ gap: 6 }}>
         <Txt variant="bodyStrong">How it works</Txt>
         <Txt variant="small" tone="muted">
-          1. Pair once in person: one phone shows a QR code, the other scans it.{'\n'}2. Tap "Send" to share an encrypted update file through WhatsApp, Nearby Share or Bluetooth.{'\n'}3. Open the file on the other phone. Only entries not marked private are shared.
+          {cloudOn
+            ? `1. Pair once in person: one phone shows a QR code, the other scans it.\n2. That's it: changes sync through the cloud on their own, encrypted, within about 30 seconds while the app is open.\n3. Only entries not marked private are shared.`
+            : `1. Pair once in person: one phone shows a QR code, the other scans it.\n2. Tap "Send" to share an encrypted update file through WhatsApp, Nearby Share or Bluetooth.\n3. Open the file on the other phone. Only entries not marked private are shared.`}
         </Txt>
       </Card>
 

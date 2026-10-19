@@ -1,12 +1,15 @@
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system';
+import { syncedNowISO, syncedNowMs } from '@/domain/clock';
 import { randomBytes } from '@/domain/ids';
 import { buildBundle, bundleSize, validateBundle, type Bundle } from '@/domain/sync/bundle';
 import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sync/crypto';
 import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
+import { openRecord, planRecord, type Space } from '@/domain/sync/records';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
-import { allRows, applyRemote, getMeta, listPeers, loadTables, saveIdentity, setMeta, update, upsertPeer } from '@/db/repo';
+import { allRows, applyRemote, getMeta, getSyncMarks, listPeers, loadTables, rowsByIds, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
+import { logFailure, logWarn } from './diagnostics';
 import { writeCacheFile } from './files';
 import { getHouseholdKey, setHouseholdKey } from './secure';
 
@@ -32,7 +35,7 @@ export async function sendChanges(peer: Peer | null): Promise<{ rows: number }> 
   if (!key) throw new Error('Household key missing');
   const { identity } = getState();
   const since = peer?.lastSentAt ?? null;
-  const startedAt = new Date().toISOString();
+  const startedAt = syncedNowISO();
   const bundle = buildBundle(await collectRows(), {
     householdId: identity.householdId,
     deviceId: identity.deviceId,
@@ -70,14 +73,92 @@ const CONFLICTS_KEY = 'pendingConflicts';
 export async function loadConflicts(): Promise<PendingConflict[]> {
   try {
     return JSON.parse((await getMeta(CONFLICTS_KEY)) ?? '[]');
-  } catch {
+  } catch (e) {
+    logFailure('sync: pending conflicts unreadable, ignoring them', e);
     return [];
   }
 }
 
 const saveConflicts = (list: PendingConflict[]) => setMeta(CONFLICTS_KEY, JSON.stringify(list));
 
-async function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
+let mergeQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Merges read the local rows and then write; household cloud sync, the personal backup and file
+ * imports can all run at once, so they take turns.
+ */
+function serialMerge<T>(fn: () => Promise<T>): Promise<T> {
+  const run = mergeQueue.then(fn);
+  mergeQueue = run.catch(() => {});
+  return run;
+}
+
+export function mergeBundle(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
+  return serialMerge(() => mergeBundleNow(bundle, policy));
+}
+
+export interface PulledRecord {
+  record_key: string;
+  seq: number | string;
+  payload: string;
+}
+
+/**
+ * Apply one page of household records pulled from the cloud (services/cloud.ts). A record is a
+ * conflict only if this phone also changed it since it last synced it; everything else the server
+ * has is simply newer. Remembers each record's seq so the next push edits from the right version.
+ */
+export function applyRecords(space: Space, page: PulledRecord[], policy: ConflictPolicy): Promise<{ received: number; unreadable: number }> {
+  return serialMerge(async () => {
+    const pending = new Map((await loadConflicts()).map((c) => [`${c.table}:${c.local.id}`, c]));
+    const names = new Map((await listPeers()).map((p) => [p.deviceId, p.name]));
+    const writes = new Map<TableName, BaseRow[]>();
+    const marks: { table: TableName; id: string; seq: number; updatedAt: string }[] = [];
+    let received = 0;
+    let unreadable = 0;
+    // Decrypt the page first, then look up local state per table in one query each.
+    const opened: { seq: number; table: TableName; incoming: BaseRow }[] = [];
+    for (const raw of page) {
+      const seq = Number(raw.seq);
+      try {
+        const rec = openRecord(space, raw.record_key, raw.payload);
+        if (!SYNC_TABLES.includes(rec.t)) throw new Error(`unknown table ${rec.t}`);
+        opened.push({ seq, table: rec.t, incoming: rec.r });
+      } catch (e) {
+        logWarn(`cloud sync: skipped record #${seq} this household key can't open (${(e as Error).message})`);
+        unreadable++;
+      }
+    }
+    const state = new Map<TableName, { marks: Awaited<ReturnType<typeof getSyncMarks>>; rows: Map<string, BaseRow> }>();
+    for (const table of new Set(opened.map((o) => o.table))) {
+      const ids = opened.filter((o) => o.table === table).map((o) => o.incoming.id);
+      state.set(table, { marks: await getSyncMarks(space.id, table, ids), rows: (await rowsByIds(table, ids)) as Map<string, BaseRow> });
+    }
+    for (const { seq, table, incoming } of opened) {
+      const mark = state.get(table)!.marks.get(incoming.id);
+      // Already have this version: it was pushed from this phone, or seen before.
+      if (mark && mark.seq >= seq) continue;
+      const local = state.get(table)!.rows.get(incoming.id);
+      const dirty = Boolean(local) && (!mark || mark.updatedAt !== local!.updatedAt);
+      const action = planRecord(local, incoming, dirty, policy);
+      if (action.kind === 'insert' || action.kind === 'update') {
+        writes.set(table, [...(writes.get(table) ?? []), incoming]);
+        received++;
+      }
+      if (action.kind === 'conflict') {
+        pending.set(`${table}:${incoming.id}`, { table, from: names.get(incoming.deviceId) ?? 'another phone', local: local!, incoming });
+      }
+      // "same": the local row already matches; anything else: the server's version is now the base.
+      marks.push({ table, id: incoming.id, seq, updatedAt: action.kind === 'same' ? local!.updatedAt : incoming.updatedAt });
+    }
+    for (const [table, rows] of writes) await applyRemote(table, rows as never[]);
+    await setSyncMarks(space.id, marks);
+    await saveConflicts([...pending.values()]);
+    return { received, unreadable };
+  });
+}
+
+async function mergeBundleNow(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
   const peers = await listPeers();
   const lastSync = peers.find((p) => p.deviceId === bundle.fromDeviceId)?.lastReceivedAt ?? null;
   const totals = { inserted: 0, updated: 0, skipped: 0, autoResolved: 0, pendingConflicts: 0 };
@@ -122,7 +203,7 @@ export async function importChanges(uri: string): Promise<ImportResult> {
   return importSealed(await new File(uri).text());
 }
 
-/** Decrypt and merge one sealed delta, whether it came from a file or the cloud mailbox. */
+/** Decrypt and merge one sealed delta from a .emx file. */
 export async function importSealed(text: string): Promise<ImportResult> {
   const key = await getHouseholdKey();
   if (!key) throw new Error('Household key missing');
@@ -133,7 +214,7 @@ export async function importSealed(text: string): Promise<ImportResult> {
   const result = await mergeBundle(bundle, getState().settings.syncConflictPolicy);
   await upsertPeer({ deviceId: bundle.fromDeviceId, name: bundle.fromName, lastReceivedAt: bundle.createdAt });
   // All timestamps are UTC, so only a wrong phone clock can make "newest" pick the wrong edit.
-  const clockAheadMinutes = Math.max(0, Math.round((Date.parse(bundle.createdAt) - Date.now()) / 60_000));
+  const clockAheadMinutes = Math.max(0, Math.round((Date.parse(bundle.createdAt) - syncedNowMs()) / 60_000));
   return { from: bundle.fromName, ...result, clockAheadMinutes };
 }
 

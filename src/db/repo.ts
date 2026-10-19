@@ -1,13 +1,16 @@
+import { syncedNowISO } from '@/domain/clock';
 import { uuidv7 } from '@/domain/ids';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableMap, type TableName } from '@/domain/types';
 import { getDb } from './client';
 import { columnsOf } from './schema';
 import { DEFAULT_SETTINGS, EMPTY_TABLES, getState, type Identity, type Settings } from './store';
+import { logFailure } from '@/services/diagnostics';
 
 type Row<K extends TableName> = TableMap[K];
 export type NewRow<K extends TableName> = Omit<Row<K>, keyof BaseRow> & Partial<BaseRow>;
 
-const now = () => new Date().toISOString();
+// Bookkeeping times use the server-corrected clock, so every phone orders edits the same way.
+const now = syncedNowISO;
 
 function pick(table: TableName, row: Record<string, unknown>) {
   const cols = columnsOf(table);
@@ -20,13 +23,18 @@ function pick(table: TableName, row: Record<string, unknown>) {
   return { cols, values };
 }
 
+const upsertSql = (table: TableName) => {
+  const cols = columnsOf(table);
+  return `INSERT OR REPLACE INTO "${table}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
+};
+
 async function writeRow<K extends TableName>(table: K, row: Row<K>): Promise<void> {
-  const { cols, values } = pick(table, row as unknown as Record<string, unknown>);
-  const placeholders = cols.map(() => '?').join(', ');
-  await getDb().runAsync(
-    `INSERT OR REPLACE INTO "${table}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-    values,
-  );
+  await getDb().runAsync(upsertSql(table), pick(table, row as unknown as Record<string, unknown>).values);
+}
+
+/** Many rows of one table in one transaction and one prepared statement. */
+async function writeRows<K extends TableName>(table: K, rows: Row<K>[]): Promise<void> {
+  await getDb().transaction((tx) => tx.runManyAsync(upsertSql(table), rows.map((r) => pick(table, r as unknown as Record<string, unknown>).values)));
 }
 
 export async function insert<K extends TableName>(table: K, data: NewRow<K>): Promise<Row<K>> {
@@ -53,9 +61,7 @@ export async function insertMany<K extends TableName>(table: K, items: NewRow<K>
     (data) =>
       ({ scope: 'household', ...data, id: data.id ?? uuidv7(), createdAt: data.createdAt ?? ts, updatedAt: data.updatedAt ?? ts, deletedAt: null, deviceId: data.deviceId ?? identity.deviceId }) as Row<K>,
   );
-  await getDb().withTransactionAsync(async () => {
-    for (const r of rows) await writeRow(table, r);
-  });
+  await writeRows(table, rows);
   getState().putRows(table, rows);
   return rows;
 }
@@ -88,9 +94,7 @@ export async function restore<K extends TableName>(table: K, id: string): Promis
 /** Rows exactly as received from another phone (keeps their updatedAt / deviceId). */
 export async function applyRemote<K extends TableName>(table: K, rows: Row<K>[]): Promise<void> {
   if (!rows.length) return;
-  await getDb().withTransactionAsync(async () => {
-    for (const r of rows) await writeRow(table, r);
-  });
+  await writeRows(table, rows);
   getState().putRows(table, rows);
 }
 
@@ -106,6 +110,59 @@ export async function loadTables() {
     (tables as Record<string, unknown[]>)[name] = rows;
   }
   return tables;
+}
+
+// ── per-record cloud sync state (services/cloud.ts) ────────────────────────
+
+export interface SyncMark {
+  seq: number;
+  updatedAt: string;
+}
+
+/**
+ * Rows changed on this phone since they were last synced to `space` (or never synced), with the
+ * seq of the server version they were edited from (0 = new). Paged by id. `scope`: household rows
+ * only (family sync) or every row (personal backup).
+ */
+export async function dirtyRows<K extends TableName>(space: string, table: K, afterId: string, limit: number, scope: 'household' | 'all' = 'household'): Promise<{ row: Row<K>; base: number }[]> {
+  const rows = await getDb().getAllAsync<Row<K> & { __seq: number | null }>(
+    `SELECT t.*, c.seq AS __seq FROM "${table}" t LEFT JOIN cloud_records c ON c.space = ? AND c.tbl = ? AND c.id = t.id
+     WHERE (? = 'all' OR t.scope = 'household') AND t.id > ? AND (c.id IS NULL OR c.updatedAt <> t.updatedAt) ORDER BY t.id LIMIT ?`,
+    [space, table, scope, afterId, limit],
+  );
+  return rows.map(({ __seq, ...row }) => ({ row: row as unknown as Row<K>, base: __seq ?? 0 }));
+}
+
+/** Sync marks for many records of one table in one query (each query is a native statement; keep them few). */
+export async function getSyncMarks(space: string, table: TableName, ids: string[]): Promise<Map<string, SyncMark>> {
+  if (!ids.length) return new Map();
+  const rows = await getDb().getAllAsync<SyncMark & { id: string }>(
+    `SELECT id, seq, updatedAt FROM cloud_records WHERE space = ? AND tbl = ? AND id IN (${ids.map(() => '?').join(', ')})`,
+    [space, table, ...ids],
+  );
+  return new Map(rows.map((r) => [r.id, { seq: r.seq, updatedAt: r.updatedAt }]));
+}
+
+export async function setSyncMarks(space: string, marks: { table: TableName; id: string; seq: number; updatedAt: string }[]): Promise<void> {
+  if (!marks.length) return;
+  await getDb().transaction((tx) =>
+    tx.runManyAsync(
+      'INSERT OR REPLACE INTO cloud_records (space, tbl, id, seq, updatedAt) VALUES (?, ?, ?, ?, ?)',
+      marks.map((m) => [space, m.table, m.id, m.seq, m.updatedAt]),
+    ),
+  );
+}
+
+/** Forget everything synced with a space (it was deleted, or the backup turned off). */
+export async function clearSyncMarks(space: string): Promise<void> {
+  await getDb().runAsync('DELETE FROM cloud_records WHERE space = ?', [space]);
+}
+
+/** Rows by id including tombstones (the in-memory store only holds live rows), in one query. */
+export async function rowsByIds<K extends TableName>(table: K, ids: string[]): Promise<Map<string, Row<K>>> {
+  if (!ids.length) return new Map();
+  const rows = await getDb().getAllAsync<Row<K>>(`SELECT * FROM "${table}" WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+  return new Map(rows.map((r) => [r.id, r]));
 }
 
 // ── meta (device-local key/value, never synced) ────────────────────────────
@@ -142,7 +199,8 @@ export async function loadSettings(): Promise<Settings> {
   const raw = await getMeta('settings');
   try {
     return { ...DEFAULT_SETTINGS, ...(raw ? JSON.parse(raw) : {}) };
-  } catch {
+  } catch (e) {
+    logFailure('settings unreadable, using defaults', e);
     return DEFAULT_SETTINGS;
   }
 }
