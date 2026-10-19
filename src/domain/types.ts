@@ -64,7 +64,7 @@ export type PayMethod = 'upi' | 'bank' | 'cash' | 'card' | 'wallet';
 export type TxnSource = 'manual' | 'ocr' | 'sms' | 'upi' | 'sync' | 'bill';
 export type TxnStatus = 'pending' | 'confirmed' | 'rejected';
 /** What obligation a transaction pays / settles. */
-export type LinkType = 'bill' | 'loan' | 'policy' | 'card' | 'income' | null;
+export type LinkType = 'bill' | 'loan' | 'policy' | 'card' | 'income' | 'investment' | null;
 
 export interface Transaction extends BaseRow {
   type: TxnType;
@@ -240,6 +240,55 @@ export interface SmsFormat extends BaseRow {
   active: 0 | 1;
 }
 
+export type AssetClass = 'gold' | 'silver' | 'equity' | 'mf' | 'fixed' | 'other';
+export type QuantityUnit = 'g' | 'share' | 'unit' | 'none';
+
+/** Something the family owns: "22K gold", "INFY", a fund. Its quantity and cost come from its trades. */
+export interface Holding extends BaseRow {
+  assetClass: AssetClass;
+  /** jewellery | coin | digital | sgb | etf | sip | lumpsum | fd | ppf | ... (domain/investments.ts). */
+  form: string | null;
+  name: string;
+  /** NSE/BSE ticker, AMFI scheme code. */
+  symbol: string | null;
+  unit: QuantityUnit;
+  /** '999', '916', '925'… */
+  purity: string | null;
+  /** Whose it is; null = held jointly by the household. */
+  memberId: string | null;
+  /** Last known price per unit (paise), entered by hand until online prices exist. */
+  priceNow: Paise | null;
+  priceAsOf: string | null;
+  closed: 0 | 1;
+  note: string | null;
+}
+
+/**
+ * One buy or sell of a holding. `amount` is the trade's own value; the cash that moved, if any, is the
+ * transaction `txnId` (a transfer, linkType investment). They differ when no cash moves: a gift, an
+ * old piece of jewellery traded in for a new one.
+ */
+export interface Trade extends BaseRow {
+  holdingId: string;
+  side: 'buy' | 'sell';
+  tradeDate: YMD;
+  /** Buy: cost including charges and taxes. Sell: what was received, after them. */
+  amount: Paise;
+  /** Thousandths of the holding's unit (10.5 g = 10500, 3 shares = 3000); null = not entered. */
+  quantity: number | null;
+  /** Paise per unit actually paid, before charges and taxes; null = not entered. */
+  unitPrice: Paise | null;
+  /** Making charges, brokerage, stamp duty… */
+  charges: Paise;
+  /** GST, STT… */
+  taxes: Paise;
+  /** Market rate that day, paise per unit (optional reference, e.g. the day's gold rate). */
+  refRate: Paise | null;
+  /** 'manual', or where a fetched rate came from. */
+  refSource: string | null;
+  txnId: string | null;
+}
+
 /** A phone in the household. Each phone publishes its own (id = its deviceId). */
 export interface Device extends BaseRow {
   name: string;
@@ -309,6 +358,8 @@ export interface TableMap {
   household: HouseholdInfo;
   sync_holds: SyncHold;
   key_grants: KeyGrant;
+  holdings: Holding;
+  trades: Trade;
 }
 export type TableName = keyof TableMap;
 // Control tables first: a file or page that changes the head or a rule is applied before the data it covers.
@@ -318,6 +369,8 @@ export const SYNC_TABLES: TableName[] = [
   'sync_holds',
   'key_grants',
   'categories',
+  'holdings',
+  'trades',
   'members',
   'accounts',
   'cards',

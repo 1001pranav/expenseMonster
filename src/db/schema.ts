@@ -121,10 +121,12 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   household: { headDeviceId: T, keyId: T, removed: T },
   sync_holds: { holdDevice: T, since: T, until: T, tbl: T, recordId: T, decision: TN, note: T },
   key_grants: { recipient: TN, keyId: TN, sealed: TN },
+  holdings: { assetClass: TN, form: T, name: TN, symbol: T, unit: TN, purity: T, memberId: T, priceNow: I, priceAsOf: T, closed: IN0, note: T },
+  trades: { holdingId: TN, side: TN, tradeDate: TN, amount: IN0, quantity: I, unitPrice: I, charges: IN0, taxes: IN0, refRate: I, refSource: T, txnId: T },
 };
 
 /** Tables created after v1, by the migration that created them (older migrations must skip them). */
-const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5, key_grants: 6 };
+const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5, key_grants: 6, holdings: 7, trades: 7 };
 /** Columns added to an existing table, by the migration that added them (with ALTER TABLE). */
 const ADDED_IN: Partial<Record<TableName, Record<string, number>>> = {
   devices: { publicKey: 6 },
@@ -198,4 +200,7 @@ export const MIGRATIONS: string[] = [
     'ALTER TABLE "household" ADD COLUMN "removed" TEXT;',
     createTable('key_grants', 6),
   ].join('\n'),
+  // v7: investments (domain/investments.ts). The money side stays a transaction (a transfer,
+  // linkType 'investment'); these hold what was bought.
+  [createTable('holdings', 7), createTable('trades', 7), 'CREATE INDEX IF NOT EXISTS trades_holding ON trades(holdingId);'].join('\n'),
 ];

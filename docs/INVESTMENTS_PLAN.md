@@ -1,6 +1,6 @@
 # Investments: plan
 
-Status: decisions agreed (§8), nothing built yet. Covers gold/silver, shares, and how investments interact with
+Status: decisions agreed (§8). Phase 1 (buying and selling, §3a) is being built. Covers gold/silver, shares, and how investments interact with
 spending, family sync and tax.
 
 ## 1. Where the request is right and where I disagree
@@ -101,13 +101,14 @@ trades              -- every buy/sell/redeem
   holdingId    TEXT NOT NULL
   side         TEXT NOT NULL   -- buy | sell
   tradeDate    TEXT NOT NULL
-  quantity     INTEGER NOT NULL   -- MILLI-units: 10.5 g = 10500, 3 shares = 3000, 12.345 units = 12345
-  unitPrice    INTEGER NOT NULL   -- paise per unit actually paid/received
+  amount       INTEGER NOT NULL   -- the trade's value: buy = cost incl. charges; sell = what you got, after charges
+  quantity     INTEGER            -- MILLI-units: 10.5 g = 10500, 3 shares = 3000, 12.345 units = 12345; NULL = not entered
+  unitPrice    INTEGER            -- paise per unit actually paid/received; NULL = not entered
   charges      INTEGER NOT NULL DEFAULT 0   -- making charges, brokerage, STT, stamp duty
   taxes        INTEGER NOT NULL DEFAULT 0   -- GST etc.
   refRate      INTEGER         -- market rate that day, paise per unit (optional)
   refSource    TEXT            -- 'manual' | 'fetched:<provider>:<city or symbol>'; edited after fetch → 'manual'
-  txnId        TEXT            -- the cash transaction (transfer, linkType 'investment')
+  txnId        TEXT            -- the cash transaction (transfer, linkType 'investment'); NULL = no cash moved
 ```
 
 Choices to note:
@@ -117,14 +118,70 @@ Choices to note:
 - **Trades, not a single holding row with a running total.** A total with no lots can't
   compute capital gains (FIFO lots, holding period for short/long term). It also merges badly
   when two phones both edit "quantity". Append-only trades merge cleanly; the holding total is derived.
-- **The cash transaction stays the single source of truth for money movement.** A trade points to
-  it (`txnId`), and the transaction points back (`linkType: 'investment'`, `linkId: tradeId`). That
-  is the same pattern bills, loans and cards already use. Deleting one asks about the other.
+- **The trade has its own value (`amount`); the cash transaction records only the money that moved.**
+  A trade points to it (`txnId`), and the transaction points back (`linkType: 'investment'`,
+  `linkId: tradeId`), the same pattern bills, loans and cards use. Usually both amounts are equal.
+  They differ when no cash moves: gold received as a gift, old jewellery exchanged for new (§3a),
+  bonus shares. A trade without a transaction is allowed. (Correction: an earlier version of
+  this plan made the transaction the only record of value, which can't express these cases.)
+- Quantity and price are nullable: we agreed grams may be left blank. (The earlier `NOT NULL` contradicted that.)
+- Deleting an investment's transaction deletes its trade; undo restores both.
 - `LinkType` gains `'investment'`.
+
+## 3a. Selling
+
+Selling is a trade with `side: 'sell'`. These rules apply to every asset class (jewellery,
+coins, shares, fund redemptions, SGB maturity, an FD closing).
+
+**What is recorded.** You enter what you sold (quantity, or "all of it"), the price or the
+total received, and charges (brokerage, deductions the jeweller makes for wastage or purity).
+`amount` is what you actually received, after charges. Enter two of amount, quantity and price
+and the third is calculated, as for buying (a sale's charges are subtracted, not added).
+
+**The cash.** Money received is a transaction of `type: 'transfer'`, `linkType: 'investment'`,
+flagged `sale`, into the chosen account. It is **not income**: you are converting something you
+own back into cash, so monthly income and the savings rate don't jump in the month you sell.
+The month's **Invested** figure is net: purchases minus sale proceeds. A month where you sell more
+than you buy shows a negative figure ("Taken out ₹X").
+
+**Gain or loss.** The cost of what was sold is taken from the earliest purchases first (FIFO, as
+the Income Tax Department requires for shares and funds held in demat). Gain = amount received −
+that cost. The holding's remaining cost and quantity go down accordingly.
+- **Quantities missing.** If a purchase before the sale has no quantity, the cost of part of the
+  holding can't be worked out. Then the app offers **"Sold all of it"** (cost = everything still
+  invested, and the holding is closed) or asks for the missing quantities. It never guesses a share.
+- **Selling more than you hold** (purchases not recorded in the app) is allowed. The cost of the
+  unrecorded part counts as unknown, and the gain shows as "at least ₹X" with a prompt to add the
+  older purchase.
+- Gains are shown on the holding and on the Investments screen. They are not counted as income
+  anywhere. Their tax treatment (short/long term by holding period, which differs by asset class)
+  is phase 2 (§6).
+
+**Closing.** When the quantity reaches zero, or the user picks "Sold all of it", the holding is
+marked closed. It stays in history with its realised gain, and is hidden from the list by default.
+
+**Jewellery exchange** (old gold traded in for new, common in India). The app records it as two
+trades on the same day: a sale of the old piece with no cash (its `amount` = the value the jeweller
+gave), and a purchase of the new piece at its full value. Only the difference moves as cash: one
+transaction for what you paid on top, or what you received if the old piece was worth more. The
+new piece's cost basis is its full price, not just the cash paid, and the old piece's gain or loss
+is realised. Phase 1 records this as two entries (sale without cash, purchase). A guided
+"Exchange" screen is phase 2.
+
+**Gifts.** Gold received as a gift is a purchase without cash (`txnId` NULL) at the value that day,
+if known, or with only grams (then it has no cost basis and its gain on sale shows as unknown).
+Jewellery given away is a sale without cash, recorded at its value if known. Neither is income or
+spending.
+
+**Mutual funds and SIPs.** A redemption is a sale in units. SIP instalments are separate
+purchases, so FIFO works per instalment, which is what the tax rules need. A switch between
+schemes is a sale in one holding and a purchase in another on the same day.
 
 ## 4. UX
 
-- **Add → Investment** (new tile). Step 1: pick class (Gold / Silver / Shares / Mutual fund /
+- **Add → Investment** (new tile): *Buy* or *Sell*. Selling starts from a holding (its screen
+  has a **Sell** button) and shows how much is held and the cost of what you're selling before saving.
+- Step 1 (buying): pick class (Gold / Silver / Shares / Mutual fund /
   Fixed / Other). Step 2: a form specific to that class:
   - Gold/silver: amount paid, grams, purity chips, form chips, *market rate that day (optional)*,
     making charges + GST (optional, with "I don't know" allowed), from which account, whose.
@@ -189,8 +246,8 @@ up new tables automatically. Each one gets a round-trip test.
 | Phase | Scope | Notes |
 |---|---|---|
 | 0 | Forward-compatible sync (§5) | Ships alone; no visible feature |
-| 1 | `holdings` + `trades`, gold/silver/shares/MF buy forms, investment transfers, Invested on dashboard, savings-rate fix, convert existing `cat_invest` expenses | Conversion is an opt-in review list, never silent: it changes past months' totals |
-| 2 | Sells, FIFO realized gains, Portfolio screen with manual current prices, jewellery making-charge insight, tax lines | |
+| 1 | `holdings` + `trades`, buy forms for every class, **selling (§3a): sale proceeds as transfers, FIFO cost and realised gain, closing a holding, purchases/sales without cash (gifts, exchange as two entries)**, Invested (net) on dashboard, savings-rate fix, convert existing `cat_invest` expenses | Conversion is an opt-in review list, never silent: it changes past months' totals |
+| 2 | Portfolio screen with manual current prices and unrealised gains, guided jewellery exchange, making-charge insight, tax lines (short/long term per class) | |
 | 3 | Optional online prices: AMFI NAV file for MFs (public daily file), an end-of-day equity source, a gold/silver reference rate with a city label. Off by default, source always shown, always editable | Check each source's terms first; the lookup sends nothing about the user beyond "which symbol" |
 | 4 | SIP schedules as dues (reuse `recurrence.ts`), broker/AMC capture | |
 

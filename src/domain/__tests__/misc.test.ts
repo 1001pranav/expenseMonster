@@ -75,7 +75,7 @@ describe('totals', () => {
       txn({ type: 'settlement', amount: 300_00, occurredAt: at('2026-09-20') }),
       txn({ amount: 999_00, status: 'pending', occurredAt: at('2026-09-20') }),
     ];
-    expect(monthTotals(t, '2026-09')).toEqual({ income: 50_000_00, expense: 1_300_00, net: 48_700_00, cardSpend: 1_000_00 });
+    expect(monthTotals(t, '2026-09')).toEqual({ income: 50_000_00, expense: 1_300_00, net: 48_700_00, cardSpend: 1_000_00, invested: 0 });
   });
 
   it('can total a month only up to a given day (for fair comparisons)', () => {

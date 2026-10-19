@@ -435,13 +435,13 @@ describe('data from a newer app version', () => {
   it('keeps records of unknown tables and unknown fields, and sends the fields back after an edit here', async () => {
     const old = makePhone('OLD', key, 'ask');
     const holding = { ...txn({ deviceId: 'NEW' }), name: '22K gold', grams: 10500 } as unknown as Row;
-    uploadFromNewerApp('holdings', holding);
+    uploadFromNewerApp('goals', holding);
     const bought = { ...txn({ type: 'transfer', amount: 70_000_00, deviceId: 'NEW', updatedAt: nextTime() }), linkType: 'investment', holdingId: holding.id } as unknown as Row;
     uploadFromNewerApp('transactions', bought);
 
     const first = await old.sync();
     expect(first).toMatchObject({ received: 1, held: 1, unreadable: 0 });
-    expect(old.held.get(`holdings:${holding.id}`)).toMatchObject({ name: '22K gold', grams: 10500 });
+    expect(old.held.get(`goals:${holding.id}`)).toMatchObject({ name: '22K gold', grams: 10500 });
     expect(JSON.parse(old.get(bought.id)!.extra as string)).toEqual({ holdingId: holding.id });
 
     // Edited on the old phone: the field it doesn't know goes back up with the edit.
@@ -463,10 +463,10 @@ describe('data from a newer app version', () => {
     const old = makePhone('OLD', key, 'ask');
     const v1 = { ...txn({ deviceId: 'NEW', updatedAt: '2026-05-01T00:00:00.000Z' }), name: 'INFY' } as unknown as Row;
     const v2 = { ...v1, name: 'Infosys', updatedAt: '2026-05-02T00:00:00.000Z' };
-    const file = (rows: Row[]) => validateBundle({ ...buildBundle({}, { householdId: 'house', deviceId: 'NEW', deviceName: 'New', since: null }), tables: { holdings: rows } });
+    const file = (rows: Row[]) => validateBundle({ ...buildBundle({}, { householdId: 'house', deviceId: 'NEW', deviceName: 'New', since: null }), tables: { goals: rows } });
     expect((await old.merge(file([v2]))).held).toBe(1);
     await old.merge(file([v1]));
-    expect(old.held.get(`holdings:${v1.id}`)?.name).toBe('Infosys');
+    expect(old.held.get(`goals:${v1.id}`)?.name).toBe('Infosys');
     expect(() => validateBundle({ ...file([v1]), tables: { 'x"; drop': [v1] } })).toThrow('Unknown table');
   });
 });
