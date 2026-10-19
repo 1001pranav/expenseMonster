@@ -1,6 +1,6 @@
 # Investments: plan
 
-Status: proposal, nothing built yet. Covers gold/silver, shares, and how investments interact with
+Status: decisions agreed (§8), nothing built yet. Covers gold/silver, shares, and how investments interact with
 spending, family sync and tax.
 
 ## 1. Where the request is right and where I disagree
@@ -37,14 +37,22 @@ input:
   lookup goes against that.
 - Historical rates for a past date (logging last month's purchase) are even harder to get.
 
-So the rate is **entered or derived**, and a looked-up rate is an optional convenience later (Phase 3):
+Agreed approach: **record grams and the per-gram cost; the user fills them in, leaves them
+blank, or fetches them online and confirms.**
 
-- The user enters **amount paid + grams + purity**. The app computes ₹/g paid.
-- An optional **market rate that day** field (₹/g), prefilled with the last one used, tagged with
-  its source: `manual`, or `city:<name>` once lookup exists. With it, the app can show "you paid
-  ₹X over the metal value (making + GST)". That is the useful insight for jewellery, and it is the
-  real reason to record the day's rate.
-- The city is stored as a label on that reference rate, not as something the form requires.
+- Amount paid, grams and ₹/g are linked. Enter any two and the third is filled in (and shown, so a
+  typo stands out). Amount paid is the only required field; it is the money that left the account.
+- **Blank is allowed, with a visible consequence.** Without grams the purchase still counts as
+  invested, but the app can't value it later. The holding shows "Add grams to track its value" and
+  never makes up a number.
+- **Online price, always confirmed.** A "Fetch today's rate" button (city picker for gold/silver,
+  symbol for shares) fills the field and marks it with where it came from. Nothing fetched is saved
+  until the user has seen it and can edit it. Saving an edited figure stores it as `manual`.
+- **No source available** (offline, no API for that city or a past date, a lookup failure): the
+  button says so and the field stays as it is, open for typing or left blank. The form never waits
+  on the network.
+- The city is stored as a label on the rate, not required by the form. The last city used is
+  remembered.
 
 ## 2. Asset classes and fields
 
@@ -57,10 +65,18 @@ So the rate is **entered or derived**, and a looked-up rate is an optional conve
 | Fixed income | FD, RD, PPF, NPS, bonds | none (amount) | institution, rate % p.a., maturity date |
 | Other | real estate, crypto, anything else | optional | free text |
 
-Jewellery deserves a short, honest caption in the UI: making charges and GST (often 10–25% on top
-of the metal) are not recovered when you sell. The user can mark a piece as **not an investment**.
-It is then recorded as a normal expense (Shopping) with the weight kept for the record, instead
-of inflating net worth.
+**Jewellery: the user decides what it is.** When the user records a jewellery purchase, the form
+asks *what is this for?*:
+
+| Choice | Recorded as | Weight / rate |
+|---|---|---|
+| Investment | Investment transfer + holding + trade | Grams, purity, ₹/g, making charges, GST |
+| For own use | Expense (Shopping) | Optional note of grams and purity on the expense ("just mention it"), no holding, not in net worth |
+| Gift to someone | Expense (Gifts & donations) | Not asked |
+
+A short caption under *Investment* says that making charges and GST (often 10–25% on top of the
+metal) are not recovered on sale. It informs; it doesn't block. A piece recorded for own use can be
+turned into an investment later from its expense ("Track as investment").
 
 ## 3. Data model
 
@@ -75,7 +91,7 @@ holdings            -- one per thing you own: "22K gold", "INFY", "Parag Parikh 
   symbol       TEXT            -- NSE/BSE ticker, AMFI code
   unit         TEXT NOT NULL   -- g | share | unit | none
   purity       TEXT            -- '916', '999', '925'
-  memberId     TEXT            -- whose it is (family net worth by person)
+  memberId     TEXT            -- whose it is; NULL = held jointly by the household
   priceNow     INTEGER         -- paise per unit, last known (manual until Phase 3)
   priceAsOf    TEXT
   closed       INTEGER NOT NULL DEFAULT 0
@@ -90,7 +106,7 @@ trades              -- every buy/sell/redeem
   charges      INTEGER NOT NULL DEFAULT 0   -- making charges, brokerage, STT, stamp duty
   taxes        INTEGER NOT NULL DEFAULT 0   -- GST etc.
   refRate      INTEGER         -- market rate that day, paise per unit (optional)
-  refSource    TEXT            -- 'manual' | 'city:bengaluru' | 'ibja' | 'amfi'
+  refSource    TEXT            -- 'manual' | 'fetched:<provider>:<city or symbol>'; edited after fetch → 'manual'
   txnId        TEXT            -- the cash transaction (transfer, linkType 'investment')
 ```
 
@@ -116,13 +132,18 @@ Choices to note:
     brokerage, account.
   - MF: scheme, amount, NAV *or* units (derive one from the other), SIP toggle.
   - Whatever two of {amount, quantity, price} are entered, the third is derived and shown.
+  - Every amount and rate field supports editing at the cursor, like the transaction amount does.
 - **Expense form:** choosing the Investments category offers "Record as an investment?" and opens
   the class picker with amount/date/account carried over, so existing habits still work.
 - **Captures:** SMS/screenshots from brokers, AMCs or digital-gold apps (Zerodha, Groww, Kuvera,
   SafeGold…) are suggested as investment transfers in Review. That is a keyword list like
   `CATEGORY_FOR`, and the user always confirms.
-- **Portfolio screen** (from Home and Insights): per class, invested vs current value (when
-  `priceNow` is set), gain/loss, weight, and per person. "Update price" per holding.
+- **Portfolio screen** (from Home and Insights): **combined household net worth first, then one
+  line per member, plus a "Joint" line** for holdings with no `memberId`. Joint holdings count in
+  the combined figure and are *not* split across members by default: splitting needs
+  ownership shares nobody wants to enter for a family FD. Per class: invested vs current value
+  (when `priceNow` is set), gain/loss, weight. "Update price" per holding (manual, or fetch and
+  confirm).
 - **Insights:** monthly *Invested* bar next to income/expense. The savings rate becomes
   `(income − spent) / income` and investing no longer lowers it. A new optional metric is
   *investment rate* = invested / income.
@@ -166,12 +187,17 @@ up new tables automatically. Each one gets a round-trip test.
 | 3 | Optional online prices: AMFI NAV file for MFs (public daily file), an end-of-day equity source, a gold/silver reference rate with a city label. Off by default, source always shown, always editable | Check each source's terms first; the lookup sends nothing about the user beyond "which symbol" |
 | 4 | SIP schedules as dues (reuse `recurrence.ts`), broker/AMC capture | |
 
-## 8. Open questions for you
+## 8. Decisions
 
-1. Net worth per member, or household only? (The `memberId` on holdings allows both. The question is
-   what the Portfolio screen leads with.)
-2. Should jewellery default to "investment" or "expense with weight recorded"? I'd default to
-   expense: most families don't sell jewellery, and counting it at metal value overstates
-   liquid wealth.
-3. Is Phase 3 (network price lookup) worth it at all for an offline-first, privacy-first app? A
-   "last rate you entered" prefill covers most of the need.
+1. **Net worth:** both. Combined household first, then per member, with jointly held items on
+   their own line (§4).
+2. **Jewellery:** the user picks Investment, For own use or Gift (§2). Only Investment creates a
+   holding. Own use keeps an optional weight note. Gift asks for nothing extra.
+3. **Prices:** grams and ₹/g are stored. Each value is typed, left blank or fetched online and
+   confirmed (§1). Without an online source the user types it or leaves it blank.
+4. **Amount editing:** the transaction screen's amount can be edited at any position (tap or drag
+   the cursor), not only cleared and retyped. Done separately from this plan; the investment forms
+   use the same behaviour.
+
+Still open: which online sources to use in Phase 3, after checking each one's terms. Until then
+the fetch button is hidden, not shown disabled.

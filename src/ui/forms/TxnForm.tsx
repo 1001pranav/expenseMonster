@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Image, Pressable, TextInput, View } from 'react-native';
+import { applyAmountKey, groupAmount, isValidAmountText, toGroupedIndex, toRawIndex, type Selection } from '@/domain/amountInput';
 import { billerMeta, viewBill } from '@/domain/bills';
 import { formatDay, isoToYMD, toISO, type YMD } from '@/domain/dates';
 import { formatINR, type Paise } from '@/domain/money';
@@ -48,6 +49,15 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   // A settlement is edited as a family transfer that counts towards who owes whom.
   const [type, setType] = useState<TxnType>(existing?.type === 'settlement' ? 'transfer' : (existing?.type ?? initialType));
   const [amountStr, setAmountStr] = useState(amountText(existing?.amount ?? null));
+  /** Cursor in the typed amount (raw characters, no commas): keypad keys go there, not only at the end. */
+  const [amountSel, setAmountSel] = useState<Selection>(() => ({ start: amountStr.length, end: amountStr.length }));
+  /** When the keypad last changed the amount (see onSelectionChange). */
+  const keyedAt = useRef(0);
+  const setAmount = (raw: string, cursor = raw.length) => {
+    keyedAt.current = Date.now();
+    setAmountStr(raw);
+    setAmountSel({ start: cursor, end: cursor });
+  };
   const [keypad, setKeypad] = useState(!existing);
   const [categoryId, setCategoryId] = useState<string | null>(existing?.categoryId ?? null);
   const [method, setMethod] = useState<PayMethod>(existing?.method ?? 'upi');
@@ -136,17 +146,10 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   );
   const billCategory = categoryId === 'cat_utilities' || categoryId === 'cat_rent' || categoryId === 'cat_education' || flags.some((f) => f.startsWith('biller:'));
 
+  const amountShown = groupAmount(amountStr);
   const onKey = (k: string) => {
-    if (k === 'clear') return setAmountStr('');
-    if (k === 'del') return setAmountStr((s) => s.slice(0, -1));
-    setAmountStr((s) => {
-      if (k === '.' && s.includes('.')) return s;
-      const next = s === '0' && k !== '.' ? k : s + k;
-      const [, dec] = next.split('.');
-      if (dec && dec.length > 2) return s;
-      if (Number(next) > 99_99_99_999) return s;
-      return next;
-    });
+    const next = applyAmountKey(amountStr, amountSel, k);
+    setAmount(next.raw, next.cursor);
   };
 
   const save = async (approve = false) => {
@@ -271,20 +274,41 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         ]}
       />
 
-      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(2.5), borderRadius: radius.xl, backgroundColor: soft }}>
+      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(2.5), borderRadius: radius.xl, backgroundColor: soft }}>
         <Row gap={0.5} style={{ alignItems: 'flex-start' }}>
           <Txt variant="h1" style={{ color, marginTop: 6 }}>
             ₹
           </Txt>
-          <Txt style={{ fontFamily: fonts.display, fontSize: 52, lineHeight: 64, letterSpacing: -1.5, color: amountStr ? colors.text : colors.textFaint, fontVariant: ['tabular-nums'] }}>
-            {amountStr ? formatINR(Number(amountStr.split('.')[0]) * 100, { symbol: false, decimals: 'never' }) + (amountStr.includes('.') ? `.${amountStr.split('.')[1]}` : '') : '0'}
-          </Txt>
+          {/* The app's keypad types here; the phone keyboard stays down. Tap or drag to move the cursor. */}
+          <TextInput
+            value={amountShown}
+            placeholder="0"
+            placeholderTextColor={colors.textFaint}
+            showSoftInputOnFocus={false}
+            contextMenuHidden
+            selection={{ start: toGroupedIndex(amountShown, amountSel.start), end: toGroupedIndex(amountShown, amountSel.end) }}
+            onSelectionChange={(e) => {
+              // Android reports the cursor jumping to the end when the text changes, before our
+              // cursor is applied; only taps and drags move it.
+              if (Date.now() - keyedAt.current < 250) return;
+              const { start, end } = e.nativeEvent.selection;
+              setAmountSel({ start: toRawIndex(amountShown, start), end: toRawIndex(amountShown, end) });
+            }}
+            // A hardware keyboard can still type; keep only well-formed amounts.
+            onChangeText={(t) => {
+              const raw = t.replace(/[^\d.]/g, '');
+              if (isValidAmountText(raw)) setAmountStr(raw);
+            }}
+            onFocus={() => setKeypad(true)}
+            selectionColor={color}
+            cursorColor={color}
+            accessibilityLabel={`Amount ${amountStr || 'zero'} rupees`}
+            style={{ fontFamily: fonts.display, fontSize: 52, height: 64, minWidth: 40, padding: 0, letterSpacing: -1.5, color: colors.text, fontVariant: ['tabular-nums'], includeFontPadding: false }}
+          />
         </Row>
-        {!keypad ? (
-          <Txt variant="small" tone="faint">
-            Tap to edit
-          </Txt>
-        ) : null}
+        <Txt variant="small" tone="faint">
+          {keypad ? 'Tap a digit to move the cursor there' : 'Tap to edit'}
+        </Txt>
       </Pressable>
       {keypad ? <Keypad onKey={onKey} /> : null}
 
@@ -414,7 +438,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
                 onPress={() => {
                   const on = !(link.type === 'bill' && link.id === v.bill.id);
                   setLink(on ? { type: 'bill', id: v.bill.id } : { type: null, id: null });
-                  if (on && !amountStr) setAmountStr(amountText(v.remaining));
+                  if (on && !amountStr) setAmount(amountText(v.remaining));
                   if (on && !payee) setPayee(biller!.name);
                 }}
               />
