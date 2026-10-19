@@ -1,4 +1,4 @@
-import { anonymise, anonymiseText, casDate, closingTriple, parseCas, statementDate, toLines, type Word } from '../cas';
+import { anonymise, anonymiseText, casDate, closingTriple, kindOf, parseCas, statementDate, toLines, type Word } from '../cas';
 
 /** Words of one printed line: [x, text] pairs, 7pt type, each character about 3.5pt wide. */
 const line = (page: number, y: number, cells: [number, string][]): Word[] =>
@@ -46,10 +46,10 @@ describe('reading a consolidated account statement', () => {
     const s = parseCas(CDSL);
     expect(s).toMatchObject({ depository: 'CDSL', asOf: '2026-10-31', unreadable: 1 });
     expect(s.rows).toEqual([
-      { isin: 'INE009A01021', name: 'INFOSYS LIMITED - EQ', kind: 'equity', quantity: 25_000, price: 1520_40, value: 38_010_00, invested: null, folio: null },
-      { isin: 'INE040A01034', name: 'HDFC BANK LIMITED', kind: 'equity', quantity: 40_000, price: 1700_00, value: 68_000_00, invested: null, folio: null },
-      { isin: 'INF879O01027', name: 'PARAG PARIKH FLEXI CAP - DIRECT GROWTH', kind: 'fund', quantity: 1_234_567, price: 92_46, value: 1_14_144_21, invested: 1_00_000_00, folio: '12345678/90' },
-      { isin: 'INF846K01CH7', name: 'AXIS LIQUID FUND - DIRECT PLAN - GROWTH OPTION', kind: 'fund', quantity: 10_000, price: 2801_12, value: 28_011_23, invested: null, folio: null },
+      { isin: 'INE009A01021', name: 'INFOSYS LIMITED - EQ', kind: 'equity', quantity: 25_000, price: 1520_40, value: 38_010_00, invested: null, folio: null, maturity: null },
+      { isin: 'INE040A01034', name: 'HDFC BANK LIMITED', kind: 'equity', quantity: 40_000, price: 1700_00, value: 68_000_00, invested: null, folio: null, maturity: null },
+      { isin: 'INF879O01027', name: 'PARAG PARIKH FLEXI CAP - DIRECT GROWTH', kind: 'fund', quantity: 1_234_567, price: 92_46, value: 1_14_144_21, invested: 1_00_000_00, folio: '12345678/90', maturity: null },
+      { isin: 'INF846K01CH7', name: 'AXIS LIQUID FUND - DIRECT PLAN - GROWTH OPTION', kind: 'fund', quantity: 10_000, price: 2801_12, value: 28_011_23, invested: null, folio: null, maturity: null },
     ]);
   });
 
@@ -89,4 +89,42 @@ describe('reading a consolidated account statement', () => {
     expect(anonymiseText('DP ID IN301549 someone@mail.com 9876543210')).toBe('DP ID ######## *******@****.*** ##########');
     expect(anonymise([[1, 2, 3, 4, 7, 'RAJ']])).toEqual([[1, 2, 3, 4, 7, 'xxx']]);
   });
+
+  it('tells shares, funds and bonds apart: by section heading, else by the ISIN, else not at all', () => {
+    expect(kindOf('INE009A01021', null)).toBe('equity'); // type 01: equity shares
+    expect(kindOf('INF879O01027', null)).toBe('fund');
+    expect(kindOf('INE020B08443', null)).toBe('bond'); // type 08: debenture
+    expect(kindOf('IN0020230010', null)).toBe('bond'); // issuer 0: central government security
+    expect(kindOf('INE040A03010', null)).toBe('other'); // type 03: preference share
+    expect(kindOf('INE0CCU25019', null)).toBe('other'); // type 25: REIT
+    expect(kindOf('INE009A01021', 'other')).toBe('other'); // listed under, say, Preference Shares
+    // Heading and security type disagree: left for the person, not picked.
+    expect(kindOf('INE009A01021', 'bond')).toBe('other');
+    // An ISIN of an unlisted type: the heading says what it is.
+    expect(kindOf('INE0CCU25019', 'equity')).toBe('equity');
+    // What the ISIN says outright wins over any heading.
+    expect(kindOf('IN0020230010', 'equity')).toBe('bond');
+    expect(kindOf('INF879O01027', 'equity')).toBe('fund');
+  });
+
+  it('reads bonds under their heading, with the maturity date, and leaves unsupported sections for review', () => {
+    const s = parseCas([
+      ...line(1, 40, [[40, 'National Securities Depository Limited'], [300, 'Consolidated Account Statement']]),
+      ...line(1, 60, [[40, 'Holdings as on 31-10-2026']]),
+      ...line(1, 100, [[40, 'Corporate Bonds (C)']]),
+      // ISIN | name | frequency | coupon % | maturity | number | face value | value
+      ...line(1, 120, [[40, 'INE020B07HN6'], [110, 'REC LIMITED 8.10% NCD'], [230, 'Once a year'], [290, '8.10'], [330, '15-03-2030'], [400, '10'], [440, '1,000.00'], [500, '10,000.00']]),
+      ...line(1, 160, [[40, 'Preference Shares (P)']]),
+      ...line(1, 180, [[40, 'INE040A03010'], [110, 'SOME CO 7% PREF'], [400, '5'], [440, '100.00'], [500, '500.00']]),
+      ...line(2, 100, [[40, 'Equity Shares']]),
+      // A government security in a table with no bond heading: the ISIN says so.
+      ...line(2, 120, [[40, 'IN0020230010'], [110, 'GOI 7.18% 2033'], [400, '100'], [440, '101.25'], [500, '10,125.00']]),
+    ]);
+    expect(s.rows.map((r) => [r.isin, r.kind, r.name, r.quantity, r.price, r.value, r.maturity])).toEqual([
+      ['INE020B07HN6', 'bond', 'REC LIMITED 8.10% NCD', 10_000, 1000_00, 10_000_00, '2030-03-15'],
+      ['INE040A03010', 'other', 'SOME CO 7% PREF', 5_000, 100_00, 500_00, null],
+      ['IN0020230010', 'bond', 'GOI 7.18% 2033', 100_000, 101_25, 10_125_00, null],
+    ]);
+  });
 });
+

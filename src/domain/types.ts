@@ -240,8 +240,8 @@ export interface SmsFormat extends BaseRow {
   active: 0 | 1;
 }
 
-export type AssetClass = 'gold' | 'silver' | 'equity' | 'mf' | 'fixed' | 'other';
-export type QuantityUnit = 'g' | 'share' | 'unit' | 'none';
+export type AssetClass = 'gold' | 'silver' | 'equity' | 'mf' | 'bond' | 'fixed' | 'other';
+export type QuantityUnit = 'g' | 'share' | 'unit' | 'bond' | 'none';
 export type FundType = 'equity' | 'debt' | 'hybrid' | 'gold' | 'international';
 
 /** Something the family owns: "22K gold", "INFY", a fund. Its quantity and cost come from its trades. */
@@ -262,8 +262,14 @@ export interface Holding extends BaseRow {
   /** Last known price per unit (paise), entered by hand until online prices exist. */
   priceNow: Paise | null;
   priceAsOf: string | null;
-  /** 'manual' (entered here) or 'amfi' (AMFI's daily NAV file); null for older entries. */
+  /** 'manual' (entered here), 'amfi' (AMFI's daily NAV file) or 'cas' (a CDSL/NSDL statement); null for older entries. */
   priceSource: string | null;
+  /** Bonds: face value per bond (paise). */
+  faceValue: Paise | null;
+  /** Bonds: coupon, percent a year. */
+  couponRate: number | null;
+  /** Bonds: when it matures. */
+  maturityDate: YMD | null;
   closed: 0 | 1;
   note: string | null;
 }

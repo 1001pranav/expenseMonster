@@ -235,6 +235,20 @@ The AMFI fund prices (§3b) are a separate, permitted source (personal, non-comm
   rows didn't add up) shares the layout with names, PAN, account/folio/phone numbers and e-mails
   masked. ISINs, headings, dates and amounts are kept: the person sees this and decides.
 
+**Bonds and what the statement holds besides shares and funds:**
+- **Section headings first.** A row's kind comes from the statement's section heading ("Equity
+  Shares", "Mutual Funds (M)", "Corporate Bonds (C)", "Government Securities (G)"), as casparser
+  reads them.
+- **What the ISIN states outright wins over a heading:** `INF` is a fund; issuer `0`–`4` is a
+  government security. A heading applies until the next one, so it can't be trusted against those.
+- **Company ISINs without a heading:** the security type (characters 8–9) decides. `01` is a share;
+  `05`–`11`, `24`, `A7`, `B7` are bonds/debentures (codes from an analysis of real ISINs,
+  github.com/captn3m0/india-isin-data, which calls them "fluid").
+- **Disagreements and anything else** (heading vs ISIN type; preference shares, REITs/InvITs,
+  warrants, AIFs…) are **"not supported yet"**: shown, only skippable, never imported as something
+  else.
+- **Bond rows:** a bond row's maturity date is picked up when printed.
+
 **Limits:** values are as on the statement date (monthly when there were transactions, otherwise
 half-yearly; one can be downloaded on demand). **It hasn't been run against a real statement yet**: the
 tests use layouts rebuilt from casparser's documented rows. The first real statements, or their

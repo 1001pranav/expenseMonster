@@ -169,5 +169,18 @@ describe('saving investments', () => {
     expect(opening).toMatchObject({ amount: 60_000_00, quantity: 40_000, txnId: null, tradeDate: '2026-10-31' });
     expect(tables().holdings.some((x) => x.name === 'RELIANCE')).toBe(false);
   });
+
+  it('adds a bond from a statement as a bond (government or corporate), with its maturity, and never adds what it does not support', async () => {
+    const r = await applyCasImport({ asOf: '2026-10-31', owner: null, scope: 'household' }, [
+      { line: { isin: 'IN0020230010', name: 'GOI 7.18% 2033', kind: 'bond', quantity: 100_000, price: 101_25 }, action: { kind: 'add', cost: 10_000_00 } },
+      { line: { isin: 'INE020B07HN6', name: 'REC NCD', kind: 'bond', quantity: 10_000, price: 1000_00, maturity: '2030-03-15' }, action: { kind: 'add', cost: 10_000_00 } },
+      { line: { isin: 'INE040A03010', name: 'PREF', kind: 'other', quantity: 5_000, price: 100_00 }, action: { kind: 'add', cost: 500_00 } },
+    ]);
+    expect(r.added).toBe(2);
+    const h = (name: string) => tables().holdings.find((x) => x.name === name);
+    expect(h('GOI 7.18% 2033')).toMatchObject({ assetClass: 'bond', form: 'gsec', unit: 'bond', maturityDate: null });
+    expect(h('REC NCD')).toMatchObject({ assetClass: 'bond', form: 'corporate', unit: 'bond', maturityDate: '2030-03-15', priceNow: 1000_00 });
+    expect(h('PREF')).toBeUndefined();
+  });
 });
 

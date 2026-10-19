@@ -79,6 +79,19 @@ export const ASSET_CLASSES: Record<AssetClass, AssetMeta> = {
     chargesLabel: 'Charges',
     taxesLabel: 'Stamp duty',
   },
+  bond: {
+    label: 'Bonds',
+    icon: 'document-text',
+    unit: 'bond',
+    forms: [
+      { value: 'corporate', label: 'Corporate bond / NCD' },
+      { value: 'gsec', label: 'Government security' },
+      { value: 'taxfree', label: 'Tax-free bond' },
+    ],
+    purities: NO_CHOICES,
+    chargesLabel: 'Brokerage',
+    taxesLabel: 'Stamp duty',
+  },
   fixed: {
     label: 'Deposits & schemes',
     icon: 'business',
@@ -88,7 +101,6 @@ export const ASSET_CLASSES: Record<AssetClass, AssetMeta> = {
       { value: 'rd', label: 'RD' },
       { value: 'ppf', label: 'PPF' },
       { value: 'nps', label: 'NPS' },
-      { value: 'bonds', label: 'Bonds' },
     ],
     purities: NO_CHOICES,
     chargesLabel: 'Charges',
@@ -97,12 +109,12 @@ export const ASSET_CLASSES: Record<AssetClass, AssetMeta> = {
   other: { label: 'Other', icon: 'cube', unit: 'none', forms: NO_CHOICES, purities: NO_CHOICES, chargesLabel: 'Charges', taxesLabel: 'Taxes' },
 };
 
-export const ASSET_ORDER: AssetClass[] = ['gold', 'silver', 'equity', 'mf', 'fixed', 'other'];
+export const ASSET_ORDER: AssetClass[] = ['gold', 'silver', 'equity', 'mf', 'bond', 'fixed', 'other'];
 
 /** Gold and silver ETFs and funds are counted in units, not grams. */
 export const unitFor = (assetClass: AssetClass, form: string | null): QuantityUnit => (form === 'etf' ? 'unit' : ASSET_CLASSES[assetClass].unit);
 
-const UNIT_LABEL: Record<QuantityUnit, [string, string]> = { g: ['g', 'g'], share: ['share', 'shares'], unit: ['unit', 'units'], none: ['', ''] };
+const UNIT_LABEL: Record<QuantityUnit, [string, string]> = { g: ['g', 'g'], share: ['share', 'shares'], unit: ['unit', 'units'], bond: ['bond', 'bonds'], none: ['', ''] };
 export const unitLabel = (unit: QuantityUnit, plural = true) => UNIT_LABEL[unit][plural ? 1 : 0];
 
 // ── quantities in thousandths ───────────────────────────────────────────────

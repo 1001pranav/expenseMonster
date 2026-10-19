@@ -16,6 +16,10 @@ export interface NewHolding {
   assetClass: AssetClass;
   form: string | null;
   fundType: FundType | null;
+  /** Bonds only. */
+  faceValue?: Paise | null;
+  couponRate?: number | null;
+  maturityDate?: YMD | null;
   name: string;
   symbol: string | null;
   unit: QuantityUnit;
@@ -55,7 +59,7 @@ export interface InvestmentInput {
 export async function saveInvestment(input: InvestmentInput, opts: { tradeId?: string; fromTxnId?: string } = {}): Promise<Trade> {
   const holding: Holding =
     'assetClass' in input.holding
-      ? await insert('holdings', { ...input.holding, priceNow: null, priceAsOf: null, priceSource: null, closed: 0, note: null, scope: input.scope })
+      ? await insert('holdings', { faceValue: null, couponRate: null, maturityDate: null, ...input.holding, priceNow: null, priceAsOf: null, priceSource: null, closed: 0, note: null, scope: input.scope })
       : findById('holdings', input.holding.id)!;
   if (!holding) throw new Error('That holding no longer exists');
   const existing = opts.tradeId ? findById('trades', opts.tradeId) : undefined;
@@ -187,7 +191,7 @@ export type CasAction =
  */
 export async function applyCasImport(
   x: { asOf: YMD; owner: string | null; scope: Scope },
-  items: { line: { isin: string; name: string; kind: 'equity' | 'fund'; quantity: number; price: Paise }; action: CasAction }[],
+  items: { line: { isin: string; name: string; kind: 'equity' | 'fund' | 'bond' | 'other'; quantity: number; price: Paise; maturity?: YMD | null }; action: CasAction }[],
 ): Promise<{ priced: number; added: number }> {
   let priced = 0;
   let added = 0;
@@ -201,9 +205,23 @@ export async function applyCasImport(
       await price(action.holdingId, line.price);
       priced++;
     } else if (action.kind === 'add') {
+      // What the app doesn't import yet (preference shares, REITs…) is only ever skipped.
+      if (line.kind === 'other') continue;
+      const bond = line.kind === 'bond';
       const trade = await saveInvestment({
         side: 'buy',
-        holding: { assetClass: line.kind === 'equity' ? 'equity' : 'mf', form: null, fundType: null, name: line.name || line.isin, symbol: line.isin, unit: line.kind === 'equity' ? 'share' : 'unit', purity: null, memberId: x.owner },
+        holding: {
+          assetClass: line.kind === 'equity' ? 'equity' : bond ? 'bond' : 'mf',
+          // Government securities have a numeric issuer character (IN0…IN4).
+          form: bond ? ('01234'.includes(line.isin[2]) ? 'gsec' : 'corporate') : null,
+          fundType: null,
+          name: line.name || line.isin,
+          symbol: line.isin,
+          unit: line.kind === 'equity' ? 'share' : bond ? 'bond' : 'unit',
+          purity: null,
+          memberId: x.owner,
+          ...(bond ? { maturityDate: line.maturity ?? null } : {}),
+        },
         tradeDate: x.asOf,
         amount: action.cost,
         quantity: line.quantity,

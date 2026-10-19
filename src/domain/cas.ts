@@ -19,8 +19,8 @@ export type Word = [page: number, x: number, y: number, width: number, size: num
 export interface CasRow {
   isin: string;
   name: string;
-  /** Shares (ISIN INE…/IN9…) or a fund (INF…: mutual funds and ETFs). */
-  kind: 'equity' | 'fund';
+  /** See kindOf: shares, a fund (mutual funds and ETFs), a bond, or something the app doesn't import yet. */
+  kind: CasKind;
   /** Thousandths of a share or unit. */
   quantity: number;
   /** Paise per share or unit (NAVs are rounded to the paisa). */
@@ -29,7 +29,11 @@ export interface CasRow {
   /** Total cost, when the statement prints it (fund tables do). */
   invested: Paise | null;
   folio: string | null;
+  /** Bonds: the maturity date, when the row prints it. */
+  maturity: YMD | null;
 }
+
+export type CasKind = 'equity' | 'fund' | 'bond' | 'other';
 
 export interface CasStatement {
   depository: 'CDSL' | 'NSDL' | null;
@@ -40,7 +44,41 @@ export interface CasStatement {
   unreadable: number;
 }
 
-const ISIN = /^IN[EF9][0-9A-Z]{8}\d$/;
+// Any Indian ISIN: companies (INE), funds (INF), partly paid (IN9), government securities (IN0…IN4).
+const ISIN = /^IN[0-9A-Z]{9}\d$/;
+
+/**
+ * Statement section headings (lower case), as casparser reads them. A heading tells what the rows
+ * below it are; other sections (preference shares, AIFs, money market…) aren't imported.
+ */
+const SECTIONS: [RegExp, CasKind][] = [
+  [/^(equity shares|equities \(e\))$/, 'equity'],
+  [/^(mutual funds \(m\)|mutual funds? units held with the amc|mutual fund folios|mutual fund units held as on\b.*)$/, 'fund'],
+  [/^(corporate bonds \(c\)|government securities \(g\))$/, 'bond'],
+  [/^(preference shares \(p\)|alternate investment fund \(a\)|money market instruments \(i\)|securitised instruments \(s\)|postal saving scheme \(o\)|national pension system \(n\)|zero coupon zero principal ?\(z\))$/, 'other'],
+];
+
+// Security type (ISIN characters 8-9) of company ISINs. From an analysis of real ISINs
+// (github.com/captn3m0/india-isin-data), which notes the codes are "fluid": used only when no
+// section heading says what a row is, and the person confirms every row before it is imported.
+const EQUITY_TYPES = new Set(['01']);
+const BOND_TYPES = new Set(['05', '06', '07', '08', '09', '10', '11', '24', 'A7', 'B7']);
+
+/**
+ * What a holding is. What the ISIN says outright wins (INF: a fund; issuer 0-4: a government
+ * security). For company ISINs the section heading decides, checked against the security type: a
+ * heading applies until the next one, so a disagreement means the table may not be the heading's
+ * and the row is left for the person ('other'). Never a guess.
+ */
+export function kindOf(isin: string, section: CasKind | null): CasKind {
+  const issuer = isin[2];
+  if (issuer === 'F') return 'fund';
+  if ('01234'.includes(issuer)) return 'bond';
+  const type = isin.slice(7, 9);
+  const byType: CasKind = (issuer === 'E' || issuer === '9') && EQUITY_TYPES.has(type) ? 'equity' : issuer === 'E' && BOND_TYPES.has(type) ? 'bond' : 'other';
+  if (!section || section === byType) return byType;
+  return byType === 'other' ? section : 'other';
+}
 // CDSL sometimes drops the leading zero (".196").
 const NUMBER = /^-?(?:\d[\d,]*(?:\.\d+)?|\.\d+)$/;
 
@@ -93,15 +131,22 @@ export function closingTriple(n: number[]): { q: number; p: number; v: number; i
 }
 
 const FOLIO = /^\d+\/\d+$/;
-const NOT_NAME = /^(?:--?|@|ARN-?\d+|DIRECT|\d+\/\d+)$/i;
+const NOT_NAME = /^(?:--?|@|ARN-?\d+|DIRECT|\d+\/\d+|once a year|on maturity|half[- ]yearly|quarterly|monthly|annually|semi[- ]annually|cumulative)$/i;
 
 /** Read the holdings rows of a statement. */
 export function parseCas(words: Word[]): CasStatement {
   const lines = toLines(words);
   const rows: CasRow[] = [];
   let unreadable = 0;
+  let section: CasKind | null = null;
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
+    const heading = line.cells.map((c) => c.text).join(' ').trim().toLowerCase();
+    const marker = line.cells.length <= 2 ? SECTIONS.find(([re]) => re.test(heading)) : undefined;
+    if (marker) {
+      section = marker[1];
+      continue;
+    }
     const isinAt = line.cells.findIndex((c) => ISIN.test(c.text.split(' ')[0]));
     if (isinAt < 0) continue;
     const isin = line.cells[isinAt].text.split(' ')[0];
@@ -121,17 +166,19 @@ export function parseCas(words: Word[]): CasStatement {
       continue;
     }
     const restOfIsinCell = line.cells[isinAt].text.split(' ').slice(1);
-    const words = (list: Line['cells']) => list.filter((c) => !ISIN.test(c.text.split(' ')[0]) && !NUMBER.test(c.text) && !NOT_NAME.test(c.text)).map((c) => c.text);
+    const words = (list: Line['cells']) => list.filter((c) => !ISIN.test(c.text.split(' ')[0]) && !NUMBER.test(c.text) && !NOT_NAME.test(c.text) && !casDate(c.text)).map((c) => c.text);
+    const kind = kindOf(isin, section);
     const name = [...restOfIsinCell, ...words(line.cells), ...words(wrapped)].join(' ').replace(/\s+/g, ' ').trim();
     rows.push({
       isin,
       name,
-      kind: isin.startsWith('INF') ? 'fund' : 'equity',
+      kind,
       quantity: Math.round(t.q * 1000),
       price: Math.round(t.p * 100),
       value: Math.round(t.v * 100),
       invested: t.invested === null ? null : Math.round(t.invested * 100),
       folio: line.cells.find((c) => FOLIO.test(c.text))?.text ?? null,
+      maturity: kind === 'bond' ? (cells.map((c) => casDate(c.text)).find((d): d is YMD => Boolean(d)) ?? null) : null,
     });
   }
   // NSDL prints a holding in its summary and again in the detailed table: the same numbers twice.

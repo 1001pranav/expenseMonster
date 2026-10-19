@@ -102,6 +102,18 @@ export default function HoldingDetail() {
             </Row>
           </>
         ) : null}
+        {holding.assetClass === 'bond' && (holding.faceValue || holding.couponRate || holding.maturityDate) ? (
+          <Txt variant="small" tone="muted">
+            {[
+              holding.faceValue ? `Face value ${money(holding.faceValue, { decimals: 'never' })}` : null,
+              holding.couponRate ? `${holding.couponRate}% a year` : null,
+              holding.maturityDate ? `matures ${formatDay(holding.maturityDate, { year: true })}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            . Record coupons as income (Interest & dividends).
+          </Txt>
+        ) : null}
         {s.costs ? (
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt tone="muted">of which charges & taxes</Txt>

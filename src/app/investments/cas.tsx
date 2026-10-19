@@ -162,7 +162,8 @@ export default function ImportCas() {
           {matches.map((m) => {
             const c = choiceOf(m.line.isin, Boolean(m.holding));
             const gap = m.holding && m.appQuantity !== null && m.appQuantity !== m.line.quantity;
-            const unit = m.line.kind === 'equity' ? 'share' : 'unit';
+            const unit = m.line.kind === 'equity' ? 'share' : m.line.kind === 'bond' ? 'bond' : 'unit';
+            const unsupported = m.line.kind === 'other';
             return (
               <Card key={m.line.isin} style={{ gap: space(1) }}>
                 <Row gap={1}>
@@ -174,8 +175,13 @@ export default function ImportCas() {
                       {m.line.isin} · {formatQuantity(m.line.quantity, unit)} × {money(m.line.price)} = {money(m.line.value, { decimals: 'never' })}
                     </Txt>
                   </View>
-                  <Pill label={m.holding ? 'In the app' : 'New'} tone={m.holding ? 'income' : 'info'} />
+                  <Pill label={unsupported ? 'Not supported yet' : m.holding ? 'In the app' : m.line.kind === 'bond' ? 'New bond' : 'New'} tone={unsupported ? 'warn' : m.holding ? 'income' : 'info'} />
                 </Row>
+                {unsupported ? (
+                  <Txt variant="small" tone="muted">
+                    Preference shares, REITs, InvITs and similar aren't imported yet. Add it by hand under Invest / sell → Other if you want to track it.
+                  </Txt>
+                ) : null}
                 {gap ? (
                   <Txt variant="small" tone="warn">
                     The app records {formatQuantity(m.appQuantity!, unit)}. Record the missing purchase or sale on the holding: the statement doesn't say what it cost.
@@ -183,7 +189,7 @@ export default function ImportCas() {
                 ) : null}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {m.holding ? <Chip label="Update price" selected={c === 'price'} onPress={() => setChoice(m.line.isin, { choice: 'price' })} /> : null}
-                  {!m.holding ? <Chip label="Add" selected={c === 'add'} onPress={() => setChoice(m.line.isin, { choice: 'add', cost: choices[m.line.isin]?.cost ?? (m.line.invested ? String(m.line.invested / 100) : '') })} /> : null}
+                  {!m.holding && !unsupported ? <Chip label="Add" selected={c === 'add'} onPress={() => setChoice(m.line.isin, { choice: 'add', cost: choices[m.line.isin]?.cost ?? (m.line.invested ? String(m.line.invested / 100) : '') })} /> : null}
                   {!m.holding && m.linkable.length ? <Chip label="It's one I have" selected={c === 'link'} onPress={() => setChoice(m.line.isin, { choice: 'link' })} /> : null}
                   <Chip label="Skip" selected={c === 'skip'} onPress={() => setChoice(m.line.isin, { choice: 'skip' })} />
                 </View>

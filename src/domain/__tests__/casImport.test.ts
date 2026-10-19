@@ -3,7 +3,7 @@ import { byIsin, matchCas } from '../casImport';
 import type { Holding } from '../types';
 import { base } from './fixtures';
 
-const row = (over: Partial<CasRow>): CasRow => ({ isin: 'INE009A01021', name: 'INFOSYS', kind: 'equity', quantity: 10_000, price: 1500_00, value: 15_000_00, invested: null, folio: null, ...over });
+const row = (over: Partial<CasRow>): CasRow => ({ isin: 'INE009A01021', name: 'INFOSYS', kind: 'equity', quantity: 10_000, price: 1500_00, value: 15_000_00, invested: null, folio: null, maturity: null, ...over });
 const holding = (over: Partial<Holding>): Holding => ({
   ...base(),
   assetClass: 'equity',
@@ -17,6 +17,9 @@ const holding = (over: Partial<Holding>): Holding => ({
   priceNow: null,
   priceAsOf: null,
   priceSource: null,
+  faceValue: null,
+  couponRate: null,
+  maturityDate: null,
   closed: 0,
   note: null,
   ...over,
@@ -57,4 +60,14 @@ describe('importing a statement', () => {
     expect(matchCas([line], [h], [complete], null)[0].appQuantity).toBe(8_000);
     expect(matchCas([line], [h], [{ ...(complete as object), quantityComplete: false } as never], null)[0].appQuantity).toBeNull();
   });
+
+  it('links bonds only to bonds, and never offers anything for what it does not import', () => {
+    const [bond, pref] = byIsin([row({ isin: 'INE020B07HN6', kind: 'bond' }), row({ isin: 'INE040A03010', kind: 'other' })]);
+    const myBond = holding({ id: 'b', assetClass: 'bond', unit: 'bond' });
+    const share = holding({ id: 's' });
+    const [m1, m2] = matchCas([bond, pref], [myBond, share], [], null);
+    expect(m1.linkable.map((h) => h.id)).toEqual(['b']);
+    expect(m2.linkable).toEqual([]);
+  });
 });
+

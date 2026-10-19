@@ -1,4 +1,5 @@
 import type { CasRow } from './cas';
+import type { YMD } from './dates';
 import type { HoldingSummary } from './investments';
 import type { Paise } from './money';
 import type { Holding } from './types';
@@ -18,6 +19,7 @@ export interface CasHolding {
   value: Paise;
   /** Cost, when every row of it printed one. */
   invested: Paise | null;
+  maturity: YMD | null;
 }
 
 /** One line per ISIN: the same holding in two demat accounts or two folios is added up. */
@@ -25,12 +27,13 @@ export function byIsin(rows: CasRow[]): CasHolding[] {
   const out = new Map<string, CasHolding>();
   for (const r of rows) {
     const h = out.get(r.isin);
-    if (!h) out.set(r.isin, { isin: r.isin, name: r.name, kind: r.kind, quantity: r.quantity, price: r.price, value: r.value, invested: r.invested });
+    if (!h) out.set(r.isin, { isin: r.isin, name: r.name, kind: r.kind, quantity: r.quantity, price: r.price, value: r.value, invested: r.invested, maturity: r.maturity });
     else {
       h.quantity += r.quantity;
       h.value += r.value;
       h.invested = h.invested !== null && r.invested !== null ? h.invested + r.invested : null;
       if (!h.name) h.name = r.name;
+      h.maturity ??= r.maturity;
     }
   }
   return [...out.values()];
@@ -51,7 +54,8 @@ const isinOf = (h: Holding) => h.symbol?.trim().toUpperCase() ?? '';
 export function matchCas(lines: CasHolding[], holdings: Holding[], summaries: HoldingSummary[], owner: string | null): CasMatch[] {
   const mine = holdings.filter((h) => !h.deletedAt && (h.memberId === owner || h.memberId === null));
   const summaryOf = new Map(summaries.map((s) => [s.holding.id, s]));
-  const kindOf = (h: Holding): CasHolding['kind'] | null => (h.assetClass === 'equity' ? 'equity' : h.assetClass === 'mf' || h.form === 'etf' ? 'fund' : null);
+  const kindOf = (h: Holding): CasHolding['kind'] | null =>
+    h.assetClass === 'equity' ? 'equity' : h.assetClass === 'bond' ? 'bond' : h.assetClass === 'mf' || h.form === 'etf' ? 'fund' : null;
   return lines.map((line) => {
     const found = mine.filter((h) => isinOf(h) === line.isin).sort((a, b) => Number(b.memberId === owner) - Number(a.memberId === owner))[0] ?? null;
     const s = found ? summaryOf.get(found.id) : undefined;
@@ -59,7 +63,7 @@ export function matchCas(lines: CasHolding[], holdings: Holding[], summaries: Ho
       line,
       holding: found,
       appQuantity: s && s.quantityComplete ? s.quantity : null,
-      linkable: found ? [] : mine.filter((h) => kindOf(h) === line.kind && !/^IN[EF9][0-9A-Z]{8}\d$/.test(isinOf(h))),
+      linkable: found || line.kind === 'other' ? [] : mine.filter((h) => kindOf(h) === line.kind && !/^IN[0-9A-Z]{9}\d$/.test(isinOf(h))),
     };
   });
 }

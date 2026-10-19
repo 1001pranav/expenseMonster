@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { isoToYMD, toISO, type YMD } from '@/domain/dates';
+import { addMonths, isoToYMD, toISO, type YMD } from '@/domain/dates';
 import {
   ASSET_CLASSES,
   ASSET_ORDER,
@@ -87,6 +87,10 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
   const [picking, setPicking] = useState(false);
   const [owner, setOwner] = useState<string>(''); // '' = joint
   const [fundType, setFundType] = useState<FundType | null>(null);
+  // Bonds
+  const [faceText, setFaceText] = useState('');
+  const [couponText, setCouponText] = useState('');
+  const [maturity, setMaturity] = useState<YMD | null>(null);
   const [purpose, setPurpose] = useState<Purpose>('investment');
 
   const [amountText, setAmountText] = useState(rupeesText(existing?.amount ?? cashTxn?.amount ?? prefill?.amount ?? null));
@@ -199,7 +203,17 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
           side,
           holding: chosen
             ? { id: chosen.id }
-            : { assetClass, form, fundType: assetClass === 'mf' ? fundType : null, name: newName, symbol: symbol.trim() || null, unit, purity: isMetal ? purity : null, memberId: owner || null },
+            : {
+                assetClass,
+                form,
+                fundType: assetClass === 'mf' ? fundType : null,
+                name: newName,
+                symbol: symbol.trim().toUpperCase() || null,
+                unit,
+                purity: isMetal ? purity : null,
+                memberId: owner || null,
+                ...(assetClass === 'bond' ? { faceValue: money(faceText), couponRate: couponText.trim() ? Number(couponText) || null : null, maturityDate: maturity } : {}),
+              },
           tradeDate: date,
           amount,
           quantity: hasQuantity ? quantity : null,
@@ -348,6 +362,21 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
                   ]}
                 />
               ) : null}
+              {assetClass === 'bond' ? (
+                <>
+                  <TextField label="ISIN (optional)" value={symbol} onChangeText={setSymbol} placeholder="From the contract note: INE… or IN0…" autoCapitalize="characters" hint="Lets a CDSL/NSDL statement update its price" />
+                  <Row gap={1} style={{ alignItems: 'flex-start' }}>
+                    <View style={{ flex: 1 }}>
+                      <TextField label="Face value per bond" value={faceText} onChangeText={setFaceText} keyboardType="decimal-pad" placeholder="₹ 1,000" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <TextField label="Coupon, % a year" value={couponText} onChangeText={setCouponText} keyboardType="decimal-pad" placeholder="8.1" />
+                    </View>
+                  </Row>
+                  <SwitchRow label="Has a maturity date" value={maturity !== null} onChange={(v) => setMaturity(v ? addMonths(today, 12 * 5) : null)} />
+                  {maturity ? <DateField label="Matures on" value={maturity} onChange={setMaturity} /> : null}
+                </>
+              ) : null}
               {assetClass === 'equity' || assetClass === 'mf' ? (
                 <TextField label={assetClass === 'equity' ? 'Symbol (optional)' : 'Scheme code or ISIN (optional)'} value={symbol} onChangeText={setSymbol} placeholder={assetClass === 'equity' ? 'INFY' : 'For daily prices from AMFI'} autoCapitalize="characters" />
               ) : null}
@@ -393,7 +422,7 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
       {hasQuantity && !soldAll && asInvestment ? (
         <Row gap={1} style={{ alignItems: 'flex-start' }}>
           <View style={{ flex: 1 }}>
-            <TextField label={unit === 'g' ? 'Grams' : unit === 'share' ? 'Shares' : 'Units'} value={qtyText} onChangeText={(t) => edit('quantity', t)} keyboardType="decimal-pad" placeholder="Optional" hint={derivedHint('quantity')} />
+            <TextField label={unit === 'g' ? 'Grams' : unit === 'share' ? 'Shares' : unit === 'bond' ? 'Bonds' : 'Units'} value={qtyText} onChangeText={(t) => edit('quantity', t)} keyboardType="decimal-pad" placeholder="Optional" hint={derivedHint('quantity')} />
           </View>
           <View style={{ flex: 1 }}>
             <TextField label={`Price per ${unitName}`} value={priceText} onChangeText={(t) => edit('unitPrice', t)} keyboardType="decimal-pad" placeholder="₹" hint={derivedHint('unitPrice')} />

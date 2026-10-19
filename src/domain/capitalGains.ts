@@ -14,6 +14,7 @@ import type { FinancialYear } from './tax';
  *   sources disagree on the current position.
  * - Sovereign Gold Bonds: redemption at maturity and a sale on the exchange are taxed differently.
  * - Debt, hybrid and international funds: depend on the fund's equity share and the purchase date.
+ * - Bonds: listed or not, market-linked or not, bought before or after April 2023 all differ; coupons are income.
  * - Deposits: their return is interest (income), not a capital gain.
  * Rules change in budgets: they live here, with the date they apply from and where they come from.
  */
@@ -42,6 +43,7 @@ export function gainKindOf(h: Holding): GainKind | { reason: string } {
     if (h.form === 'sgb') return { reason: 'Sovereign Gold Bonds: maturity and market sales differ' };
     return 'otherAsset';
   }
+  if (h.assetClass === 'bond') return { reason: 'Bonds: tax depends on listing and type (coupons are income)' };
   if (h.assetClass === 'fixed') return { reason: 'Returns are interest, taxed as income' };
   return { reason: "The app doesn't know this kind of asset" };
 }
