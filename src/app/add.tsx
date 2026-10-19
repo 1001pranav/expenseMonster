@@ -25,6 +25,7 @@ export default function AddSheet() {
     { label: 'Paste SMS', icon: 'chatbubble-ellipses', gradient: 'ocean', href: '/paste-sms' },
     { label: 'Transfer', icon: 'swap-horizontal', gradient: 'ink', href: { pathname: '/txn/new', params: { type: 'transfer' } } },
     { label: 'Settle up', icon: 'people', gradient: 'brand', href: '/settle' },
+    { label: 'Invest / sell', icon: 'trending-up', gradient: 'mint', href: '/investments/new' },
   ];
   const setup: Tile[] = [
     { label: 'Bill', icon: 'flash', gradient: 'marigold', href: '/biller/new' },

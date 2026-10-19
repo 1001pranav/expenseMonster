@@ -108,6 +108,8 @@ export default function Household() {
         <Card padded={false} style={{ overflow: 'hidden' }}>
           <ListRow icon="business" iconColor={colors.info} title="Bank accounts & wallets" chevron onPress={() => router.push('/accounts')} />
           <Divider inset={space(9)} />
+          <ListRow icon="trending-up" iconColor={colors.income} title="Investments" subtitle="Gold, shares, funds… by person and joint" chevron onPress={() => router.push('/investments')} />
+          <Divider inset={space(9)} />
           <ListRow icon="pie-chart" iconColor={colors.warn} title="Budgets" chevron onPress={() => router.push('/budgets')} />
           <Divider inset={space(9)} />
           <ListRow icon="pricetags" iconColor="#DB2777" title="Categories & auto-rules" chevron onPress={() => router.push('/categories')} />

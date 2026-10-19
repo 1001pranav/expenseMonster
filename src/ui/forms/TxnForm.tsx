@@ -6,10 +6,10 @@ import { billerMeta, viewBill } from '@/domain/bills';
 import { formatDay, isoToYMD, toISO, type YMD } from '@/domain/dates';
 import { formatINR, type Paise } from '@/domain/money';
 import { memberBalances, parseIds } from '@/domain/settle';
+import { LEGACY_INVEST_CATEGORY } from '@/domain/investments';
 import { categoryHistory, flagsOf, suggestCategory } from '@/domain/transactions';
 import type { PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
-import { restore } from '@/db/repo';
-import { approveCapture, deleteTransaction, learnRule, rejectCapture, saveTransaction } from '@/data/actions';
+import { approveCapture, deleteTransaction, learnRule, rejectCapture, restoreTransaction, saveTransaction } from '@/data/actions';
 import { useMembers, useSelfId, useSortedCategories, useTable, useToday } from '@/data/hooks';
 import { Button, Card, Chip, Pill, Row, Txt, type IconName } from '../components/core';
 import { Keypad, toast } from '../components/feedback';
@@ -200,7 +200,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
     if (!existing) return;
     if (pending) await rejectCapture(existing.id);
     else await deleteTransaction(existing.id);
-    toast(pending ? 'Rejected' : 'Deleted', { actionLabel: pending ? undefined : 'Undo', onAction: pending ? undefined : () => restore('transactions', existing.id) });
+    toast(pending ? 'Rejected' : 'Deleted', { actionLabel: pending ? undefined : 'Undo', onAction: pending ? undefined : () => restoreTransaction(existing.id) });
     goBack();
   };
 
@@ -424,6 +424,24 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
             Not counted as spending: it is counted when they spend it. If they don't record their spending here (say, parents in another city), save it as an expense instead.
           </Txt>
         </>
+      ) : null}
+
+      {type === 'expense' && categoryId === LEGACY_INVEST_CATEGORY ? (
+        <Card tone="alt" style={{ gap: 6 }}>
+          <Txt variant="small" tone="muted">
+            Money put into gold, shares or a fund isn't spent: you still own it. Recorded as an investment, it doesn't count as spending and you can track what you hold.
+          </Txt>
+          <Button
+            title="Record as an investment instead"
+            size="sm"
+            variant="secondary"
+            onPress={() =>
+              existing
+                ? router.replace({ pathname: '/investments/new', params: { fromTxn: existing.id } })
+                : router.replace({ pathname: '/investments/new', params: { amount: amount ? String(amount) : undefined, date } })
+            }
+          />
+        </Card>
       ) : null}
 
       {type === 'expense' && billCategory && openBills.length ? (

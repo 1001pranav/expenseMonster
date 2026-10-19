@@ -1,6 +1,7 @@
 # Investments: plan
 
-Status: decisions agreed (§8). Phase 1 (buying and selling, §3a) is being built. Covers gold/silver, shares, and how investments interact with
+Status: decisions agreed (§8). **Phase 1 is built** (§7): buying and selling, investment transfers,
+the Investments screen, Invested on Home and Insights, converting old expenses. Next: phase 2. Covers gold/silver, shares, and how investments interact with
 spending, family sync and tax.
 
 ## 1. Where the request is right and where I disagree

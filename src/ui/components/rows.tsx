@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { formatDay, isoToYMD, relativeDay, type YMD } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
+import { isInvestment, isInvestmentSale } from '@/domain/investments';
 import { isFamilyTransfer } from '@/domain/settle';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
@@ -15,6 +16,7 @@ const METHOD_LABEL: Record<Transaction['method'], string> = { upi: 'UPI', bank: 
 
 export function txnTitle(t: Transaction, cat?: Category, nameOf?: (memberId: string | null) => string) {
   if (t.type === 'transfer' && t.linkType === 'card') return 'Card bill payment';
+  if (isInvestment(t)) return `${isInvestmentSale(t) ? 'Sold' : 'Invested'}${t.payee ? `: ${t.payee}` : ''}`;
   if (isFamilyTransfer(t) && nameOf && t.memberId && t.toMemberId) return `${nameOf(t.memberId)} → ${nameOf(t.toMemberId)}`;
   if (t.type === 'settlement') return 'Settlement';
   return t.payee || cat?.name || (t.type === 'income' ? 'Income' : 'Expense');
@@ -26,7 +28,7 @@ export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Catego
   const selfId = useStore((s) => s.identity.selfMemberId);
   const nameOf = (id: string | null) => (id === selfId ? 'You' : (members.find((m) => m.id === id)?.name ?? 'Someone'));
   const sign = t.type === 'expense' ? -1 : t.type === 'income' ? 1 : 0;
-  const icon: IconName = isFamilyTransfer(t) ? 'people' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? (t.type === 'income' ? 'arrow-down' : 'arrow-up'));
+  const icon: IconName = isInvestment(t) ? 'trending-up' : isFamilyTransfer(t) ? 'people' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? (t.type === 'income' ? 'arrow-down' : 'arrow-up'));
   const color = t.type === 'transfer' || t.type === 'settlement' ? colors.info : (cat?.color ?? colors.textMuted);
   const meta = [t.type === 'settlement' ? 'Settlement' : null, cat && t.payee ? cat.name : null, t.method === 'card' && card ? card.name : METHOD_LABEL[t.method]].filter(Boolean).join(' · ');
   const flags = flagsOf(t);

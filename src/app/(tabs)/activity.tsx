@@ -3,8 +3,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDays, addMonths, formatDay, formatMonth, isoToYMD, monthKey, relativeDay } from '@/domain/dates';
-import { restore } from '@/db/repo';
-import { deleteTransaction } from '@/data/actions';
+import { deleteTransaction, restoreTransaction } from '@/data/actions';
 import { useCategoryMap, useTable, useToday } from '@/data/hooks';
 import { Card, Chip, EmptyState, IconButton, Money, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
@@ -77,7 +76,7 @@ export default function Activity() {
 
   const onDelete = async (id: string) => {
     await deleteTransaction(id);
-    toast('Transaction deleted', { actionLabel: 'Undo', onAction: () => restore('transactions', id) });
+    toast('Transaction deleted', { actionLabel: 'Undo', onAction: () => restoreTransaction(id) });
   };
 
   const title = params.category ? (cats.get(params.category)?.name ?? 'Activity') : params.card ? (cards.find((c) => c.id === params.card)?.name ?? 'Activity') : 'Activity';
