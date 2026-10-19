@@ -262,6 +262,8 @@ export interface Holding extends BaseRow {
   /** Last known price per unit (paise), entered by hand until online prices exist. */
   priceNow: Paise | null;
   priceAsOf: string | null;
+  /** 'manual' (entered here) or 'amfi' (AMFI's daily NAV file); null for older entries. */
+  priceSource: string | null;
   closed: 0 | 1;
   note: string | null;
 }

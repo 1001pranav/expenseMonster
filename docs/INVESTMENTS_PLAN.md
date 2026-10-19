@@ -2,7 +2,26 @@
 
 Status: decisions agreed (§8). **Phases 1 and 2 are built** (§7). Phase 2: current prices (one
 gold/silver rate per purity), value and gain not yet taken, guided jewellery exchange, what went
-over the metal's worth, and capital gains on the Tax screen (§6). Next: phase 3 (online prices). Covers gold/silver, shares, and how investments interact with
+over the metal's worth, and capital gains on the Tax screen (§6). **Phase 3 has started: fund prices
+from AMFI are built** (§3b). Next: share prices, then a gold/silver reference rate.
+
+## 3b. Online prices: mutual funds (built)
+
+- **Source:** AMFI's public daily NAV file (`www.amfiindia.com/spages/NAVAll.txt`, with
+  `portal.amfiindia.com` as fallback). AMFI's terms allow personal, non-commercial use. The phone
+  fetches it directly for its owner; nothing is republished and no server of ours is involved.
+  **If the app is ever sold or offered commercially, this needs AMFI's permission or a licensed feed.**
+- **Privacy:** the whole file (a few MB) is downloaded and searched on the phone, so AMFI learns
+  nothing about which funds the family holds. Only when the user taps; never in the background.
+- **Format:** columns are found by header name. AMFI inserted Plan and Option columns before the NAV
+  in August 2026, which broke readers that counted columns. Both layouts are read, and a file
+  missing a needed column is refused with a message, never misread.
+- **Confirmation:** fetched NAVs are listed (old → new, with AMFI's date) and saved only on Apply.
+  Each holding records the price's source (`priceSource`: `amfi` or `manual`, migration v9), and the
+  screen shows it. NAVs have 4 decimals and are stored to the paisa: on 10,000 units the value can be
+  off by up to ₹50.
+- **Linking:** a fund is matched by its AMFI scheme code or ISIN (`symbol`). "Find the scheme"
+  searches names by words, on the form and on the fund's screen. Covers gold/silver, shares, and how investments interact with
 spending, family sync and tax.
 
 ## 1. Where the request is right and where I disagree

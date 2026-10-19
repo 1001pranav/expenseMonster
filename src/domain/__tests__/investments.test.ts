@@ -31,6 +31,7 @@ const holding = (over: Partial<Holding>): Holding => ({
   memberId: null,
   priceNow: null,
   priceAsOf: null,
+  priceSource: null,
   closed: 0,
   note: null,
   ...over,

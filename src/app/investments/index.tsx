@@ -3,8 +3,11 @@ import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { formatDay, isoToYMD } from '@/domain/dates';
 import { ASSET_CLASSES, ASSET_ORDER, formatQuantity, investedByOwner, legacyInvestmentExpenses, portfolioValue, summarizeHoldings } from '@/domain/investments';
+import { applyFundPrices } from '@/data/investments';
 import { useMembers, useSelfId, useTable } from '@/data/hooks';
-import { Button, Card, Divider, EmptyState, ListRow, Money, Row, Section, Txt, type IconName } from '@/ui/components/core';
+import { proposeFundPrices, type NavProposal } from '@/services/navPrices';
+import { Sheet, toast } from '@/ui/components/feedback';
+import { Button, Card, Divider, EmptyState, ListRow, Money, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -18,6 +21,20 @@ export default function Investments() {
   const selfId = useSelfId();
   const [showSold, setShowSold] = useState(false);
   const [showLegacy, setShowLegacy] = useState(false);
+  const money = useMoneyText();
+  const [navs, setNavs] = useState<{ proposals: NavProposal[]; unmatched: number } | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const getFundPrices = async () => {
+    setFetching(true);
+    try {
+      const r = await proposeFundPrices();
+      setNavs({ proposals: r.proposals, unmatched: r.unmatched.length });
+    } catch (e) {
+      toast((e as Error).message, { tone: 'error' });
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const summaries = useMemo(() => summarizeHoldings(holdings, trades, txns).filter((s) => s.trades.length), [holdings, trades, txns]);
   const held = summaries.filter((s) => !s.soldOut && !s.holding.closed);
@@ -108,6 +125,41 @@ export default function Investments() {
           </Row>
         ) : null}
       </Card>
+
+      {held.some((x) => x.holding.assetClass === 'mf') ? (
+        <Button title="Get today's fund prices (AMFI)" icon="cloud-download-outline" variant="secondary" loading={fetching} onPress={getFundPrices} />
+      ) : null}
+      <Sheet visible={Boolean(navs)} onClose={() => setNavs(null)} title="Fund prices from AMFI">
+        <Txt variant="small" tone="muted">
+          Each fund's latest NAV from AMFI's public file, dated as published. Nothing is saved until you apply; you can still change a price on its fund.
+        </Txt>
+        {navs?.proposals.map((p) => (
+          <View key={p.holding.id} style={{ gap: 2 }}>
+            <Txt numberOfLines={1}>{p.holding.name}</Txt>
+            <Txt variant="small" tone="muted">
+              {p.current ? `${money(p.current)} → ` : ''}
+              {money(p.scheme.nav)} · {formatDay(p.scheme.date, { year: true })}
+            </Txt>
+          </View>
+        ))}
+        {navs?.unmatched ? (
+          <Txt variant="small" tone="warn">
+            {navs.unmatched === 1 ? 'One fund has' : `${navs.unmatched} funds have`} no scheme code: open {navs.unmatched === 1 ? 'it' : 'each'} and link it to its AMFI scheme.
+          </Txt>
+        ) : null}
+        {navs?.proposals.length ? (
+          <Button
+            title={`Apply ${navs.proposals.length} price${navs.proposals.length > 1 ? 's' : ''}`}
+            icon="checkmark"
+            onPress={async () => {
+              await applyFundPrices(navs.proposals.map((p) => ({ holdingId: p.holding.id, nav: p.scheme.nav, date: p.scheme.date })));
+              toast('Fund prices updated', { tone: 'success' });
+              setNavs(null);
+            }}
+          />
+        ) : null}
+        <Button title="Close" variant="secondary" onPress={() => setNavs(null)} />
+      </Sheet>
 
       {legacy.length ? (
         <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: colors.warn }}>

@@ -27,6 +27,7 @@ import { useMembers, useSelfId, useTable, useToday } from '@/data/hooks';
 import { Button, Card, Chip, Row, Txt, type IconName } from '../components/core';
 import { toast } from '../components/feedback';
 import { ChipSelect, DateField, Field, Segmented, SwitchRow, TextField } from '../components/forms';
+import { SchemePicker } from '../components/SchemePicker';
 import { Screen, goBack } from '../components/Screen';
 import { space } from '../theme';
 
@@ -83,6 +84,7 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
   const [purity, setPurity] = useState<string | null>(chosen?.purity ?? meta.purities[0]?.value ?? null);
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
+  const [picking, setPicking] = useState(false);
   const [owner, setOwner] = useState<string>(''); // '' = joint
   const [fundType, setFundType] = useState<FundType | null>(null);
   const [purpose, setPurpose] = useState<Purpose>('investment');
@@ -318,6 +320,20 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
                 placeholder={defaultHoldingName(assetClass, form, purity) || (assetClass === 'equity' ? 'Infosys' : assetClass === 'mf' ? 'Parag Parikh Flexi Cap' : 'What is it?')}
               />
               {assetClass === 'mf' ? (
+                <>
+                  <Button title={symbol ? `Scheme ${symbol} · change` : 'Find the scheme (AMFI list)'} icon="search" size="sm" variant="secondary" onPress={() => setPicking(true)} />
+                  <SchemePicker
+                    visible={picking}
+                    onClose={() => setPicking(false)}
+                    initialQuery={name}
+                    onPick={(scheme) => {
+                      setName(scheme.name);
+                      setSymbol(scheme.code);
+                    }}
+                  />
+                </>
+              ) : null}
+              {assetClass === 'mf' ? (
                 <ChipSelect
                   label="The fund invests in"
                   value={fundType}
@@ -333,7 +349,7 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
                 />
               ) : null}
               {assetClass === 'equity' || assetClass === 'mf' ? (
-                <TextField label={assetClass === 'equity' ? 'Symbol (optional)' : 'Scheme code (optional)'} value={symbol} onChangeText={setSymbol} placeholder={assetClass === 'equity' ? 'INFY' : 'AMFI code'} autoCapitalize="characters" />
+                <TextField label={assetClass === 'equity' ? 'Symbol (optional)' : 'Scheme code or ISIN (optional)'} value={symbol} onChangeText={setSymbol} placeholder={assetClass === 'equity' ? 'INFY' : 'For daily prices from AMFI'} autoCapitalize="characters" />
               ) : null}
               {members.length > 1 ? (
                 <ChipSelect

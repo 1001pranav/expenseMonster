@@ -55,7 +55,7 @@ export interface InvestmentInput {
 export async function saveInvestment(input: InvestmentInput, opts: { tradeId?: string; fromTxnId?: string } = {}): Promise<Trade> {
   const holding: Holding =
     'assetClass' in input.holding
-      ? await insert('holdings', { ...input.holding, priceNow: null, priceAsOf: null, closed: 0, note: null, scope: input.scope })
+      ? await insert('holdings', { ...input.holding, priceNow: null, priceAsOf: null, priceSource: null, closed: 0, note: null, scope: input.scope })
       : findById('holdings', input.holding.id)!;
   if (!holding) throw new Error('That holding no longer exists');
   const existing = opts.tradeId ? findById('trades', opts.tradeId) : undefined;
@@ -118,6 +118,11 @@ export async function deleteInvestment(tradeId: string): Promise<void> {
 /** Mark a holding sold out (or open again): hidden from the list by default, kept in history. */
 export const setHoldingClosed = (holdingId: string, closed: boolean) => update('holdings', holdingId, { closed: closed ? 1 : 0 });
 
+/** Prices fetched and confirmed by the user: each holding gets its scheme's NAV, dated as AMFI dated it. */
+export async function applyFundPrices(prices: { holdingId: string; nav: Paise; date: YMD }[]): Promise<void> {
+  for (const p of prices) await update('holdings', p.holdingId, { priceNow: p.nav, priceAsOf: p.date, priceSource: 'amfi' });
+}
+
 /** Rename, change owner, or set the last known price of a holding. */
 export const updateHolding = (holdingId: string, patch: Partial<Pick<Holding, 'name' | 'symbol' | 'memberId' | 'fundType' | 'priceNow' | 'priceAsOf' | 'note'>>) => update('holdings', holdingId, patch);
 
@@ -127,7 +132,7 @@ export async function setPrice(holdingId: string, price: Paise, opts: { sameMeta
   if (!holding) throw new Error('That holding no longer exists');
   const asOf = todayYMD();
   const targets = opts.sameMetal ? getState().tables.holdings.filter((h) => h.id === holding.id || sameMetal(holding, h)) : [holding];
-  for (const h of targets) await update('holdings', h.id, { priceNow: price, priceAsOf: asOf });
+  for (const h of targets) await update('holdings', h.id, { priceNow: price, priceAsOf: asOf, priceSource: 'manual' });
   return targets.length;
 }
 
