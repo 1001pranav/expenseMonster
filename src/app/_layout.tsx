@@ -21,6 +21,8 @@ import { listPeers } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { cloudConfigured, cloudSyncNow, cloudSyncSoon, type CloudResult } from '@/services/cloud';
+import { publishDevice } from '@/services/holds';
+import { followKeyChange } from '@/services/rotation';
 import { startLiveSync } from '@/services/livesync';
 import { holdSync, isSyncHeld, releaseSync, useSyncHold } from '@/services/syncHold';
 import { vaultSyncSoon } from '@/services/vault';
@@ -140,6 +142,11 @@ function App() {
     if (ready && identity.onboarded) scheduleSoon();
   }, [ready, version, identity.onboarded]);
 
+  // Family phones show this phone by name (household head, review).
+  useEffect(() => {
+    if (ready && identity.onboarded) publishDevice().catch((e) => logFailure('could not publish this phone to the household', e, 'warn'));
+  }, [ready, identity.onboarded, identity.deviceName]);
+
   // Optional cloud sync: upload edits shortly after they happen (no-op unless the user turned it on).
   useEffect(() => {
     if (!ready || !identity.onboarded || locked) return;
@@ -239,6 +246,13 @@ function onCloudResult(r: CloudResult) {
   const grew = r.pendingConflicts > knownConflicts;
   knownConflicts = r.pendingConflicts;
   if (grew) toast(`${r.pendingConflicts} entries changed on two phones. Resolve them in Sync.`, { tone: 'error' });
+  // The head may have removed a phone: switch to the new household key, or stop if it was this one.
+  followKeyChange()
+    .then((s) => {
+      if (s === 'switched') toast('The household head changed the family key. This phone is up to date.', { tone: 'success' });
+      if (s === 'removed') toast('The household head removed this phone. Your data stays on it; cloud sync is off.', { tone: 'error' });
+    })
+    .catch((e) => logFailure('household: could not follow the key change', e));
 }
 
 /** Shown after unlock while the startup family sync runs: at most 8 s, and skippable. */

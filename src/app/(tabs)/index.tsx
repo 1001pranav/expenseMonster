@@ -159,7 +159,8 @@ export default function Home() {
         <Row gap={2}>
           <Stat label="Income" value={totals.income} tone="inverse" />
           <Stat label={totals.net < 0 ? 'Overspent' : 'Saved'} value={Math.abs(totals.net)} tone="inverse" />
-          <Stat label="On cards" value={totals.cardSpend} tone="inverse" />
+          {/* Three figures fit a narrow phone: in a month with investments, what went in replaces card spend. */}
+          {totals.invested ? <Stat label={totals.invested < 0 ? 'Taken out' : 'Invested'} value={Math.abs(totals.invested)} tone="inverse" /> : <Stat label="On cards" value={totals.cardSpend} tone="inverse" />}
         </Row>
       </Card>
 

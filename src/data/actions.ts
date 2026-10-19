@@ -6,7 +6,7 @@ import type { Paise } from '@/domain/money';
 import { advance } from '@/domain/recurrence';
 import { ruleKey } from '@/domain/transactions';
 import type { Bill, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
-import { findById, insert, insertMany, remove, update, type NewRow } from '@/db/repo';
+import { findById, insert, insertMany, remove, restore, update, type NewRow } from '@/db/repo';
 import { CATEGORY_FOR } from '@/db/seed';
 import { getState } from '@/db/store';
 
@@ -73,7 +73,18 @@ export async function approveCapture(id: string, patch: Partial<Transaction> = {
 /** Rejected captures are kept (as tombstone-like rows) so the same SMS is never offered again. */
 export const rejectCapture = (id: string) => update('transactions', id, { status: 'rejected' });
 
-export const deleteTransaction = (id: string) => remove('transactions', id);
+/** Delete a transaction; an investment's trade goes with it (the money and what it bought are one entry). */
+export async function deleteTransaction(id: string) {
+  const t = findById('transactions', id);
+  await remove('transactions', id);
+  if (t?.linkType === 'investment' && t.linkId && findById('trades', t.linkId)) await remove('trades', t.linkId);
+}
+
+/** Undo deleteTransaction. */
+export async function restoreTransaction(id: string) {
+  const t = await restore('transactions', id);
+  if (t.linkType === 'investment' && t.linkId) await restore('trades', t.linkId).catch(() => {});
+}
 
 function stripFlag(flags: string | null, prefix: string) {
   const rest = (flags ?? '').split(',').filter((f) => f && !f.startsWith(prefix));

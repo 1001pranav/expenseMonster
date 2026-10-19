@@ -22,19 +22,25 @@ export const isLive = (t: Transaction) => !t.deletedAt && t.status === 'confirme
 export interface MonthTotals {
   income: Paise;
   expense: Paise;
+  /** income − expense: what wasn't spent (whatever was invested counts as saved). */
   net: Paise;
   cardSpend: Paise;
+  /** Put into investments minus taken out by selling (negative when more was taken out). */
+  invested: Paise;
 }
 
 /**
  * Income and expense for a month. Transfers (incl. credit-card bill payments) and
  * settlements are excluded: they move money between your own pockets / people.
  * Card refunds (income on a card) reduce expense instead of counting as income.
+ * Investments are transfers too (into something you still own): counted separately as invested,
+ * and a sale's proceeds as taken out, never as income.
  */
 export function monthTotals(transactions: Transaction[], month: string, uptoDay = 31): MonthTotals {
   let income = 0;
   let expense = 0;
   let cardSpend = 0;
+  let invested = 0;
   for (const t of transactions) {
     const d = isoToYMD(t.occurredAt);
     if (!isLive(t) || monthKey(d) !== month || Number(d.slice(8)) > uptoDay) continue;
@@ -44,9 +50,11 @@ export function monthTotals(transactions: Transaction[], month: string, uptoDay 
     } else if (t.type === 'income') {
       if (t.method === 'card') expense -= t.amount;
       else income += t.amount;
+    } else if (t.type === 'transfer' && t.linkType === 'investment') {
+      invested += flagsOf(t).includes('sale') ? -t.amount : t.amount;
     }
   }
-  return { income, expense, net: income - expense, cardSpend };
+  return { income, expense, net: income - expense, cardSpend, invested };
 }
 
 /** Expense per day for the last `days` days ending `today` (oldest first). */

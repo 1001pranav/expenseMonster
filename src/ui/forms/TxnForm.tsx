@@ -1,14 +1,15 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Image, Pressable, TextInput, View } from 'react-native';
+import { applyAmountKey, groupAmount, isValidAmountText, toGroupedIndex, toRawIndex, type Selection } from '@/domain/amountInput';
 import { billerMeta, viewBill } from '@/domain/bills';
 import { formatDay, isoToYMD, toISO, type YMD } from '@/domain/dates';
 import { formatINR, type Paise } from '@/domain/money';
-import { parseIds } from '@/domain/settle';
+import { memberBalances, parseIds } from '@/domain/settle';
+import { LEGACY_INVEST_CATEGORY } from '@/domain/investments';
 import { categoryHistory, flagsOf, suggestCategory } from '@/domain/transactions';
 import type { PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
-import { restore } from '@/db/repo';
-import { approveCapture, deleteTransaction, learnRule, rejectCapture, saveTransaction } from '@/data/actions';
+import { approveCapture, deleteTransaction, learnRule, rejectCapture, restoreTransaction, saveTransaction } from '@/data/actions';
 import { useMembers, useSelfId, useSortedCategories, useTable, useToday } from '@/data/hooks';
 import { Button, Card, Chip, Pill, Row, Txt, type IconName } from '../components/core';
 import { Keypad, toast } from '../components/feedback';
@@ -45,8 +46,18 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   const pending = existing?.status === 'pending';
   const flags = existing ? flagsOf(existing) : [];
 
-  const [type, setType] = useState<TxnType>(existing?.type ?? initialType);
+  // A settlement is edited as a family transfer that counts towards who owes whom.
+  const [type, setType] = useState<TxnType>(existing?.type === 'settlement' ? 'transfer' : (existing?.type ?? initialType));
   const [amountStr, setAmountStr] = useState(amountText(existing?.amount ?? null));
+  /** Cursor in the typed amount (raw characters, no commas): keypad keys go there, not only at the end. */
+  const [amountSel, setAmountSel] = useState<Selection>(() => ({ start: amountStr.length, end: amountStr.length }));
+  /** When the keypad last changed the amount (see onSelectionChange). */
+  const keyedAt = useRef(0);
+  const setAmount = (raw: string, cursor = raw.length) => {
+    keyedAt.current = Date.now();
+    setAmountStr(raw);
+    setAmountSel({ start: cursor, end: cursor });
+  };
   const [keypad, setKeypad] = useState(!existing);
   const [categoryId, setCategoryId] = useState<string | null>(existing?.categoryId ?? null);
   const [method, setMethod] = useState<PayMethod>(existing?.method ?? 'upi');
@@ -57,6 +68,11 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   const [note, setNote] = useState(existing?.note ?? '');
   const [scope, setScope] = useState<Scope>(existing?.scope ?? 'household');
   const [payer, setPayer] = useState<string | null>(existing?.memberId ?? (selfId || null));
+  /** Family transfer: money sent from `payer` to this member. */
+  const [family, setFamily] = useState(Boolean(existing?.toMemberId));
+  const [toMember, setToMember] = useState<string | null>(existing?.toMemberId ?? null);
+  /** Settles a debt or lends money, so it changes who owes whom; otherwise just money handed over. */
+  const [countsInBalance, setCountsInBalance] = useState(existing?.type === 'settlement');
   const [splitWith, setSplitWith] = useState<string[]>(parseIds(existing?.splitWith ?? null));
   const [link, setLink] = useState<{ type: Transaction['linkType']; id: string | null }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });
   const [showAllCats, setShowAllCats] = useState(false);
@@ -110,6 +126,12 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
     [payee, existing?.vpa, existing?.id, type, txns, categories],
   );
   const amount = Math.round(Number(amountStr || '0') * 100);
+  const memberOptions = members.map((m) => ({ value: m.id, label: m.id === selfId ? 'You' : m.name, color: m.color }));
+  const nameOf = (id: string | null) => memberOptions.find((o) => o.value === id)?.label ?? 'Someone';
+  const isFamily = type === 'transfer' && family;
+  // What the two owe each other without this entry, for the "counts towards who owes whom" hint.
+  const balances = useMemo(() => memberBalances(txns.filter((t) => t.id !== existing?.id)), [txns, existing?.id]);
+  const receiverOwed = isFamily && payer && toMember && (balances[payer] ?? 0) < 0 && (balances[toMember] ?? 0) > 0 ? Math.min(-balances[payer], balances[toMember]) : 0;
   const cardHint = flags.find((f) => f.startsWith('card-hint:'))?.split(':')[1];
 
   // "Which bill?" — open bills, newest due first, for bill-type categories or when the capture matched a biller.
@@ -124,41 +146,36 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   );
   const billCategory = categoryId === 'cat_utilities' || categoryId === 'cat_rent' || categoryId === 'cat_education' || flags.some((f) => f.startsWith('biller:'));
 
+  const amountShown = groupAmount(amountStr);
   const onKey = (k: string) => {
-    if (k === 'clear') return setAmountStr('');
-    if (k === 'del') return setAmountStr((s) => s.slice(0, -1));
-    setAmountStr((s) => {
-      if (k === '.' && s.includes('.')) return s;
-      const next = s === '0' && k !== '.' ? k : s + k;
-      const [, dec] = next.split('.');
-      if (dec && dec.length > 2) return s;
-      if (Number(next) > 99_99_99_999) return s;
-      return next;
-    });
+    const next = applyAmountKey(amountStr, amountSel, k);
+    setAmount(next.raw, next.cursor);
   };
 
   const save = async (approve = false) => {
     if (!amount) return toast('Enter an amount', { tone: 'error' });
     if (method === 'card' && type === 'expense' && !cardId && cards.length) return toast('Pick which credit card', { tone: 'error' });
+    if (isFamily && (!payer || !toMember || payer === toMember)) return toast('Pick who sent it and who got it', { tone: 'error' });
     setSaving(true);
     try {
       const time = existing && isoToYMD(existing.occurredAt) === date ? existing.occurredAt : toISO(date, date === today ? new Date().getHours() * 60 + new Date().getMinutes() : null);
       const isCardPayment = type === 'transfer' && link.type === 'card';
       const draft = {
-        type,
+        type: isFamily && countsInBalance ? 'settlement' : type,
         amount,
         occurredAt: time,
         categoryId: type === 'transfer' ? null : categoryId,
         method: isCardPayment && method === 'card' ? 'bank' : method,
         cardId: method === 'card' || isCardPayment ? cardId : null,
         accountId: method === 'card' && !isCardPayment ? null : accountId,
-        payee: payee.trim() || null,
+        payee: isFamily ? null : payee.trim() || null,
         note: note.trim() || null,
         scope,
         memberId: payer,
+        toMemberId: isFamily ? toMember : null,
         splitWith: type === 'expense' && splitWith.length ? JSON.stringify(splitWith) : null,
-        linkType: link.id ? link.type : null,
-        linkId: link.id,
+        linkType: link.id && !isFamily ? link.type : null,
+        linkId: isFamily ? null : link.id,
       } satisfies Partial<Transaction>;
       if (existing && (pending || approve)) {
         await approveCapture(existing.id, draft);
@@ -169,7 +186,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         toast('Saved', { tone: 'success' });
       } else {
         await saveTransaction(draft);
-        toast(`${type === 'income' ? 'Income' : type === 'transfer' ? 'Transfer' : 'Expense'} of ${formatINR(amount)} saved`, { tone: 'success' });
+        toast(`${type === 'income' ? 'Income' : isFamily ? `Transfer to ${nameOf(toMember)}` : type === 'transfer' ? 'Transfer' : 'Expense'} of ${formatINR(amount)} saved`, { tone: 'success' });
       }
       goBack();
     } catch (e) {
@@ -183,7 +200,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
     if (!existing) return;
     if (pending) await rejectCapture(existing.id);
     else await deleteTransaction(existing.id);
-    toast(pending ? 'Rejected' : 'Deleted', { actionLabel: pending ? undefined : 'Undo', onAction: pending ? undefined : () => restore('transactions', existing.id) });
+    toast(pending ? 'Rejected' : 'Deleted', { actionLabel: pending ? undefined : 'Undo', onAction: pending ? undefined : () => restoreTransaction(existing.id) });
     goBack();
   };
 
@@ -242,9 +259,10 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
       ) : null}
 
       <Segmented
-        value={type === 'settlement' ? 'expense' : type}
+        value={type}
         onChange={(v) => {
           setType(v);
+          if (v !== 'transfer') setFamily(false);
           setCategoryId(null);
           setAutoCat(false);
           if (v !== 'transfer' && link.type === 'card') setLink({ type: null, id: null });
@@ -256,20 +274,41 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         ]}
       />
 
-      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(2.5), borderRadius: radius.xl, backgroundColor: soft }}>
+      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(2.5), borderRadius: radius.xl, backgroundColor: soft }}>
         <Row gap={0.5} style={{ alignItems: 'flex-start' }}>
           <Txt variant="h1" style={{ color, marginTop: 6 }}>
             ₹
           </Txt>
-          <Txt style={{ fontFamily: fonts.display, fontSize: 52, lineHeight: 64, letterSpacing: -1.5, color: amountStr ? colors.text : colors.textFaint, fontVariant: ['tabular-nums'] }}>
-            {amountStr ? formatINR(Number(amountStr.split('.')[0]) * 100, { symbol: false, decimals: 'never' }) + (amountStr.includes('.') ? `.${amountStr.split('.')[1]}` : '') : '0'}
-          </Txt>
+          {/* The app's keypad types here; the phone keyboard stays down. Tap or drag to move the cursor. */}
+          <TextInput
+            value={amountShown}
+            placeholder="0"
+            placeholderTextColor={colors.textFaint}
+            showSoftInputOnFocus={false}
+            contextMenuHidden
+            selection={{ start: toGroupedIndex(amountShown, amountSel.start), end: toGroupedIndex(amountShown, amountSel.end) }}
+            onSelectionChange={(e) => {
+              // Android reports the cursor jumping to the end when the text changes, before our
+              // cursor is applied; only taps and drags move it.
+              if (Date.now() - keyedAt.current < 250) return;
+              const { start, end } = e.nativeEvent.selection;
+              setAmountSel({ start: toRawIndex(amountShown, start), end: toRawIndex(amountShown, end) });
+            }}
+            // A hardware keyboard can still type; keep only well-formed amounts.
+            onChangeText={(t) => {
+              const raw = t.replace(/[^\d.]/g, '');
+              if (isValidAmountText(raw)) setAmountStr(raw);
+            }}
+            onFocus={() => setKeypad(true)}
+            selectionColor={color}
+            cursorColor={color}
+            accessibilityLabel={`Amount ${amountStr || 'zero'} rupees`}
+            style={{ fontFamily: fonts.display, fontSize: 52, height: 64, minWidth: 40, padding: 0, letterSpacing: -1.5, color: colors.text, fontVariant: ['tabular-nums'], includeFontPadding: false }}
+          />
         </Row>
-        {!keypad ? (
-          <Txt variant="small" tone="faint">
-            Tap to edit
-          </Txt>
-        ) : null}
+        <Txt variant="small" tone="faint">
+          {keypad ? 'Tap a digit to move the cursor there' : 'Tap to edit'}
+        </Txt>
       </Pressable>
       {keypad ? <Keypad onKey={onKey} /> : null}
 
@@ -281,17 +320,38 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
                 key={c.id}
                 icon="card"
                 label={`Pay ${c.name}`}
-                selected={link.type === 'card' && cardId === c.id}
+                selected={!family && link.type === 'card' && cardId === c.id}
                 onPress={() => {
+                  setFamily(false);
                   setCardId(c.id);
                   setLink({ type: 'card', id: c.id });
                   setScope(c.scope);
                 }}
               />
             ))}
-            <Chip label="Another account" icon="business" selected={link.type !== 'card'} onPress={() => setLink({ type: null, id: null })} />
+            {members.length > 1 ? (
+              <Chip
+                label="Family member"
+                icon="people"
+                selected={family}
+                onPress={() => {
+                  setFamily(true);
+                  setLink({ type: null, id: null });
+                  setScope('household');
+                }}
+              />
+            ) : null}
+            <Chip
+              label="Another account"
+              icon="business"
+              selected={!family && link.type !== 'card'}
+              onPress={() => {
+                setFamily(false);
+                setLink({ type: null, id: null });
+              }}
+            />
           </View>
-          {link.type === 'card' ? (
+          {!family && link.type === 'card' ? (
             <Txt variant="small" tone="muted" style={{ marginTop: 6 }}>
               Card bill payments are transfers, so your spending isn't counted twice.
             </Txt>
@@ -345,6 +405,45 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         </Field>
       )}
 
+      {isFamily ? (
+        <>
+          <ChipSelect label="From" value={payer} onChange={setPayer} options={memberOptions} />
+          <ChipSelect label="To" value={toMember} onChange={setToMember} options={memberOptions.filter((o) => o.value !== payer)} />
+          <SwitchRow
+            icon="people-outline"
+            label="Counts towards who owes whom"
+            description={
+              receiverOwed
+                ? `${nameOf(payer)} owes ${nameOf(toMember)} ${formatINR(receiverOwed)}: turn on if this pays it back.`
+                : 'On for paying back or lending. Off for money just handed over (pocket money, household cash).'
+            }
+            value={countsInBalance}
+            onChange={setCountsInBalance}
+          />
+          <Txt variant="small" tone="muted">
+            Not counted as spending: it is counted when they spend it. If they don't record their spending here (say, parents in another city), save it as an expense instead.
+          </Txt>
+        </>
+      ) : null}
+
+      {type === 'expense' && categoryId === LEGACY_INVEST_CATEGORY ? (
+        <Card tone="alt" style={{ gap: 6 }}>
+          <Txt variant="small" tone="muted">
+            Money put into gold, shares or a fund isn't spent: you still own it. Recorded as an investment, it doesn't count as spending and you can track what you hold.
+          </Txt>
+          <Button
+            title="Record as an investment instead"
+            size="sm"
+            variant="secondary"
+            onPress={() =>
+              existing
+                ? router.replace({ pathname: '/investments/new', params: { fromTxn: existing.id } })
+                : router.replace({ pathname: '/investments/new', params: { amount: amount ? String(amount) : undefined, date } })
+            }
+          />
+        </Card>
+      ) : null}
+
       {type === 'expense' && billCategory && openBills.length ? (
         <Field label="Which bill?">
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -357,7 +456,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
                 onPress={() => {
                   const on = !(link.type === 'bill' && link.id === v.bill.id);
                   setLink(on ? { type: 'bill', id: v.bill.id } : { type: null, id: null });
-                  if (on && !amountStr) setAmountStr(amountText(v.remaining));
+                  if (on && !amountStr) setAmount(amountText(v.remaining));
                   if (on && !payee) setPayee(biller!.name);
                 }}
               />
@@ -379,21 +478,23 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
       ) : null}
 
       <DateField label="Date" value={date} onChange={setDate} />
-      <View style={{ gap: space(1) }}>
-        <TextField label={type === 'income' ? 'From' : 'Paid to'} value={payee} onChangeText={(v) => onPayee(v)} placeholder={type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…'} icon="storefront-outline" />
-        {payeeSuggestions.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {payeeSuggestions.map((p) => (
-              <Chip key={p.name} compact icon="time-outline" label={p.name} onPress={() => onPayee(p.name, p)} />
-            ))}
-          </View>
-        ) : null}
-        {autoCat && categoryId ? (
-          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 2 }}>
-            Filed under {categories.find((c) => c.id === categoryId)?.name} like your past entries — tap a category to change it.
-          </Txt>
-        ) : null}
-      </View>
+      {!isFamily ? (
+        <View style={{ gap: space(1) }}>
+          <TextField label={type === 'income' ? 'From' : 'Paid to'} value={payee} onChangeText={(v) => onPayee(v)} placeholder={type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…'} icon="storefront-outline" />
+          {payeeSuggestions.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {payeeSuggestions.map((p) => (
+                <Chip key={p.name} compact icon="time-outline" label={p.name} onPress={() => onPayee(p.name, p)} />
+              ))}
+            </View>
+          ) : null}
+          {autoCat && categoryId ? (
+            <Txt variant="small" tone="muted" style={{ paddingHorizontal: 2 }}>
+              Filed under {categories.find((c) => c.id === categoryId)?.name} like your past entries — tap a category to change it.
+            </Txt>
+          ) : null}
+        </View>
+      ) : null}
 
       <Pressable onPress={() => setMore((m) => !m)} accessibilityRole="button" style={{ paddingVertical: 4 }}>
         <Txt variant="small" tone="primary">

@@ -61,7 +61,10 @@ describe('bundle + merge', () => {
     const backup = buildBundle(rows, { householdId: 'h', deviceId: 'd', deviceName: 'A', since: null, kind: 'backup' });
     expect(backup.tables.transactions).toHaveLength(3);
     expect(validateBundle(JSON.parse(JSON.stringify(b)))).toBeTruthy();
-    expect(() => validateBundle({ v: 1, householdId: 'h', tables: { evil: [] } })).toThrow();
+    // A table from a newer app version is kept (services/sync.ts); damage is still rejected.
+    expect(validateBundle({ v: 1, householdId: 'h', tables: { holdings: [] } })).toBeTruthy();
+    expect(() => validateBundle({ v: 1, householdId: 'h', tables: { 'Evil Table': [] } })).toThrow('Unknown table');
+    expect(() => validateBundle({ v: 1, householdId: 'h', tables: { holdings: [{ id: 1 }] } })).toThrow('Malformed rows');
   });
 
   it('applies last-write-wins with tombstones and is idempotent', () => {

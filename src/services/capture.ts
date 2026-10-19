@@ -7,6 +7,7 @@ import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domai
 import { applyFormat } from '@/domain/parsers/custom';
 import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
+import { memberForVpa } from '@/domain/settle';
 import { categoryHistory, suggestCategory } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
 import { addCapture, type TxnDraft } from '@/data/actions';
@@ -28,7 +29,7 @@ export interface CaptureSummary {
 const emptySummary = (): CaptureSummary => ({ added: 0, duplicates: 0, bills: 0, statements: 0, skipped: 0, unknownBillers: [] });
 
 function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawText: string, attachment: string | null): TxnDraft {
-  const { tables } = getState();
+  const { tables, identity } = getState();
   const card = p.cardLast4 ? tables.cards.find((c) => c.last4 === p.cardLast4) : undefined;
   const account = p.accountLast4 ? tables.accounts.find((a) => a.last4 === p.accountLast4) : undefined;
   const flags: string[] = [];
@@ -39,6 +40,15 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
   let type: Transaction['type'] = p.direction === 'debit' ? 'expense' : 'income';
   let linkType: Transaction['linkType'] = null;
   let linkId: string | null = null;
+  let memberId: string | null = identity.selfMemberId || null;
+  let toMemberId: string | null = null;
+  // UPI to or from a family member moves money inside the household: a transfer, so it isn't
+  // counted as spending here and again when they spend it.
+  const member = !p.isCreditCard ? memberForVpa(p.vpa, tables.members, identity.selfMemberId) : undefined;
+  if (member && identity.selfMemberId) {
+    type = 'transfer';
+    [memberId, toMemberId] = p.direction === 'debit' ? [identity.selfMemberId, member.id] : [member.id, identity.selfMemberId];
+  }
   // "Payment received on your credit card" → bill payment, which is a transfer, not income.
   if (p.isCreditCard && p.direction === 'credit' && !p.isRefund && /payment/i.test(rawText)) {
     type = 'transfer';
@@ -77,6 +87,8 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     accountId: account?.id ?? null,
     payee: p.payee,
     vpa: p.vpa,
+    memberId,
+    toMemberId,
     categoryId,
     linkType,
     linkId,
