@@ -207,14 +207,14 @@ options, with what was confirmed and what wasn't:
 | Option | Cost | Terms | Practical | Verdict |
 |---|---|---|---|---|
 | **App downloads NSE's daily bhavcopy** (every stock's close, CM-UDiFF zip on `nsearchives.nseindia.com`) | Free | NSE's Terms of Use prohibit "systematic or automated data collection (including scraping…)" from the website without written permission; commercial use of market data is priced by NSE Data | NSE rejects requests that don't look like a browser (403s are widely reported); file names carry a version and changed in July 2024 (old CSV discontinued 8 Jul 2024) | **No.** Making it work means disguising the app as a browser to get past NSE's blocking, against its terms. I won't build that |
-| **User downloads the bhavcopy in their browser and opens it in the app** (NSE or BSE) | Free | A person downloading a file NSE offers for download, for their own use | One download every week or month; the app already opens shared files, and `fflate` (already a dependency) unzips | **Recommended.** Same privacy as AMFI: the whole file is read on the phone, nothing about holdings leaves it |
+| **User downloads the bhavcopy in their browser and opens it in the app** (NSE or BSE) | Free | A person downloading a file NSE offers for download, for their own use | One download every week or month; picked with the document picker the app already uses for `.emx` files (it only registers for shared images, on purpose), and `fflate` (already a dependency) unzips | **Recommended.** Same privacy as AMFI: the whole file is read on the phone, nothing about holdings leaves it |
 | Broker APIs (Angel One SmartAPI, Upstox: data reported free; Zerodha Kite: ₹500/month for data) | Free–₹500/mo | Each person's own account and keys, for their own use | Every family member registers a developer app, keeps API secrets on the phone, and logs in again every day (TOTP). Far too much for end-of-day values | No, maybe later as an option for one power user |
 | Yahoo/Google finance endpoints | Free | Unofficial; their terms don't allow it | Change or vanish without notice | No |
 | CDSL/NSDL monthly eCAS (consolidated statement PDF emailed to every demat holder) | Free | The user's own statement | Has every holding with month-end value, and could *import* holdings too. Needs on-device PDF text extraction (PAN-protected), which the app doesn't have. Commercial CAS-parsing APIs mean uploading your whole portfolio to a third party: not acceptable here | Good **phase 4** candidate (import + valuation), on-device only |
 | Licensed feed (NSE Data, vendors) | Paid | Proper licence | Server needed | Only if the app is ever commercial (also needed for AMFI data then) |
 
 **Recommended build:** "Import price file". The user downloads the day's bhavcopy from NSE's (or
-BSE's) website, then shares or opens it with ExpenseMonster. The app unzips it, reads columns **by
+BSE's) website, then picks it under Investments → *Import price file*. The app unzips it, reads columns **by
 header name** (as for AMFI), and matches shares by **ISIN** first, then ticker (`symbol`). It then
 shows old → new closing prices with the file's trade date, and saves only on Apply (`priceSource:
 'nse'`/`'bse'`). Shares gain an optional ISIN, which is on every contract note and statement and is
