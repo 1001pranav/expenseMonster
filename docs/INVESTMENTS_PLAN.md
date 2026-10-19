@@ -3,7 +3,8 @@
 Status: decisions agreed (§8). **Phases 1 and 2 are built** (§7). Phase 2: current prices (one
 gold/silver rate per purity), value and gain not yet taken, guided jewellery exchange, what went
 over the metal's worth, and capital gains on the Tax screen (§6). **Phase 3 has started: fund prices
-from AMFI are built** (§3b). Next: share prices, then a gold/silver reference rate.
+from AMFI are built** (§3b). Share prices are researched (§3c): import of a bhavcopy the user
+downloads, pending a real sample file. Then a gold/silver reference rate.
 
 ## 3b. Online prices: mutual funds (built)
 
@@ -197,6 +198,32 @@ spending.
 **Mutual funds and SIPs.** A redemption is a sale in units. SIP instalments are separate
 purchases, so FIFO works per instalment, which is what the tax rules need. A switch between
 schemes is a sale in one holding and a purchase in another on the same day.
+
+## 3c. Online prices: shares (researched, not built)
+
+Researched October 2026. India has no official, free, per-stock price API like AMFI's NAV file. The
+options, with what was confirmed and what wasn't:
+
+| Option | Cost | Terms | Practical | Verdict |
+|---|---|---|---|---|
+| **App downloads NSE's daily bhavcopy** (every stock's close, CM-UDiFF zip on `nsearchives.nseindia.com`) | Free | NSE's Terms of Use prohibit "systematic or automated data collection (including scraping…)" from the website without written permission; commercial use of market data is priced by NSE Data | NSE rejects requests that don't look like a browser (403s are widely reported); file names carry a version and changed in July 2024 (old CSV discontinued 8 Jul 2024) | **No.** Making it work means disguising the app as a browser to get past NSE's blocking, against its terms. I won't build that |
+| **User downloads the bhavcopy in their browser and opens it in the app** (NSE or BSE) | Free | A person downloading a file NSE offers for download, for their own use | One download every week or month; the app already opens shared files, and `fflate` (already a dependency) unzips | **Recommended.** Same privacy as AMFI: the whole file is read on the phone, nothing about holdings leaves it |
+| Broker APIs (Angel One SmartAPI, Upstox: data reported free; Zerodha Kite: ₹500/month for data) | Free–₹500/mo | Each person's own account and keys, for their own use | Every family member registers a developer app, keeps API secrets on the phone, and logs in again every day (TOTP). Far too much for end-of-day values | No, maybe later as an option for one power user |
+| Yahoo/Google finance endpoints | Free | Unofficial; their terms don't allow it | Change or vanish without notice | No |
+| CDSL/NSDL monthly eCAS (consolidated statement PDF emailed to every demat holder) | Free | The user's own statement | Has every holding with month-end value, and could *import* holdings too. Needs on-device PDF text extraction (PAN-protected), which the app doesn't have. Commercial CAS-parsing APIs mean uploading your whole portfolio to a third party: not acceptable here | Good **phase 4** candidate (import + valuation), on-device only |
+| Licensed feed (NSE Data, vendors) | Paid | Proper licence | Server needed | Only if the app is ever commercial (also needed for AMFI data then) |
+
+**Recommended build:** "Import price file". The user downloads the day's bhavcopy from NSE's (or
+BSE's) website, then shares or opens it with ExpenseMonster. The app unzips it, reads columns **by
+header name** (as for AMFI), and matches shares by **ISIN** first, then ticker (`symbol`). It then
+shows old → new closing prices with the file's trade date, and saves only on Apply (`priceSource:
+'nse'`/`'bse'`). Shares gain an optional ISIN, which is on every contract note and statement and is
+unambiguous across exchanges.
+
+**Not yet verified:** the exact current UDiFF column names (one guide names `TckrSymb`, `ISIN`,
+`ClsPric`; `TradDt` and `SctySrs` were not confirmed), BSE's current file format, and BSE's terms. Before
+building, test the parser against a **real downloaded file** from each exchange. This sandbox
+can't reach either site.
 
 ## 4. UX
 
