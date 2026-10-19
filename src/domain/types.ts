@@ -243,11 +243,24 @@ export interface SmsFormat extends BaseRow {
 /** A phone in the household. Each phone publishes its own (id = its deviceId). */
 export interface Device extends BaseRow {
   name: string;
+  /** X25519 public key (base64) the head seals a new household key to (domain/sync/grant.ts). */
+  publicKey: string | null;
 }
 
 /** The household's one shared record (id "household"): who is head. Only the head can change it. */
 export interface HouseholdInfo extends BaseRow {
   headDeviceId: string | null;
+  /** Id of the household key in use since the head last removed a phone (domain/sync/grant.ts). */
+  keyId: string | null;
+  /** JSON array of removed phones' device ids. */
+  removed: string | null;
+}
+
+/** A new household key sealed to one remaining phone's public key, after the head removed a phone. */
+export interface KeyGrant extends BaseRow {
+  recipient: string;
+  keyId: string;
+  sealed: string;
 }
 
 export type HoldDecision = 'hold' | 'merge' | 'discard';
@@ -295,6 +308,7 @@ export interface TableMap {
   devices: Device;
   household: HouseholdInfo;
   sync_holds: SyncHold;
+  key_grants: KeyGrant;
 }
 export type TableName = keyof TableMap;
 // Control tables first: a file or page that changes the head or a rule is applied before the data it covers.
@@ -302,6 +316,7 @@ export const SYNC_TABLES: TableName[] = [
   'devices',
   'household',
   'sync_holds',
+  'key_grants',
   'categories',
   'members',
   'accounts',

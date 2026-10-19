@@ -65,6 +65,7 @@ export const EMPTY_TABLES: Tables = {
   devices: [],
   household: [],
   sync_holds: [],
+  key_grants: [],
 };
 
 interface State {

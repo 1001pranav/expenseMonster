@@ -1,4 +1,4 @@
-import { newKey } from '@/domain/sync/crypto';
+import { newKey, toBase64 } from '@/domain/sync/crypto';
 import { dayRange, isControlTable, isHeldBack, ruleFor, type ScreenContext } from '@/domain/sync/holds';
 import { isNewer } from '@/domain/sync/merge';
 import { invalidReason } from '@/domain/sync/validate';
@@ -25,7 +25,7 @@ import {
 } from '@/db/repo';
 import { columnDefsOf } from '@/db/schema';
 import { getState } from '@/db/store';
-import { setHouseholdKey } from './secure';
+import { getDeviceKeys, setHouseholdKey } from './secure';
 
 /**
  * Household head and review (rules in domain/sync/holds.ts). Rows received from other phones are
@@ -90,13 +90,17 @@ export async function reconcileHolds(): Promise<{ applied: number; setAside: num
   return { applied, setAside: aside };
 }
 
-/** Publish this phone's name to the household, so the head can tell phones apart. */
+/**
+ * Publish this phone's name and public key to the household: the head tells phones apart by name,
+ * and seals a new household key to the key when removing another phone (services/rotation.ts).
+ */
 export async function publishDevice(): Promise<void> {
   const { deviceId, deviceName } = getState().identity;
   if (!deviceId) return;
+  const publicKey = toBase64((await getDeviceKeys()).publicKey);
   const mine = getState().tables.devices.find((d) => d.id === deviceId);
-  if (!mine) await insert('devices', { id: deviceId, name: deviceName, scope: 'household' } as never);
-  else if (mine.name !== deviceName) await update('devices', deviceId, { name: deviceName });
+  if (!mine) await insert('devices', { id: deviceId, name: deviceName, publicKey, scope: 'household' } as never);
+  else if (mine.name !== deviceName || mine.publicKey !== publicKey) await update('devices', deviceId, { name: deviceName, publicKey });
 }
 
 // ── the head ─────────────────────────────────────────────────────────────

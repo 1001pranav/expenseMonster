@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { randomBytes } from '@/domain/ids';
 import { fromBase64, hashPin, safeEqual, toBase64 } from '@/domain/sync/crypto';
+import { newDeviceKeys, publicKeyOf, type DeviceKeys } from '@/domain/sync/grant';
 
 /** Keystore-backed (Android) / Keychain (iOS) storage. Never synced, never in backups. */
 const OPTS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
@@ -8,6 +9,8 @@ const OPTS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.W
 const KEYS = {
   db: 'emx.dbKey',
   household: 'emx.householdKey',
+  nextHousehold: 'emx.nextHouseholdKey',
+  device: 'emx.deviceKey',
   pinHash: 'emx.pinHash',
   pinSalt: 'emx.pinSalt',
   failed: 'emx.failedPins',
@@ -34,6 +37,32 @@ export async function getHouseholdKey(): Promise<Uint8Array | null> {
 
 export async function setHouseholdKey(key: Uint8Array): Promise<void> {
   await SecureStore.setItemAsync(KEYS.household, toBase64(key), OPTS);
+}
+
+/**
+ * The head's new household key while it is being handed out (services/rotation.ts): kept until the
+ * grants are uploaded under the old key, then it becomes the household key.
+ */
+export async function getNextHouseholdKey(): Promise<Uint8Array | null> {
+  const v = await SecureStore.getItemAsync(KEYS.nextHousehold, OPTS);
+  return v ? fromBase64(v) : null;
+}
+
+export async function setNextHouseholdKey(key: Uint8Array | null): Promise<void> {
+  if (key) await SecureStore.setItemAsync(KEYS.nextHousehold, toBase64(key), OPTS);
+  else await SecureStore.deleteItemAsync(KEYS.nextHousehold, OPTS);
+}
+
+/** This phone's X25519 key pair (domain/sync/grant.ts), created on first use. The secret half never leaves this storage. */
+export async function getDeviceKeys(): Promise<DeviceKeys> {
+  const v = await SecureStore.getItemAsync(KEYS.device, OPTS);
+  if (v) {
+    const secretKey = fromBase64(v);
+    return { secretKey, publicKey: publicKeyOf(secretKey) };
+  }
+  const keys = newDeviceKeys();
+  await SecureStore.setItemAsync(KEYS.device, toBase64(keys.secretKey), OPTS);
+  return keys;
 }
 
 /**

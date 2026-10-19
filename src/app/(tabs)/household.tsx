@@ -5,6 +5,7 @@ import { memberBalances, simplifyDebts } from '@/domain/settle';
 import { asideRecords } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { HOUSEHOLD_ID, ownHeld } from '@/services/holds';
+import { keyStatus } from '@/services/rotation';
 import { useMembers, useSelfId, useTable } from '@/data/hooks';
 import { Avatar } from '@/ui/components/Avatar';
 import { Button, Card, Divider, ListRow, Money, Row, Section, Txt } from '@/ui/components/core';
@@ -24,10 +25,10 @@ export default function Household() {
   const headId = useTable('household').find((h) => h.id === HOUSEHOLD_ID)?.headDeviceId ?? null;
   const headName = headId === identity.deviceId ? 'This phone' : (devices.find((d) => d.id === headId)?.name ?? 'Another phone');
   // Family edits waiting for the head, and this phone's own entries the head is holding.
-  const [review, setReview] = useState({ aside: 0, own: 0, discarded: 0 });
+  const [review, setReview] = useState({ aside: 0, own: 0, discarded: 0, removed: false });
   useEffect(() => {
-    Promise.all([asideRecords(), ownHeld()])
-      .then(([aside, own]) => setReview({ aside: aside.length, own: own.length, discarded: own.filter((o) => o.decision === 'discard').length }))
+    Promise.all([asideRecords(), ownHeld(), keyStatus()])
+      .then(([aside, own, key]) => setReview({ aside: aside.length, own: own.length, discarded: own.filter((o) => o.decision === 'discard').length, removed: key === 'removed' }))
       .catch(() => {});
   }, [version]);
   const nameOf = (id: string) => (id === selfId ? 'You' : (members.find((m) => m.id === id)?.name ?? 'Someone'));
@@ -77,7 +78,14 @@ export default function Household() {
         </Section>
       ) : null}
 
-      {review.aside || review.own ? (
+      {review.removed ? (
+        <Card onPress={() => router.push('/sync/review')} style={{ borderWidth: 1.5, borderColor: colors.expense, gap: 4 }}>
+          <Txt variant="bodyStrong">The household head removed this phone</Txt>
+          <Txt variant="small" tone="muted">
+            Your data stays here; new family entries no longer arrive. Tap to separate this phone.
+          </Txt>
+        </Card>
+      ) : review.aside || review.own ? (
         <Card onPress={() => router.push('/sync/review')} style={{ borderWidth: 1.5, borderColor: review.discarded ? colors.expense : colors.warn, gap: 4 }}>
           <Txt variant="bodyStrong">
             {review.discarded ? `The head didn't accept ${review.discarded} of your entries` : review.own ? `${review.own} of your entries are on hold` : `${review.aside} family ${review.aside === 1 ? 'edit is' : 'edits are'} waiting for review`}

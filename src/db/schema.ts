@@ -117,13 +117,20 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   budgets: { categoryId: TN, month: TN, amount: IN0 },
   rules: { pattern: TN, categoryId: TN },
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
-  devices: { name: TN },
-  household: { headDeviceId: T },
+  devices: { name: TN, publicKey: T },
+  household: { headDeviceId: T, keyId: T, removed: T },
   sync_holds: { holdDevice: T, since: T, until: T, tbl: T, recordId: T, decision: TN, note: T },
+  key_grants: { recipient: TN, keyId: TN, sealed: TN },
 };
 
 /** Tables created after v1, by the migration that created them (older migrations must skip them). */
-const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5 };
+const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5, key_grants: 6 };
+/** Columns added to an existing table, by the migration that added them (with ALTER TABLE). */
+const ADDED_IN: Partial<Record<TableName, Record<string, number>>> = {
+  devices: { publicKey: 6 },
+  household: { keyId: 6, removed: 6 },
+};
+const EXTRA_ADDED_IN = 4;
 const tablesAt = (version: number) => (Object.keys(TABLES) as TableName[]).filter((t) => (CREATED_IN[t] ?? 1) <= version);
 
 /** Column → SQL type, as checked on rows from other phones (domain/sync/validate.ts). */
@@ -133,12 +140,14 @@ export const columnDefsOf = (table: TableName): Record<string, string> => ({ ...
 export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table]), EXTRA];
 
 /**
- * Migrations run on fresh installs too, with today's column lists. So a column added to an existing
- * table needs an ALTER TABLE migration *and* must be left out of the CREATE in older migrations
- * (as `extra` is for v1/v2), or a fresh install would add it twice.
+ * The table as migration `version` creates it. Migrations run on fresh installs too, so a column
+ * added later (ADDED_IN, `extra`) is left out here and added by its own ALTER TABLE migration;
+ * otherwise a fresh install would add it twice.
  */
-function createTable(name: TableName, withExtra = true): string {
-  const cols = { ...COMMON, ...TABLES[name], ...(withExtra ? { [EXTRA]: T } : {}) };
+function createTable(name: TableName, version: number): string {
+  const later = ADDED_IN[name] ?? {};
+  const own = Object.fromEntries(Object.entries(TABLES[name]).filter(([c]) => (later[c] ?? 0) <= version));
+  const cols = { ...COMMON, ...own, ...(version >= EXTRA_ADDED_IN ? { [EXTRA]: T } : {}) };
   const body = Object.entries(cols)
     .map(([c, def]) => `"${c}" ${def}`)
     .join(', ');
@@ -149,7 +158,7 @@ function createTable(name: TableName, withExtra = true): string {
 export const MIGRATIONS: string[] = [
   [
     // v1 tables (later tables get their own migration below).
-    ...tablesAt(1).map((t) => createTable(t, false)),
+    ...tablesAt(1).map((t) => createTable(t, 1)),
     'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT);',
     'CREATE TABLE IF NOT EXISTS peers (deviceId TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, lastSentAt TEXT, lastReceivedAt TEXT, pairedAt TEXT NOT NULL);',
     'CREATE INDEX IF NOT EXISTS txn_when ON transactions(occurredAt);',
@@ -159,7 +168,7 @@ export const MIGRATIONS: string[] = [
     'CREATE INDEX IF NOT EXISTS bills_biller ON bills(billerId);',
   ].join('\n'),
   // v2: user-taught SMS formats.
-  createTable('sms_formats', false),
+  createTable('sms_formats', 2),
   // v3: per-record cloud sync. For each household record: the server seq this phone last saw and
   // the updatedAt it had then. A row whose updatedAt differs has local edits to push.
   [
@@ -175,10 +184,18 @@ export const MIGRATIONS: string[] = [
   // head, the head's rules. Local only: rows set aside for review, and versions replaced by other
   // phones' edits (so a held edit can be undone without asking anyone).
   [
-    createTable('devices'),
-    createTable('household'),
-    createTable('sync_holds'),
+    createTable('devices', 5),
+    createTable('household', 5),
+    createTable('sync_holds', 5),
     'CREATE TABLE IF NOT EXISTS aside_records (tbl TEXT NOT NULL, id TEXT NOT NULL, row TEXT NOT NULL, reason TEXT NOT NULL, receivedAt TEXT NOT NULL, PRIMARY KEY (tbl, id));',
     'CREATE TABLE IF NOT EXISTS row_history (tbl TEXT NOT NULL, id TEXT NOT NULL, updatedAt TEXT NOT NULL, row TEXT NOT NULL, savedAt TEXT NOT NULL, PRIMARY KEY (tbl, id, updatedAt));',
+  ].join('\n'),
+  // v6: removing a phone (services/rotation.ts): each phone's public key, the household's current key
+  // id and removed phones, and the new key sealed to each remaining phone.
+  [
+    'ALTER TABLE "devices" ADD COLUMN "publicKey" TEXT;',
+    'ALTER TABLE "household" ADD COLUMN "keyId" TEXT;',
+    'ALTER TABLE "household" ADD COLUMN "removed" TEXT;',
+    createTable('key_grants', 6),
   ].join('\n'),
 ];

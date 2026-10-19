@@ -6,6 +6,7 @@
 import { buildBundle, validateBundle } from '@/domain/sync/bundle';
 import { keyFromPassphrase, newKey, seal } from '@/domain/sync/crypto';
 import { expandExtra, foldUnknown, replacesHeld } from '@/domain/sync/forward';
+import { newDeviceKeys, openGrant, type DeviceKeys } from '@/domain/sync/grant';
 import { householdSpace, recordKey, sealRecord } from '@/domain/sync/records';
 import { formatRecoveryCode, newSalt, newVaultId, newWriteToken, saltBytes } from '@/domain/sync/vault';
 import type { ConflictPolicy } from '@/domain/sync/merge';
@@ -212,11 +213,17 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
   const store: StoreRef = {};
   const repo = fakeRepo(db, device, store);
   // Keystore stand-in: household key plus the backup's secrets.
-  const secrets: { household: Uint8Array; vault: { key: Uint8Array; token: string; dataKey: Uint8Array } | null } = { household: key, vault: null };
+  const secrets: { household: Uint8Array; next: Uint8Array | null; device: DeviceKeys; vault: { key: Uint8Array; token: string; dataKey: Uint8Array } | null } = {
+    household: key,
+    next: null,
+    device: newDeviceKeys(),
+    vault: null,
+  };
   let cloud!: typeof import('../cloud');
   let sync!: typeof import('../sync');
   let vault!: typeof import('../vault');
   let holds!: typeof import('../holds');
+  let rotation!: typeof import('../rotation');
   jest.isolateModules(() => {
     jest.doMock('expo-sharing', () => ({}));
     jest.doMock('expo-file-system', () => ({ File: class {}, Paths: {} }));
@@ -226,6 +233,9 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     jest.doMock('../secure', () => ({
       getHouseholdKey: async () => secrets.household,
       setHouseholdKey: async (k: Uint8Array) => void (secrets.household = k),
+      getNextHouseholdKey: async () => secrets.next,
+      setNextHouseholdKey: async (k: Uint8Array | null) => void (secrets.next = k),
+      getDeviceKeys: async () => secrets.device,
       getVaultSecrets: async () => secrets.vault,
       setVaultSecrets: async (k: Uint8Array, token: string, dataKey: Uint8Array) => void (secrets.vault = { key: k, token, dataKey }),
       clearVaultSecrets: async () => void (secrets.vault = null),
@@ -236,6 +246,7 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     sync = require('../sync');
     vault = require('../vault');
     holds = require('../holds');
+    rotation = require('../rotation');
     const { getState } = require('@/db/store');
     store.get = getState;
     /* eslint-enable @typescript-eslint/no-require-imports */
@@ -262,6 +273,8 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     merge: (bundle: Parameters<typeof sync.mergeBundle>[0]) => sync.mergeBundle(bundle, 'newest'),
     held: db.held,
     holds,
+    rotation,
+    state: () => store.get!(),
     aside: () => [...db.aside.values()],
     /** A row written straight to this phone's database, as a modified app could. */
     raw: (t: string, data: Partial<Row>) => repo.insert(t, data),
@@ -570,6 +583,71 @@ describe('household head reviews edits from other phones', () => {
     await c.sync();
     expect(c.holds.isHead()).toBe(true);
     await expect(a.holds.holdEdits({ deviceId: 'B', day: null })).rejects.toThrow('Only the household head');
+  });
+});
+
+describe('the head removes a phone', () => {
+  let key: Uint8Array;
+  beforeEach(() => {
+    server.reset();
+    key = newKey();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  it('hands a new key to the remaining phones only: the removed one reads nothing new', async () => {
+    const [a, b, c] = [makePhone('A', key, 'newest'), makePhone('B', key, 'newest'), makePhone('C', key, 'newest')];
+    for (const p of [a, b, c]) await p.holds.publishDevice();
+    await a.holds.claimHead();
+    for (const p of [a, b, c, a]) await p.sync();
+    const old = a.add({ amount: 1 });
+    await a.sync();
+
+    expect(a.rotation.keyRecipients('C')).toEqual([{ id: 'B', name: 'B', hasKey: true }]);
+    expect(await a.rotation.removePhone('C')).toEqual({ needQr: [], finished: true });
+    const newKeyOfA = a.secrets.household;
+    expect(newKeyOfA).not.toEqual(key);
+    expect(server.spaces.size).toBe(2); // the new key's space, with everything uploaded again
+    expect(await a.rotation.keyStatus()).toBe('current');
+
+    // B finds its grant on its next sync and follows.
+    await b.sync();
+    expect(await b.rotation.followKeyChange()).toBe('switched');
+    expect(b.secrets.household).toEqual(newKeyOfA);
+    expect(b.get(old.id)?.amount).toBe(1);
+
+    // New entries reach B, not C.
+    const fresh = a.add({ amount: 999 });
+    await a.sync();
+    await b.sync();
+    expect(b.get(fresh.id)?.amount).toBe(999);
+    await c.sync();
+    expect(await c.rotation.followKeyChange()).toBe('removed');
+    expect(c.get(fresh.id)).toBeUndefined();
+    expect(c.state().settings.cloudSync).toBe(false);
+    expect(c.get(old.id)?.amount).toBe(1); // what it had stays on it
+    // C received B's grant (it can read the old key's records) but can't open it.
+    const grant = c.state().tables.key_grants.find((g) => g.recipient === 'B')!;
+    expect(() => openGrant(grant.sealed, c.secrets.device, { householdId: 'house', recipient: 'B', keyId: grant.keyId })).toThrow();
+    expect(c.state().tables.key_grants.some((g) => g.recipient === 'C')).toBe(false);
+  });
+
+  it('finishes later when offline, and only the head can remove', async () => {
+    const [a, b] = [makePhone('A', key, 'newest'), makePhone('B', key, 'newest')];
+    for (const p of [a, b]) await p.holds.publishDevice();
+    await a.holds.claimHead();
+    for (const p of [a, b, a]) await p.sync();
+    await expect(b.rotation.removePhone('A')).rejects.toThrow('Only the household head');
+    await expect(a.rotation.removePhone('A')).rejects.toThrow("can't remove its own phone");
+
+    server.offline = true;
+    expect(await a.rotation.removePhone('X')).toMatchObject({ finished: false });
+    expect(a.secrets.household).toEqual(key); // still on the old key: nobody could get the new one yet
+    expect(await a.rotation.keyStatus()).toBe('waiting');
+    server.offline = false;
+    expect(await a.rotation.followKeyChange()).toBe('switched');
+    await b.sync();
+    expect(await b.rotation.followKeyChange()).toBe('switched');
+    expect(b.secrets.household).toEqual(a.secrets.household);
   });
 });
 

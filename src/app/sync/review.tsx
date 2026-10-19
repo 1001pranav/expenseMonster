@@ -24,6 +24,7 @@ import { Button, Card, EmptyState, Pill, Row, Section, Txt } from '@/ui/componen
 import { Sheet, toast } from '@/ui/components/feedback';
 import { ChipSelect, DateField, SwitchRow } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
+import { keyRecipients, keyStatus, removedPhones, removePhone, type KeyStatus } from '@/services/rotation';
 import { TABLE_LABEL, titleOf } from '@/ui/syncLabels';
 import { space, useTheme } from '@/ui/theme';
 
@@ -55,17 +56,21 @@ export default function Review() {
   const [day, setDay] = useState<YMD>(today);
   const [handTo, setHandTo] = useState<string | null>(null);
   const [confirmSeparate, setConfirmSeparate] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [key, setKey] = useState<KeyStatus>('current');
 
   const reload = useCallback(() => {
     asideRecords().then(setAside);
     ownHeld().then(setOwn);
+    keyStatus().then(setKey);
   }, []);
   useEffect(() => {
     reload();
   }, [reload, version]);
 
   const nameOf = useCallback((id: string | null) => (id === selfId ? 'This phone' : (devices.find((d) => d.id === id)?.name ?? 'Another phone')), [devices, selfId]);
-  const others = devices.filter((d) => d.id !== selfId && !d.deletedAt).map((d) => ({ value: d.id, label: d.name }));
+  const removed = removedPhones(useTable('household').find((h) => h.id === HOUSEHOLD_ID));
+  const others = devices.filter((d) => d.id !== selfId && !d.deletedAt && !removed.includes(d.id)).map((d) => ({ value: d.id, label: d.name }));
 
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     setBusy(true);
@@ -112,6 +117,30 @@ export default function Review() {
         ) : null}
       </Card>
 
+      {key === 'removed' ? (
+        <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: colors.expense }}>
+          <Txt variant="bodyStrong">The household head removed this phone</Txt>
+          <Txt variant="small" tone="muted">
+            Everything already on this phone stays here, but it no longer receives the family's entries and cloud sync is off. Separate to keep using it on its own, or ask the head to pair it again by QR.
+          </Txt>
+          <Button title="Separate this phone" variant="secondary" onPress={() => setConfirmSeparate(true)} />
+        </Card>
+      ) : key === 'waiting' && !head ? (
+        <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: colors.warn }}>
+          <Txt variant="bodyStrong">The family key changed</Txt>
+          <Txt variant="small" tone="muted">
+            The head removed a phone and gave the others a new key. This phone hasn't received one yet: it arrives on the next sync. If it doesn't, pair this phone with the head again by QR.
+          </Txt>
+        </Card>
+      ) : key === 'waiting' && head ? (
+        <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: colors.warn }}>
+          <Txt variant="bodyStrong">Removing a phone is not finished</Txt>
+          <Txt variant="small" tone="muted">
+            The new key goes to the family's phones on the next successful sync. Until then everyone, the removed phone included, stays on the old key.
+          </Txt>
+        </Card>
+      ) : null}
+
       {own.length ? (
         <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: discarded ? colors.expense : colors.warn }}>
           <Txt variant="bodyStrong">{discarded ? `The head didn't accept ${discarded} of your entries` : `${own.length} of your entries are on hold`}</Txt>
@@ -155,6 +184,32 @@ export default function Review() {
               onPress={() => act(() => holdEdits({ deviceId: holdPhone, day: oneDay || !holdPhone ? day : null }), 'Held on every phone')}
               loading={busy}
             />
+          </Card>
+        </Section>
+      ) : null}
+
+      {head ? (
+        <Section title="Remove a phone">
+          <Card style={{ gap: space(1) }}>
+            <Txt variant="small" tone="muted">
+              The family gets a new key that the removed phone can't open. It keeps what it already has but receives nothing new. Needs cloud sync.
+            </Txt>
+            {others.map((o) => (
+              <Row key={o.value} gap={1}>
+                <Txt style={{ flex: 1 }}>{o.label}</Txt>
+                <Button title="Remove" size="sm" variant="secondary" onPress={() => setRemoving(o.value)} />
+              </Row>
+            ))}
+            {!others.length ? (
+              <Txt variant="small" tone="faint">
+                No other phones yet. A phone appears here after it syncs with this version of the app.
+              </Txt>
+            ) : null}
+            {removed.length ? (
+              <Txt variant="small" tone="muted">
+                Removed: {removed.map(nameOf).join(', ')}
+              </Txt>
+            ) : null}
           </Card>
         </Section>
       ) : null}
@@ -219,6 +274,37 @@ export default function Review() {
           </Card>
         ))}
       </Section>
+
+      <Sheet visible={Boolean(removing)} onClose={() => setRemoving(null)} title={`Remove ${nameOf(removing)}?`}>
+        <Txt tone="muted">
+          {nameOf(removing)} keeps the entries it already has, but can't read anything added from now on. The new family key goes to:
+        </Txt>
+        {removing
+          ? keyRecipients(removing).map((r) => (
+              <Txt key={r.id} variant="bodyStrong">
+                • {r.name}
+                {r.hasKey ? '' : ' (older app: pair again by QR)'}
+              </Txt>
+            ))
+          : null}
+        <Txt variant="small" tone="muted">
+          Don't recognise a phone in this list? Remove it as well. Phones not listed here pair again by QR.
+        </Txt>
+        <Button
+          title="Remove"
+          variant="danger"
+          onPress={() => {
+            const id = removing!;
+            setRemoving(null);
+            act(async () => {
+              const r = await removePhone(id);
+              if (r.needQr.length) toast(`Pair again by QR: ${r.needQr.join(', ')} (older app version)`, { tone: 'error' });
+              else toast(r.finished ? `${nameOf(id)} removed. The others switch on their next sync.` : 'Removing: it finishes when this phone is back online.', { tone: 'success' });
+            });
+          }}
+        />
+        <Button title="Cancel" variant="secondary" onPress={() => setRemoving(null)} />
+      </Sheet>
 
       <Sheet visible={confirmSeparate} onClose={() => setConfirmSeparate(false)} title="Separate this phone?">
         <Txt tone="muted">

@@ -9,7 +9,7 @@ import type { BaseRow, HouseholdInfo, SyncHold } from '../types';
  */
 
 /** Tables that run the household itself: never held (the head must always be able to change rules). */
-export const CONTROL_TABLES = ['devices', 'household', 'sync_holds'] as const;
+export const CONTROL_TABLES = ['devices', 'household', 'sync_holds', 'key_grants'] as const;
 export const isControlTable = (table: string) => (CONTROL_TABLES as readonly string[]).includes(table);
 
 /** A local calendar day as the UTC range a hold stores: its midnight to the next (DST-safe). */
@@ -60,7 +60,7 @@ export const isHeldBack = (table: string, row: BaseRow, holds: SyncHold[]) => {
 export function acceptsControl(table: string, incoming: BaseRow, household: HouseholdInfo | undefined): boolean {
   if (table === 'devices') return incoming.id === incoming.deviceId;
   const head = household?.headDeviceId ?? null;
-  if (table === 'sync_holds') return Boolean(head) && incoming.deviceId === head;
+  if (table === 'sync_holds' || table === 'key_grants') return Boolean(head) && incoming.deviceId === head;
   if (!household || !head || incoming.deviceId === head) return true;
   // Two phones claimed the free role before hearing of each other: the earlier claim wins, on every phone.
   const firstClaim = (h: BaseRow) => h.createdAt === h.updatedAt && (h as HouseholdInfo).headDeviceId === h.deviceId;
