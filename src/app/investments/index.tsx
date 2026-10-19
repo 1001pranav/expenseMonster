@@ -60,7 +60,7 @@ export default function Investments() {
           s.value !== null ? (
             <View style={{ alignItems: 'flex-end' }}>
               <Money value={s.value} decimals="never" />
-              <Money value={s.value - s.invested} decimals="never" variant="small" signed colorBySign />
+              {s.costComplete ? <Money value={s.value - s.invested} decimals="never" variant="small" signed colorBySign /> : null}
             </View>
           ) : (
             <Money value={s.invested} decimals="never" />
@@ -79,21 +79,26 @@ export default function Investments() {
           Household total, at cost
         </Txt>
         <Money value={owners.total} variant="h1" decimals="never" />
-        {worth.valuedCost ? (
-          <>
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Txt variant="small" tone="muted">
-                {worth.unvalued ? 'Worth now (priced holdings)' : 'Worth now'}
-              </Txt>
-              <Money value={worth.value} decimals="never" />
-            </Row>
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Txt variant="small" tone="muted">
-                Gain not yet taken
-              </Txt>
-              <Money value={worth.value - worth.valuedCost} decimals="never" signed colorBySign />
-            </Row>
-          </>
+        {worth.value ? (
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="small" tone="muted">
+              {worth.unvalued ? 'Worth now (priced holdings)' : 'Worth now'}
+            </Txt>
+            <Money value={worth.value} decimals="never" />
+          </Row>
+        ) : null}
+        {worth.gainBase.cost ? (
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt variant="small" tone="muted">
+              Gain not yet taken
+            </Txt>
+            <Money value={worth.gainBase.value - worth.gainBase.cost} decimals="never" signed colorBySign />
+          </Row>
+        ) : null}
+        {worth.costUnknown ? (
+          <Txt variant="small" tone="faint">
+            {worth.costUnknown === 1 ? 'One holding has' : `${worth.costUnknown} holdings have`} a purchase saved without its amount: not in the total, and no gain shown for {worth.costUnknown === 1 ? 'it' : 'them'}.
+          </Txt>
         ) : null}
         {worth.unvalued && held.length ? (
           <Txt variant="small" tone="faint">

@@ -5,7 +5,7 @@ import { formatDay } from '@/domain/dates';
 import type { CasStatement, Word } from '@/domain/cas';
 import { byIsin, matchCas } from '@/domain/casImport';
 import { formatQuantity, summarizeHoldings } from '@/domain/investments';
-import { parseAmount, type Paise } from '@/domain/money';
+import { parseAmount } from '@/domain/money';
 import { applyCasImport, type CasAction } from '@/data/investments';
 import { useMembers, useSelfId, useTable } from '@/data/hooks';
 import { discardStatement, readStatement, shareAnonymised } from '@/services/cas';
@@ -77,18 +77,20 @@ export default function ImportCas() {
     });
 
   const apply = async () => {
-    if (!result?.statement.asOf) return toast("The statement date couldn't be read, so its prices can't be dated.", { tone: 'error' });
+    if (!result) return;
+    // Nothing is mandatory: a link with no holding picked is skipped, an addition without a cost has an unknown cost.
     const items: { line: (typeof matches)[number]['line']; action: CasAction }[] = [];
+    let unlinked = 0;
     for (const m of matches) {
       const c = choiceOf(m.line.isin, Boolean(m.holding));
       if (c === 'price' && m.holding) items.push({ line: m.line, action: { kind: 'price', holdingId: m.holding.id } });
       else if (c === 'link') {
         const to = choices[m.line.isin]?.linkTo;
-        if (!to) return toast(`Pick which holding ${m.line.name || m.line.isin} is`, { tone: 'error' });
-        items.push({ line: m.line, action: { kind: 'link', holdingId: to } });
+        if (to) items.push({ line: m.line, action: { kind: 'link', holdingId: to } });
+        else unlinked++;
       } else if (c === 'add') {
-        const cost = parseAmount(choices[m.line.isin]?.cost ?? '') ?? (m.line.invested as Paise | null);
-        if (!cost) return toast(`Enter what ${m.line.name || m.line.isin} cost, or use today's value`, { tone: 'error' });
+        const typed = choices[m.line.isin]?.cost;
+        const cost = typed === undefined ? m.line.invested : typed.trim() ? parseAmount(typed) || null : null;
         items.push({ line: m.line, action: { kind: 'add', cost } });
       }
     }
@@ -96,7 +98,7 @@ export default function ImportCas() {
     setSaving(true);
     try {
       const r = await applyCasImport({ asOf: result.statement.asOf, owner: owner || null, scope: 'household' }, items);
-      toast(`${r.priced} price${r.priced === 1 ? '' : 's'} updated, ${r.added} added`, { tone: 'success' });
+      toast(`${r.priced} price${r.priced === 1 ? '' : 's'} updated, ${r.added} added${unlinked ? `, ${unlinked} skipped (no holding picked)` : ''}`, { tone: 'success' });
       goBack();
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });
@@ -146,7 +148,7 @@ export default function ImportCas() {
             </Txt>
             {!s.asOf ? (
               <Txt variant="small" tone="warn">
-                The statement date couldn't be found, so nothing can be imported from it.
+                The statement date couldn't be found: prices are saved undated, and holdings added are dated today.
               </Txt>
             ) : null}
             {s.unreadable || !s.rows.length ? (
@@ -204,7 +206,7 @@ export default function ImportCas() {
                       onChangeText={(t) => setChoice(m.line.isin, { cost: t })}
                       keyboardType="decimal-pad"
                       placeholder="₹"
-                      hint={m.line.invested ? 'From the statement' : 'From your contract notes or broker'}
+                      hint={m.line.invested ? 'From the statement' : 'Optional: from your contract notes or broker. Left blank, the cost is unknown and no gain is shown'}
                     />
                     <Button title="Use today's value as the cost" size="sm" variant="ghost" onPress={() => setChoice(m.line.isin, { cost: String(m.line.value / 100) })} />
                     <Txt variant="caption" tone="faint">

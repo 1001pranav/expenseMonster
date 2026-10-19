@@ -188,11 +188,11 @@ export function derive(field: TradeField, n: TradeNumbers, side: 'buy' | 'sell' 
 
 export interface Realised {
   trade: Trade;
-  /** What was received. */
-  proceeds: Paise;
+  /** What was received; null when the sale's amount wasn't entered. */
+  proceeds: Paise | null;
   /** Cost of what was sold, earliest purchases first (FIFO); null when it can't be known. */
   cost: Paise | null;
-  /** proceeds − cost; null with cost. */
+  /** proceeds − cost; null when either is unknown. */
   gain: Paise | null;
   /** Sold more than the recorded purchases: the cost covers only what was recorded ("at least" this gain). */
   beyondRecorded: boolean;
@@ -225,8 +225,10 @@ function shareOut(total: Paise, weights: number[]): Paise[] {
 
 export interface HoldingSummary {
   holding: Holding;
-  /** Cost of what is still held (charges included): net worth on cost basis. */
+  /** Cost of what is still held (charges included): net worth on cost basis. Known costs only (see costComplete). */
   invested: Paise;
+  /** False when some purchase still held was saved without its amount: `invested` leaves it out. */
+  costComplete: boolean;
   /** Making charges, brokerage, taxes on purchases still held: paid, not recovered on sale. */
   costs: Paise;
   /** Thousandths still held, from the quantities entered. */
@@ -252,6 +254,8 @@ interface Lot {
   date: YMD;
   quantity: number | null;
   cost: Paise;
+  /** False: bought without an amount entered; its cost is unknown, not zero. */
+  costKnown: boolean;
   charges: Paise;
 }
 
@@ -266,7 +270,7 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
   const realised: Realised[] = [];
   for (const tr of ordered) {
     if (tr.side === 'buy') {
-      lots.push({ date: tr.tradeDate, quantity: tr.quantity, cost: tr.amount, charges: tr.charges + tr.taxes });
+      lots.push({ date: tr.tradeDate, quantity: tr.quantity, cost: tr.amount, costKnown: !tr.amountUnknown, charges: tr.charges + tr.taxes });
       continue;
     }
     let cost: Paise | null = 0;
@@ -274,7 +278,7 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
     const used: Omit<SalePart, 'proceeds'>[] = [];
     if (tr.quantity === null) {
       // "Sold all of it": everything still held. With nothing recorded, the cost is unknown, not zero.
-      cost = lots.length ? lots.reduce((a, l) => a + l.cost, 0) : null;
+      cost = lots.length && lots.every((l) => l.costKnown) ? lots.reduce((a, l) => a + l.cost, 0) : null;
       used.push(...lots.map((l) => ({ boughtOn: l.date, quantity: l.quantity, cost: l.cost })));
       lots = [];
     } else {
@@ -289,7 +293,7 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
         const take = Math.min(lot.quantity, need);
         const part = take === lot.quantity ? lot.cost : Math.round((lot.cost * take) / lot.quantity);
         const partCharges = take === lot.quantity ? lot.charges : Math.round((lot.charges * take) / lot.quantity);
-        if (cost !== null) cost += part;
+        if (cost !== null) cost = lot.costKnown ? cost + part : null;
         used.push({ boughtOn: lot.date, quantity: take, cost: part });
         lot.cost -= part;
         lot.charges -= partCharges;
@@ -301,17 +305,20 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
     }
     // What each purchase's share brought in: by quantity when every quantity is known, else by cost.
     // Beyond what was recorded, the rest of the proceeds belong to purchases the app doesn't know.
+    const proceeds = tr.amountUnknown ? null : tr.amount;
     const byQuantity = used.every((u) => u.quantity !== null) && tr.quantity !== null;
     const covered = byQuantity && beyondRecorded ? Math.round((tr.amount * used.reduce((a, u) => a + (u.quantity ?? 0), 0)) / tr.quantity!) : tr.amount;
     const shares = shareOut(covered, used.map((u) => (byQuantity ? (u.quantity ?? 0) : u.cost)));
-    const parts = cost === null ? [] : used.map((u, i) => ({ ...u, proceeds: shares[i] }));
-    realised.push({ trade: tr, proceeds: tr.amount, cost, gain: cost === null ? null : tr.amount - cost, beyondRecorded, parts });
+    const known = cost !== null && proceeds !== null;
+    const parts = known ? used.map((u, i) => ({ ...u, proceeds: shares[i] })) : [];
+    realised.push({ trade: tr, proceeds, cost, gain: known ? proceeds - cost! : null, beyondRecorded, parts });
   }
   const quantity = lots.reduce((a, l) => a + (l.quantity ?? 0), 0);
   const quantityComplete = holding.unit !== 'none' && lots.length > 0 && lots.every((l) => l.quantity !== null);
   return {
     holding,
-    invested: lots.reduce((a, l) => a + l.cost, 0),
+    invested: lots.reduce((a, l) => a + (l.costKnown ? l.cost : 0), 0),
+    costComplete: lots.every((l) => l.costKnown),
     costs: lots.reduce((a, l) => a + l.charges, 0),
     quantity,
     quantityComplete,
@@ -363,25 +370,31 @@ export function defaultHoldingName(assetClass: AssetClass, form: string | null, 
 // ── current value and what went over the metal ───────────────────────────────
 
 export interface PortfolioValue {
-  /** Cost of everything held. */
+  /** Known cost of everything held. */
   invested: Paise;
+  /** Holdings with a purchase saved without its amount: left out of `invested`. */
+  costUnknown: number;
   /** Current value of the holdings that have a price and a complete quantity. */
   value: Paise;
-  /** Cost of those same holdings: value − valuedCost is the gain not yet taken. */
-  valuedCost: Paise;
+  /** Value and cost of the holdings where both are known: their difference is the gain not yet taken. */
+  gainBase: { value: Paise; cost: Paise };
   /** Holdings that can't be valued (no price, or a purchase with no quantity). */
   unvalued: number;
 }
 
 export function portfolioValue(summaries: HoldingSummary[]): PortfolioValue {
-  const out: PortfolioValue = { invested: 0, value: 0, valuedCost: 0, unvalued: 0 };
+  const out: PortfolioValue = { invested: 0, costUnknown: 0, value: 0, gainBase: { value: 0, cost: 0 }, unvalued: 0 };
   for (const s of summaries) {
     if (s.soldOut) continue;
     out.invested += s.invested;
+    if (!s.costComplete) out.costUnknown++;
     if (s.value === null) out.unvalued++;
     else {
       out.value += s.value;
-      out.valuedCost += s.invested;
+      if (s.costComplete) {
+        out.gainBase.value += s.value;
+        out.gainBase.cost += s.invested;
+      }
     }
   }
   return out;

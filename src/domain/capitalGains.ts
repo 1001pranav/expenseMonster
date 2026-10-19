@@ -90,7 +90,7 @@ export function capitalGains(summaries: HoldingSummary[], fy: FinancialYear): Ca
       const skip = (reason: string) => unestimated.push({ holding: s.holding, soldOn, gain: r.gain, reason });
       if (typeof kind !== 'string') skip(kind.reason);
       else if (soldOn < R.effectiveFrom) skip('Sold before 23 July 2024: older rules');
-      else if (r.gain === null) skip('Cost unknown: some purchases have no quantity');
+      else if (r.gain === null) skip(r.proceeds === null ? 'Sale amount not entered' : 'Cost unknown: a purchase has no quantity or amount');
       else if (r.beyondRecorded) skip('Some of what was sold was bought before it was recorded here');
       else {
         const months = R[kind].longAfterMonths;

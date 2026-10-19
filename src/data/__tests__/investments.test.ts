@@ -182,5 +182,38 @@ describe('saving investments', () => {
     expect(h('REC NCD')).toMatchObject({ assetClass: 'bond', form: 'corporate', unit: 'bond', maturityDate: '2030-03-15', priceNow: 1000_00 });
     expect(h('PREF')).toBeUndefined();
   });
+
+  it('saves without an amount: unknown, not zero, and no money entry with a made-up figure', async () => {
+    const t = await saveInvestment({ ...gold, amount: null, cash: { ...gold.cash!, amount: 0 } });
+    expect(t).toMatchObject({ amount: 0, amountUnknown: 1, txnId: null });
+    expect(tables().transactions).toHaveLength(0);
+    const [s] = summarizeHoldings(tables().holdings, tables().trades, tables().transactions);
+    expect(s).toMatchObject({ invested: 0, costComplete: false, quantity: 10_000 });
+  });
+
+  it('a trade-in without the amounts: no money entry, and the gain stays unknown', async () => {
+    const old = await saveInvestment({ ...gold, amount: 40_000_00 });
+    const x = await saveExchange({
+      date: '2026-10-15',
+      old: { holdingId: old.holdingId, quantity: null, value: null, deductions: 0 },
+      buy: { ...gold, holding: { ...(gold.holding as object), name: 'New piece' } as never, amount: null },
+      pay: { method: 'upi', accountId: null, cardId: null },
+      note: null,
+      scope: 'household',
+    });
+    expect(x.cash).toBeNull();
+    expect([x.sale.txnId, x.purchase.txnId]).toEqual([null, null]);
+    const sold = summarizeHoldings(tables().holdings, tables().trades, tables().transactions).find((s) => s.holding.id === old.holdingId)!;
+    expect(sold.realised[0]).toMatchObject({ proceeds: null, gain: null });
+  });
+
+  it('a statement without a date or a cost: prices undated, the holding added with its cost unknown', async () => {
+    await applyCasImport({ asOf: null, owner: null, scope: 'household' }, [
+      { line: { isin: 'INE040A01034', name: 'HDFC BANK', kind: 'equity', quantity: 40_000, price: 1700_00 }, action: { kind: 'add', cost: null } },
+    ]);
+    const h = tables().holdings.find((x) => x.name === 'HDFC BANK')!;
+    expect(h).toMatchObject({ priceNow: 1700_00, priceAsOf: null, priceSource: 'cas' });
+    expect(tables().trades.find((t) => t.holdingId === h.id)).toMatchObject({ amountUnknown: 1, quantity: 40_000 });
+  });
 });
 

@@ -93,7 +93,8 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
   const [maturity, setMaturity] = useState<YMD | null>(null);
   const [purpose, setPurpose] = useState<Purpose>('investment');
 
-  const [amountText, setAmountText] = useState(rupeesText(existing?.amount ?? cashTxn?.amount ?? prefill?.amount ?? null));
+  // A trade saved without its amount opens with the field empty, not "0".
+  const [amountText, setAmountText] = useState(rupeesText(existing ? (existing.amountUnknown ? null : existing.amount) : (cashTxn?.amount ?? prefill?.amount ?? null)));
   const [qtyText, setQtyText] = useState(quantityText(existing?.quantity ?? null));
   const [priceText, setPriceText] = useState(rupeesText(existing?.unitPrice ?? null));
   const [chargesText, setChargesText] = useState(existing?.charges ? rupeesText(existing.charges) : '');
@@ -168,16 +169,18 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
     .map((h) => ({ value: h.id, label: h.name }));
 
   const save = async () => {
-    const amount = numbers.amount ?? 0;
-    const quantity = numbers.quantity;
-    if (hasQuantity && !soldAll && parseQuantity(qtyText) === undefined) return toast(`Quantity: up to 3 decimals`, { tone: 'error' });
-    if (!amount && (cashMode !== 'none' || quantity === null)) return toast(side === 'buy' ? 'Enter the amount paid' : 'Enter the amount received', { tone: 'error' });
-    if (side === 'sell' && !chosen) return toast('Pick what you sold', { tone: 'error' });
-    if (method === 'card' && cashMode !== 'none' && side === 'buy' && !cardId) return toast('Pick which credit card', { tone: 'error' });
-    const newName = (name.trim() || defaultHoldingName(assetClass, form, purity)).trim();
-    if (!chosen && !newName) return toast('Give it a name', { tone: 'error' });
-    const cashAmount = cashMode === 'part' ? (money(cashText) ?? 0) : amount;
-    if (cashMode === 'part' && (!cashAmount || cashAmount >= amount)) return toast('Cash paid: less than the full amount (the rest was traded in)', { tone: 'error' });
+    // Nothing is mandatory: what isn't entered is saved as unknown, never as zero.
+    const amountIn = numbers.amount;
+    const amount = amountIn ?? 0;
+    // More than 3 decimals is rounded; only text that isn't a number is flagged (dropping it would lose what was typed).
+    const typed = qtyText.trim().replace(/,/g, '');
+    const quantity = soldAll ? null : (parseQuantity(qtyText) ?? (typed && Number.isFinite(Number(typed)) ? Math.round(Number(typed) * 1000) : null));
+    if (hasQuantity && !soldAll && typed && quantity === null) return toast(`"${qtyText}" isn't a number`, { tone: 'error' });
+    const newName = (name.trim() || defaultHoldingName(assetClass, form, purity) || ASSET_CLASSES[assetClass].label).trim();
+    const partCash = money(cashText);
+    // "Part" with no cash figure is no cash; with the full amount or more, it was paid in full.
+    const mode: CashMode = cashMode === 'part' ? (!partCash ? 'none' : amountIn !== null && partCash >= amountIn ? 'full' : 'part') : cashMode;
+    const cashAmount = mode === 'part' ? partCash! : amount;
     setSaving(true);
     try {
       if (!asInvestment) {
@@ -215,19 +218,22 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
                 ...(assetClass === 'bond' ? { faceValue: money(faceText), couponRate: couponText.trim() ? Number(couponText) || null : null, maturityDate: maturity } : {}),
               },
           tradeDate: date,
-          amount,
+          amount: amountIn,
           quantity: hasQuantity ? quantity : null,
           unitPrice: numbers.unitPrice,
           charges: numbers.charges,
           taxes: numbers.taxes,
           refRate: money(refRateText),
-          cash: cashMode === 'none' ? null : { amount: cashAmount, method: side === 'sell' && method === 'card' ? 'bank' : method, accountId, cardId },
+          cash: mode === 'none' ? null : { amount: cashAmount, method: side === 'sell' && method === 'card' ? 'bank' : method, accountId, cardId },
           note: note.trim() || null,
           scope,
         },
         { tradeId: existing?.id, fromTxnId },
       );
-      toast(side === 'buy' ? `Invested ${formatINR(amount)}` : `Sale of ${formatINR(amount)} saved`, { tone: 'success' });
+      toast(
+        amountIn === null ? 'Saved without an amount: its cost is unknown until you add it' : side === 'buy' ? `Invested ${formatINR(amount)}` : `Sale of ${formatINR(amount)} saved`,
+        { tone: 'success' },
+      );
       goBack();
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });
@@ -268,7 +274,7 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
         />
       ) : null}
 
-      {side === 'buy' && !existing ? (
+      {!existing && (side === 'buy' || !chosen) ? (
         <Field label="What">
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {ASSET_ORDER.map((c) => (
@@ -294,14 +300,14 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
           label={side === 'buy' ? 'Add to' : 'Sold from'}
           value={holdingChoice}
           onChange={(v) => v && setHoldingChoice(v)}
-          options={[...holdingOptions, ...(side === 'buy' ? [{ value: 'new', label: 'Something new' }] : [])]}
+          options={[...holdingOptions, { value: 'new', label: side === 'buy' ? 'Something new' : 'Not recorded here' }]}
         />
       ) : null}
       {side === 'sell' && !holdingOptions.length ? (
-        <Txt tone="muted">Nothing recorded to sell yet. Record the purchase first, or record the sale as a new holding bought earlier.</Txt>
+        <Txt tone="muted">Nothing recorded to sell yet: it's saved as a new holding. Add the purchase later to see the gain.</Txt>
       ) : null}
 
-      {!chosen && side === 'buy' ? (
+      {!chosen ? (
         <>
           {meta.forms.length ? <ChipSelect label="Form" value={form} onChange={(v) => setForm(v)} options={meta.forms} /> : null}
           {isMetal && meta.purities.length ? <ChipSelect label="Purity" value={purity} onChange={(v) => setPurity(v)} options={meta.purities} /> : null}

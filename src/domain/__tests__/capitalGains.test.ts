@@ -24,7 +24,7 @@ const holding = (over: Partial<Holding>): Holding => ({
   note: null,
   ...over,
 });
-const trade = (over: Partial<Trade>): Trade => ({ ...base(), holdingId: 'h', side: 'buy', tradeDate: '2025-01-10', amount: 0, quantity: null, unitPrice: null, charges: 0, taxes: 0, refRate: null, refSource: null, txnId: null, ...over });
+const trade = (over: Partial<Trade>): Trade => ({ ...base(), holdingId: 'h', side: 'buy', tradeDate: '2025-01-10', amount: 0, amountUnknown: 0, quantity: null, unitPrice: null, charges: 0, taxes: 0, refRate: null, refSource: null, txnId: null, ...over });
 const fy = financialYear('2026-10-01'); // FY 2026-27
 
 describe('capital gains', () => {

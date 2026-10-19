@@ -122,7 +122,7 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   sync_holds: { holdDevice: T, since: T, until: T, tbl: T, recordId: T, decision: TN, note: T },
   key_grants: { recipient: TN, keyId: TN, sealed: TN },
   holdings: { assetClass: TN, form: T, fundType: T, name: TN, symbol: T, unit: TN, purity: T, memberId: T, priceNow: I, priceAsOf: T, priceSource: T, faceValue: I, couponRate: R, maturityDate: T, closed: IN0, note: T },
-  trades: { holdingId: TN, side: TN, tradeDate: TN, amount: IN0, quantity: I, unitPrice: I, charges: IN0, taxes: IN0, refRate: I, refSource: T, txnId: T },
+  trades: { holdingId: TN, side: TN, tradeDate: TN, amount: IN0, amountUnknown: IN0, quantity: I, unitPrice: I, charges: IN0, taxes: IN0, refRate: I, refSource: T, txnId: T },
 };
 
 /** Tables created after v1, by the migration that created them (older migrations must skip them). */
@@ -132,6 +132,7 @@ const ADDED_IN: Partial<Record<TableName, Record<string, number>>> = {
   devices: { publicKey: 6 },
   household: { keyId: 6, removed: 6 },
   holdings: { fundType: 8, priceSource: 9, faceValue: 10, couponRate: 10, maturityDate: 10 },
+  trades: { amountUnknown: 11 },
 };
 const EXTRA_ADDED_IN = 4;
 const tablesAt = (version: number) => (Object.keys(TABLES) as TableName[]).filter((t) => (CREATED_IN[t] ?? 1) <= version);
@@ -210,4 +211,6 @@ export const MIGRATIONS: string[] = [
   'ALTER TABLE "holdings" ADD COLUMN "priceSource" TEXT;',
   // v10: bonds (assetClass 'bond'): face value, coupon and maturity.
   ['ALTER TABLE "holdings" ADD COLUMN "faceValue" INTEGER;', 'ALTER TABLE "holdings" ADD COLUMN "couponRate" REAL;', 'ALTER TABLE "holdings" ADD COLUMN "maturityDate" TEXT;'].join('\n'),
+  // v11: nothing is mandatory: a trade can be saved without its amount, which is then unknown, not zero.
+  'ALTER TABLE "trades" ADD COLUMN "amountUnknown" INTEGER NOT NULL DEFAULT 0;',
 ];

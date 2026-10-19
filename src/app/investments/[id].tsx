@@ -44,7 +44,8 @@ export default function HoldingDetail() {
   const gainOf = new Map(s.realised.map((r) => [r.trade.id, r]));
   const others = holdings.filter((h) => h.id !== holding.id && sameMetal(holding, h)).length;
   const per = unitLabel(holding.unit, false) || 'unit';
-  const gain = s.value !== null ? s.value - s.invested : null;
+  // A gain needs the whole cost: with a purchase saved without its amount it isn't shown.
+  const gain = s.value !== null && s.costComplete ? s.value - s.invested : null;
   const isFund = holding.assetClass === 'mf';
   /** Look the price up, and show it: it is saved only when the user confirms. */
   const fetchNav = async () => {
@@ -90,16 +91,18 @@ export default function HoldingDetail() {
           <Txt tone="muted">Cost</Txt>
           <Money value={s.invested} decimals="never" />
         </Row>
-        {s.value !== null && gain !== null ? (
+        {s.value !== null ? (
           <>
             <Row style={{ justifyContent: 'space-between' }}>
               <Txt tone="muted">Worth now</Txt>
               <Money value={s.value} decimals="never" />
             </Row>
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Txt tone="muted">{gain >= 0 ? 'Gain if sold' : 'Loss if sold'}</Txt>
-              <Money value={gain} decimals="never" signed colorBySign />
-            </Row>
+            {gain !== null ? (
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Txt tone="muted">{gain >= 0 ? 'Gain if sold' : 'Loss if sold'}</Txt>
+                <Money value={gain} decimals="never" signed colorBySign />
+              </Row>
+            ) : null}
           </>
         ) : null}
         {holding.assetClass === 'bond' && (holding.faceValue || holding.couponRate || holding.maturityDate) ? (
@@ -112,6 +115,11 @@ export default function HoldingDetail() {
               .filter(Boolean)
               .join(' · ')}
             . Record coupons as income (Interest & dividends).
+          </Txt>
+        ) : null}
+        {!s.costComplete ? (
+          <Txt variant="small" tone="muted">
+            Some purchases were saved without their amount: the cost above leaves them out, and no gain is shown. Open one to add it.
           </Txt>
         ) : null}
         {s.costs ? (
@@ -209,7 +217,15 @@ export default function HoldingDetail() {
                   ]
                     .filter(Boolean)
                     .join(' · ')}
-                  right={<Money value={t.amount} decimals="never" />}
+                  right={
+                    t.amountUnknown ? (
+                      <Txt variant="small" tone="faint">
+                        amount not entered
+                      </Txt>
+                    ) : (
+                      <Money value={t.amount} decimals="never" />
+                    )
+                  }
                   chevron
                   onPress={() => router.push(`/investments/trade/${t.id}`)}
                 />

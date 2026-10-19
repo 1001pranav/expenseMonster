@@ -283,8 +283,10 @@ export interface Trade extends BaseRow {
   holdingId: string;
   side: 'buy' | 'sell';
   tradeDate: YMD;
-  /** Buy: cost including charges and taxes. Sell: what was received, after them. */
+  /** Buy: cost including charges and taxes. Sell: what was received, after them. 0 when not entered (amountUnknown). */
   amount: Paise;
+  /** 1 when the amount wasn't entered: it is unknown, not zero (a cost of 0 would make any sale look like pure gain). */
+  amountUnknown: 0 | 1;
   /** Thousandths of the holding's unit (10.5 g = 10500, 3 shares = 3000); null = not entered. */
   quantity: number | null;
   /** Paise per unit actually paid, before charges and taxes; null = not entered. */

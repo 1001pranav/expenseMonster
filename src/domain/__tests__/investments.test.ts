@@ -45,6 +45,7 @@ const trade = (over: Partial<Trade>): Trade => ({
   side: 'buy',
   tradeDate: '2026-10-12',
   amount: 0,
+  amountUnknown: 0,
   quantity: null,
   unitPrice: null,
   charges: 0,
@@ -204,10 +205,18 @@ describe('investments are not spending', () => {
 
 describe('value and making charges', () => {
   it('values only what has a price and a complete quantity, and says how many it could not', () => {
-    const priced = { invested: 70_000_00, value: 75_000_00, soldOut: false };
-    const noPrice = { invested: 20_000_00, value: null, soldOut: false };
-    const sold = { invested: 0, value: null, soldOut: true };
-    expect(portfolioValue([priced, noPrice, sold] as never)).toEqual({ invested: 90_000_00, value: 75_000_00, valuedCost: 70_000_00, unvalued: 1 });
+    const priced = { invested: 70_000_00, costComplete: true, value: 75_000_00, soldOut: false };
+    const noPrice = { invested: 20_000_00, costComplete: true, value: null, soldOut: false };
+    // Priced, but one purchase was saved without its amount: its value counts, its gain can't.
+    const costUnknown = { invested: 5_000_00, costComplete: false, value: 9_000_00, soldOut: false };
+    const sold = { invested: 0, costComplete: true, value: null, soldOut: true };
+    expect(portfolioValue([priced, noPrice, costUnknown, sold] as never)).toEqual({
+      invested: 95_000_00,
+      costUnknown: 1,
+      value: 84_000_00,
+      gainBase: { value: 75_000_00, cost: 70_000_00 },
+      unvalued: 1,
+    });
   });
 
   it('shows how much went over the metal when the day rate was noted', () => {
@@ -225,3 +234,31 @@ describe('value and making charges', () => {
     expect(sameMetal(g22, holding({ form: 'sgb' }))).toBe(false);
   });
 });
+
+describe('amounts left out', () => {
+  const shares = holding({ id: 's', assetClass: 'equity', unit: 'share', form: null, purity: null, name: 'INFY' });
+  const sell = (over: Partial<Trade>) => trade({ side: 'sell', tradeDate: '2026-06-01', ...over });
+
+  it('a purchase saved without its amount: its cost is unknown, never zero', () => {
+    const s = ledger(shares, [trade({ tradeDate: '2026-01-10', amount: 10_000_00, quantity: 10_000 }), trade({ tradeDate: '2026-02-10', amountUnknown: 1, quantity: 10_000 })]);
+    expect(s).toMatchObject({ invested: 10_000_00, costComplete: false, quantity: 20_000 });
+  });
+
+  it('selling from it gives an unknown gain, not the whole sale as profit', () => {
+    const unknownFirst = ledger(shares, [trade({ tradeDate: '2026-01-10', amountUnknown: 1, quantity: 10_000 }), sell({ amount: 15_000_00, quantity: 10_000 })]);
+    expect(unknownFirst.realised[0]).toMatchObject({ cost: null, gain: null });
+    const soldAll = ledger(shares, [trade({ tradeDate: '2026-01-10', amountUnknown: 1, quantity: 10_000 }), sell({ amount: 15_000_00, quantity: null })]);
+    expect(soldAll.realised[0]).toMatchObject({ cost: null, gain: null });
+    // Selling only from purchases whose cost is known still works.
+    const known = ledger(shares, [trade({ tradeDate: '2026-01-10', amount: 10_000_00, quantity: 10_000 }), trade({ tradeDate: '2026-02-10', amountUnknown: 1, quantity: 10_000 }), sell({ amount: 15_000_00, quantity: 10_000 })]);
+    expect(known.realised[0]).toMatchObject({ cost: 10_000_00, gain: 5_000_00 });
+    expect(known.costComplete).toBe(false);
+  });
+
+  it('a sale saved without its amount: gain unknown, the quantity still leaves the holding', () => {
+    const s = ledger(shares, [trade({ tradeDate: '2026-01-10', amount: 10_000_00, quantity: 10_000 }), sell({ amountUnknown: 1, quantity: 4_000 })]);
+    expect(s.realised[0]).toMatchObject({ proceeds: null, cost: 4_000_00, gain: null, parts: [] });
+    expect(s).toMatchObject({ quantity: 6_000, invested: 6_000_00 });
+  });
+});
+

@@ -13,6 +13,13 @@ import { Screen, goBack } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
 
 const money = (text: string): Paise => (text.trim() ? parseAmount(text) : 0) ?? 0;
+/** Null when not entered: unknown, not zero. */
+const entered = (text: string): Paise | null => (text.trim() ? parseAmount(text) || null : null);
+/** Grams; more than 3 decimals rounded. Null when not entered. */
+const grams3 = (text: string): number | null => {
+  const t = text.trim().replace(/,/g, '');
+  return t && Number.isFinite(Number(t)) ? (parseQuantity(t) ?? Math.round(Number(t) * 1000)) || null : null;
+};
 
 /**
  * Old gold or silver traded in for a new piece (docs/INVESTMENTS_PLAN.md §3a): the old piece is
@@ -59,25 +66,22 @@ export default function Exchange() {
   const [scope, setScope] = useState<Scope>(old?.holding.scope ?? 'household');
   const [saving, setSaving] = useState(false);
 
-  const difference = money(newTotal) - money(oldValue);
+  // Known only when both figures were entered.
+  const difference = entered(newTotal) !== null && entered(oldValue) !== null ? money(newTotal) - money(oldValue) : null;
 
   const save = async () => {
     if (!old) return toast('Pick the piece you traded in', { tone: 'error' });
-    if (!money(oldValue)) return toast('Enter what the jeweller gave for the old piece', { tone: 'error' });
-    if (!money(newTotal)) return toast('Enter the full price of the new piece', { tone: 'error' });
-    const oldQty = all ? null : parseQuantity(oldGrams);
-    if (!all && !oldQty) return toast('Enter the grams traded in, or choose all of it', { tone: 'error' });
-    const newQty = parseQuantity(grams);
-    if (newQty === undefined) return toast('Grams: up to 3 decimals', { tone: 'error' });
-    if (difference > 0 && method === 'card' && !cardId) return toast('Pick which credit card', { tone: 'error' });
+    // Nothing else is mandatory. Grams of the old piece left blank: all of it.
+    const oldQty = all ? null : grams3(oldGrams);
+    const newQty = grams3(grams);
     setSaving(true);
     try {
       await saveExchange({
         date,
-        old: { holdingId: old.holding.id, quantity: oldQty ?? null, value: money(oldValue), deductions: money(deductions) },
+        old: { holdingId: old.holding.id, quantity: oldQty, value: entered(oldValue), deductions: money(deductions) },
         buy: {
           holding: { assetClass: metal, form: 'jewellery', fundType: null, name: name.trim() || defaultHoldingName(metal, 'jewellery', purity), symbol: null, unit: 'g', purity, memberId: owner || null },
-          amount: money(newTotal),
+          amount: entered(newTotal),
           quantity: newQty,
           unitPrice: null,
           charges: money(making),
@@ -88,7 +92,16 @@ export default function Exchange() {
         note: note.trim() || null,
         scope,
       });
-      toast(difference > 0 ? `Exchange saved: ${formatINR(difference)} paid` : difference < 0 ? `Exchange saved: ${formatINR(-difference)} received` : 'Exchange saved', { tone: 'success' });
+      toast(
+        difference === null
+          ? 'Exchange saved. Add the missing amounts later to see the gain and what was paid.'
+          : difference > 0
+            ? `Exchange saved: ${formatINR(difference)} paid`
+            : difference < 0
+              ? `Exchange saved: ${formatINR(-difference)} received`
+              : 'Exchange saved',
+        { tone: 'success' },
+      );
       goBack();
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });
@@ -168,14 +181,14 @@ export default function Exchange() {
         <Txt variant="small" tone="muted">
           Difference
         </Txt>
-        <Txt variant="h3">{difference > 0 ? `You pay ${formatINR(difference)}` : difference < 0 ? `You receive ${formatINR(-difference)}` : 'Even exchange'}</Txt>
+        <Txt variant="h3">{difference === null ? 'Enter both amounts to see it' : difference > 0 ? `You pay ${formatINR(difference)}` : difference < 0 ? `You receive ${formatINR(-difference)}` : 'Even exchange'}</Txt>
         <Txt variant="small" tone="muted">
           Only this moves as money. The new piece's cost is its full price; the old piece's gain or loss is worked out from what it cost.
         </Txt>
       </Card>
 
       <DateField label="Date" value={date} onChange={setDate} allowFuture={false} />
-      {difference !== 0 ? (
+      {difference ? (
         <>
           <ChipSelect
             label={difference > 0 ? 'Paid with' : 'Received in'}

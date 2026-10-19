@@ -39,8 +39,8 @@ export interface InvestmentInput {
   side: Trade['side'];
   holding: { id: string } | NewHolding;
   tradeDate: YMD;
-  /** The trade's value: cost of a purchase (charges included), what a sale brought in (after them). */
-  amount: Paise;
+  /** The trade's value: cost of a purchase (charges included), what a sale brought in (after them). Null: not entered, unknown. */
+  amount: Paise | null;
   quantity: number | null;
   unitPrice: Paise | null;
   charges: Paise;
@@ -66,16 +66,19 @@ export async function saveInvestment(input: InvestmentInput, opts: { tradeId?: s
   const tradeId = existing?.id ?? uuidv7();
 
   let txnId = existing?.txnId ?? opts.fromTxnId ?? null;
-  if (input.cash) {
+  // Without an amount there is no figure for the money that moved: no transaction is made (a guessed
+  // one would put a wrong number into the month's totals).
+  const cash = input.cash && input.cash.amount > 0 ? input.cash : null;
+  if (cash) {
     const today = todayYMD();
     const draft = {
       type: 'transfer',
-      amount: input.cash.amount,
+      amount: cash.amount,
       occurredAt: toISO(input.tradeDate, input.tradeDate === today ? new Date().getHours() * 60 + new Date().getMinutes() : null),
       categoryId: null,
-      method: input.cash.method,
-      accountId: input.cash.method === 'card' ? null : input.cash.accountId,
-      cardId: input.cash.method === 'card' ? input.cash.cardId : null,
+      method: cash.method,
+      accountId: cash.method === 'card' ? null : cash.accountId,
+      cardId: cash.method === 'card' ? cash.cardId : null,
       payee: holding.name,
       note: input.note,
       linkType: 'investment',
@@ -96,7 +99,8 @@ export async function saveInvestment(input: InvestmentInput, opts: { tradeId?: s
     holdingId: holding.id,
     side: input.side,
     tradeDate: input.tradeDate,
-    amount: input.amount,
+    amount: input.amount ?? 0,
+    amountUnknown: input.amount === null ? (1 as const) : (0 as const),
     quantity: input.quantity,
     unitPrice: input.unitPrice,
     charges: input.charges,
@@ -142,8 +146,8 @@ export async function setPrice(holdingId: string, price: Paise, opts: { sameMeta
 
 export interface ExchangeInput {
   date: YMD;
-  /** The old piece: what the jeweller valued it at, and how much of it (null = all of it). */
-  old: { holdingId: string; quantity: number | null; value: Paise; deductions: Paise };
+  /** The old piece: what the jeweller valued it at (null: not entered), and how much of it (null = all of it). */
+  old: { holdingId: string; quantity: number | null; value: Paise | null; deductions: Paise };
   /** The new piece, at its full price (charges and GST included). */
   buy: Omit<InvestmentInput, 'side' | 'tradeDate' | 'cash' | 'scope' | 'note'>;
   /** How the difference was paid or received. */
@@ -157,8 +161,9 @@ export interface ExchangeInput {
  * cash, and a purchase of the new one at its full price. Only the difference moves as money: paid
  * on top with the purchase, or received with the sale when the old piece was worth more.
  */
-export async function saveExchange(x: ExchangeInput): Promise<{ sale: Trade; purchase: Trade; cash: Paise }> {
-  const difference = x.buy.amount - x.old.value;
+export async function saveExchange(x: ExchangeInput): Promise<{ sale: Trade; purchase: Trade; cash: Paise | null }> {
+  // Without both figures the difference paid is unknown: no money entry, rather than a wrong one.
+  const difference = x.buy.amount !== null && x.old.value !== null ? x.buy.amount - x.old.value : 0;
   const common = { tradeDate: x.date, note: x.note, scope: x.scope };
   const sale = await saveInvestment({
     ...common,
@@ -173,13 +178,13 @@ export async function saveExchange(x: ExchangeInput): Promise<{ sale: Trade; pur
     cash: difference < 0 ? { ...x.pay, method: x.pay.method === 'card' ? 'bank' : x.pay.method, amount: -difference } : null,
   });
   const purchase = await saveInvestment({ ...common, ...x.buy, side: 'buy', cash: difference > 0 ? { ...x.pay, amount: difference } : null });
-  return { sale, purchase, cash: difference };
+  return { sale, purchase, cash: x.buy.amount !== null && x.old.value !== null ? difference : null };
 }
 
 export type CasAction =
   | { kind: 'price'; holdingId: string }
   | { kind: 'link'; holdingId: string }
-  | { kind: 'add'; cost: Paise }
+  | { kind: 'add'; cost: Paise | null }
   | { kind: 'skip' };
 
 /**
@@ -190,7 +195,7 @@ export type CasAction =
  * a difference cost.
  */
 export async function applyCasImport(
-  x: { asOf: YMD; owner: string | null; scope: Scope },
+  x: { asOf: YMD | null; owner: string | null; scope: Scope },
   items: { line: { isin: string; name: string; kind: 'equity' | 'fund' | 'bond' | 'other'; quantity: number; price: Paise; maturity?: YMD | null }; action: CasAction }[],
 ): Promise<{ priced: number; added: number }> {
   let priced = 0;
@@ -222,7 +227,8 @@ export async function applyCasImport(
           memberId: x.owner,
           ...(bond ? { maturityDate: line.maturity ?? null } : {}),
         },
-        tradeDate: x.asOf,
+        // Without the statement's date, today's is used and the note says so.
+        tradeDate: x.asOf ?? todayYMD(),
         amount: action.cost,
         quantity: line.quantity,
         unitPrice: null,
@@ -230,7 +236,7 @@ export async function applyCasImport(
         taxes: 0,
         refRate: null,
         cash: null,
-        note: 'Opening balance from a consolidated account statement',
+        note: x.asOf ? 'Opening balance from a consolidated account statement' : "Opening balance from a consolidated account statement (its date wasn't found)",
         scope: x.scope,
       });
       await price(trade.holdingId, line.price);

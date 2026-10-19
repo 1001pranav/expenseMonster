@@ -63,7 +63,14 @@ Agreed approach: **record grams and the per-gram cost; the user fills them in, l
 blank, or fetches them online and confirms.**
 
 - Amount paid, grams and ₹/g are linked. Enter any two and the third is filled in (and shown, so a
-  typo stands out). Amount paid is the only required field; it is the money that left the account.
+  typo stands out). **Nothing is mandatory** (revised from "amount paid is the only required field"):
+  a purchase can be saved with only a name, or not even that (it is named after its kind). A blank
+  amount is stored as *not entered* (`amountUnknown`), never as ₹0: it moves no money, the holding's
+  cost is marked unknown, and no gain is shown that would depend on it. A blank sale amount does the
+  same for that sale's gain; the Tax screen lists it as "Sale amount not entered". Text that isn't a
+  number is still flagged, as a typo check, and extra decimals are rounded instead of refused. The
+  only inputs the app can't do without are the ones it physically needs: the statement PDF and its
+  password to read a CAS.
 - **Blank is allowed, with a visible consequence.** Without grams the purchase still counts as
   invested, but the app can't value it later. The holding shows "Add grams to track its value" and
   never makes up a number.
@@ -124,6 +131,7 @@ trades              -- every buy/sell/redeem
   side         TEXT NOT NULL   -- buy | sell
   tradeDate    TEXT NOT NULL
   amount       INTEGER NOT NULL   -- the trade's value: buy = cost incl. charges; sell = what you got, after charges
+  amountUnknown INTEGER NOT NULL DEFAULT 0  -- 1 = amount not entered: `amount` is 0 but means unknown (v11)
   quantity     INTEGER            -- MILLI-units: 10.5 g = 10500, 3 shares = 3000, 12.345 units = 12345; NULL = not entered
   unitPrice    INTEGER            -- paise per unit actually paid/received; NULL = not entered
   charges      INTEGER NOT NULL DEFAULT 0   -- making charges, brokerage, STT, stamp duty
