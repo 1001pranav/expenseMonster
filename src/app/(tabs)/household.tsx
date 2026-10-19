@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { memberBalances, simplifyDebts } from '@/domain/settle';
+import { asideRecords } from '@/db/repo';
 import { useStore } from '@/db/store';
+import { HOUSEHOLD_ID, ownHeld } from '@/services/holds';
 import { useMembers, useSelfId, useTable } from '@/data/hooks';
 import { Avatar } from '@/ui/components/Avatar';
 import { Button, Card, Divider, ListRow, Money, Row, Section, Txt } from '@/ui/components/core';
@@ -17,6 +19,17 @@ export default function Household() {
   const identity = useStore((s) => s.identity);
   const balances = useMemo(() => memberBalances(txns), [txns]);
   const transfers = useMemo(() => simplifyDebts(balances), [balances]);
+  const version = useStore((s) => s.version);
+  const devices = useTable('devices');
+  const headId = useTable('household').find((h) => h.id === HOUSEHOLD_ID)?.headDeviceId ?? null;
+  const headName = headId === identity.deviceId ? 'This phone' : (devices.find((d) => d.id === headId)?.name ?? 'Another phone');
+  // Family edits waiting for the head, and this phone's own entries the head is holding.
+  const [review, setReview] = useState({ aside: 0, own: 0, discarded: 0 });
+  useEffect(() => {
+    Promise.all([asideRecords(), ownHeld()])
+      .then(([aside, own]) => setReview({ aside: aside.length, own: own.length, discarded: own.filter((o) => o.decision === 'discard').length }))
+      .catch(() => {});
+  }, [version]);
   const nameOf = (id: string) => (id === selfId ? 'You' : (members.find((m) => m.id === id)?.name ?? 'Someone'));
 
   return (
@@ -64,9 +77,22 @@ export default function Household() {
         </Section>
       ) : null}
 
+      {review.aside || review.own ? (
+        <Card onPress={() => router.push('/sync/review')} style={{ borderWidth: 1.5, borderColor: review.discarded ? colors.expense : colors.warn, gap: 4 }}>
+          <Txt variant="bodyStrong">
+            {review.discarded ? `The head didn't accept ${review.discarded} of your entries` : review.own ? `${review.own} of your entries are on hold` : `${review.aside} family ${review.aside === 1 ? 'edit is' : 'edits are'} waiting for review`}
+          </Txt>
+          <Txt variant="small" tone="muted">
+            {review.discarded ? 'Choose to delete them or separate this phone.' : headId === identity.deviceId ? 'You are the household head: merge or discard them.' : `${headName} (household head) is reviewing them.`}
+          </Txt>
+        </Card>
+      ) : null}
+
       <Section title="Share between phones">
         <Card padded={false} style={{ overflow: 'hidden' }}>
           <ListRow icon="sync" iconColor={colors.primary} title="Sync with family" subtitle="Pair by QR · send & receive encrypted updates" chevron onPress={() => router.push('/sync')} />
+          <Divider inset={space(9)} />
+          <ListRow icon="shield-checkmark" iconColor={colors.info} title="Household head & review" subtitle={headId ? `Head: ${headName}` : 'No head yet'} chevron onPress={() => router.push('/sync/review')} />
         </Card>
       </Section>
 

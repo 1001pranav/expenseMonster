@@ -52,7 +52,7 @@ export default function Sync() {
         if (r.clockAheadMinutes > 5) {
           toast(`${r.from}'s phone clock is ${r.clockAheadMinutes} min ahead. Fix it in Android settings, or "newest edit" may pick the wrong version.`, { tone: 'error' });
         } else {
-          toast(`From ${r.from}: ${r.inserted} new, ${r.updated} updated${r.autoResolved ? `, ${r.autoResolved} conflicts settled` : ''}${r.held ? `, ${r.held} need the latest app` : ''}`, { tone: 'success' });
+          toast(`From ${r.from}: ${r.inserted} new, ${r.updated} updated${r.autoResolved ? `, ${r.autoResolved} conflicts settled` : ''}${r.held ? `, ${r.held} need the latest app` : ''}${r.setAside ? `, ${r.setAside} set aside for review` : ''}`, { tone: 'success' });
         }
         refresh();
         if (r.pendingConflicts) router.push('/sync/conflicts');
@@ -97,7 +97,7 @@ export default function Sync() {
     setBusy('cloud');
     try {
       const r = await cloudSyncNow();
-      toast(`Cloud: ${r.received} received, ${r.sent} sent${r.held ? ` · ${r.held} need the latest app` : ''}${r.unreadable ? ` · ${r.unreadable} unreadable skipped` : ''}`, { tone: 'success' });
+      toast(`Cloud: ${r.received} received, ${r.sent} sent${r.held ? ` · ${r.held} need the latest app` : ''}${r.setAside ? ` · ${r.setAside} set aside for review` : ''}${r.unreadable ? ` · ${r.unreadable} unreadable skipped` : ''}`, { tone: 'success' });
       if (r.pendingConflicts) router.push('/sync/conflicts');
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });

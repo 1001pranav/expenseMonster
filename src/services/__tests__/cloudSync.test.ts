@@ -121,7 +121,14 @@ const TXN_COLUMNS = [...Object.keys(txn({})), 'extra'];
 const fold = (t: string, r: Row): Row => (t === 'transactions' ? foldUnknown(r, TXN_COLUMNS) : r);
 const expand = (r: Row): Row => expandExtra({ ...r });
 
-type FakeDb = { tables: Map<string, Map<string, Row>>; marks: Map<string, { seq: number; updatedAt: string }>; meta: Map<string, string>; held: Map<string, Row> };
+type FakeDb = {
+  tables: Map<string, Map<string, Row>>;
+  marks: Map<string, { seq: number; updatedAt: string }>;
+  meta: Map<string, string>;
+  held: Map<string, Row>;
+  aside: Map<string, { tbl: string; row: Row; reason: string; receivedAt: string }>;
+  history: Map<string, Row[]>;
+};
 
 function fakeRepo(db: FakeDb, device: string, store: StoreRef) {
   const table = (t: string) => db.tables.get(t) ?? db.tables.set(t, new Map()).get(t)!;
@@ -140,20 +147,59 @@ function fakeRepo(db: FakeDb, device: string, store: StoreRef) {
       for (const m of marks) db.marks.set(markKey(space, m.table, m.id), { seq: m.seq, updatedAt: m.updatedAt });
     },
     rowsByIds: async (t: string, ids: string[]) => new Map(ids.filter((id) => table(t).has(id)).map((id) => [id, expand(table(t).get(id)!)])),
-    applyRemote: async (t: string, rows: Row[]) => rows.forEach((r) => table(t).set(r.id, fold(t, { ...r }))),
+    applyRemote: async (t: string, rows: Row[]) =>
+      rows.forEach((r) => {
+        const replaced = table(t).get(r.id);
+        if (replaced && replaced.updatedAt !== r.updatedAt) db.history.set(`${t}:${r.id}`, [expand(replaced), ...(db.history.get(`${t}:${r.id}`) ?? [])]);
+        table(t).set(r.id, fold(t, { ...r }));
+        store.get!().putRow(t as TableName, table(t).get(r.id) as never);
+      }),
+    historyOf: async (t: string, id: string) => db.history.get(`${t}:${id}`) ?? [],
+    setLocalVersion: async (t: string, row: Row) => {
+      table(t).set(row.id, fold(t, { ...row }));
+      for (const [k, m] of db.marks) if (k.endsWith(`|${t}|${row.id}`)) m.updatedAt = row.updatedAt;
+    },
+    dropLocal: async (t: string, id: string) => void table(t).delete(id),
+    rowsSavedBy: async (t: string, by: { deviceId?: string | null; since?: string | null; until?: string | null; id?: string | null }) =>
+      by.id || by.deviceId || by.since || by.until
+        ? [...table(t).values()]
+            .filter((r) => (!by.id || r.id === by.id) && (!by.deviceId || r.deviceId === by.deviceId) && (!by.since || r.updatedAt >= by.since) && (!by.until || r.updatedAt < by.until))
+            .map(expand)
+        : [],
+    setAside: async (records: { tbl: string; row: Row; reason: string }[], ordered: boolean) => {
+      for (const r of records) {
+        const k = `${r.tbl}:${r.row.id}`;
+        if (replacesHeld(db.aside.get(k)?.row, r.row, ordered)) db.aside.set(k, { ...r, receivedAt: nextTime() });
+      }
+    },
+    asideRecords: async () => [...db.aside.values()],
+    releaseAside: async (t: string, id: string) => void db.aside.delete(`${t}:${id}`),
+    insert: async (t: string, data: Partial<Row>) => {
+      const at = nextTime();
+      const row = { scope: 'household', ...data, id: data.id ?? `${t}-${at}`, createdAt: at, updatedAt: at, deletedAt: null, deviceId: device } as Row;
+      table(t).set(row.id, row);
+      store.get!().putRow(t as TableName, row as never);
+      return row;
+    },
+    remove: async (t: string, id: string) => {
+      const row = { ...table(t).get(id)!, deletedAt: nextTime(), updatedAt: nextTime(), deviceId: device };
+      table(t).set(id, row);
+    },
+    forgetPeers: async () => {},
     holdRecords: async (records: { tbl: string; row: Row }[], ordered: boolean) => {
       for (const r of records) if (replacesHeld(db.held.get(`${r.tbl}:${r.row.id}`), r.row, ordered)) db.held.set(`${r.tbl}:${r.row.id}`, r.row);
     },
     update: async (t: string, id: string, patch: Partial<Row>) => {
       const row = { ...table(t).get(id)!, ...patch, updatedAt: nextTime(), deviceId: device };
       table(t).set(id, row);
+      store.get!().putRow(t as TableName, row as never);
       return row;
     },
     getMeta: async (k: string) => db.meta.get(k) ?? null,
     setMeta: async (k: string, v: string | null) => void (v === null ? db.meta.delete(k) : db.meta.set(k, v)),
     listPeers: async () => [],
     allRows: async (t: string) => [...table(t).values()].map(expand),
-    loadTables: async () => EMPTY_TABLES,
+    loadTables: async () => Object.fromEntries(Object.keys(EMPTY_TABLES).map((t) => [t, [...table(t).values()].filter((r) => !r.deletedAt)])),
     saveIdentity: async (patch: object) => store.get!().setIdentity(patch),
     saveSettings: async (patch: object) => store.get!().setSettings(patch),
     upsertPeer: async () => {},
@@ -162,7 +208,7 @@ function fakeRepo(db: FakeDb, device: string, store: StoreRef) {
 }
 
 function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
-  const db: FakeDb = { tables: new Map(), marks: new Map(), meta: new Map(), held: new Map() };
+  const db: FakeDb = { tables: new Map(), marks: new Map(), meta: new Map(), held: new Map(), aside: new Map(), history: new Map() };
   const store: StoreRef = {};
   const repo = fakeRepo(db, device, store);
   // Keystore stand-in: household key plus the backup's secrets.
@@ -170,6 +216,7 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
   let cloud!: typeof import('../cloud');
   let sync!: typeof import('../sync');
   let vault!: typeof import('../vault');
+  let holds!: typeof import('../holds');
   jest.isolateModules(() => {
     jest.doMock('expo-sharing', () => ({}));
     jest.doMock('expo-file-system', () => ({ File: class {}, Paths: {} }));
@@ -188,6 +235,7 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     cloud = require('../cloud');
     sync = require('../sync');
     vault = require('../vault');
+    holds = require('../holds');
     const { getState } = require('@/db/store');
     store.get = getState;
     /* eslint-enable @typescript-eslint/no-require-imports */
@@ -213,6 +261,10 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     resolve: (keys: string[], choice: 'mine' | 'theirs') => sync.resolveConflicts(keys, choice),
     merge: (bundle: Parameters<typeof sync.mergeBundle>[0]) => sync.mergeBundle(bundle, 'newest'),
     held: db.held,
+    holds,
+    aside: () => [...db.aside.values()],
+    /** A row written straight to this phone's database, as a modified app could. */
+    raw: (t: string, data: Partial<Row>) => repo.insert(t, data),
   };
 }
 
@@ -403,6 +455,121 @@ describe('data from a newer app version', () => {
     await old.merge(file([v1]));
     expect(old.held.get(`holdings:${v1.id}`)?.name).toBe('Infosys');
     expect(() => validateBundle({ ...file([v1]), tables: { 'x"; drop': [v1] } })).toThrow('Unknown table');
+  });
+});
+
+describe('household head reviews edits from other phones', () => {
+  let key: Uint8Array;
+  beforeEach(() => {
+    server.reset();
+    key = newKey();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  /** Head A, phone B whose data goes bad, bystander C; all synced, A head. */
+  async function household() {
+    const [a, b, c] = [makePhone('A', key, 'newest'), makePhone('B', key, 'newest'), makePhone('C', key, 'newest')];
+    const t1 = a.add({ amount: 100 });
+    await a.holds.claimHead();
+    await a.sync();
+    await b.sync();
+    await c.sync();
+    return { a, b, c, t1 };
+  }
+
+  it('holds a phone: its edits wait, edits already applied are undone, and merging applies them everywhere', async () => {
+    const { a, b, c, t1 } = await household();
+    // B's bad edit reaches C before anyone notices.
+    await b.edit(t1.id, { amount: 555 });
+    await b.sync();
+    await c.sync();
+    expect(c.get(t1.id)?.amount).toBe(555);
+
+    await a.sync();
+    await a.holds.holdEdits({ deviceId: 'B', day: null });
+    expect(a.get(t1.id)?.amount).toBe(100); // undone on the head's phone at once
+    await a.sync();
+    // C follows the head's rule: the edit is set aside and the version it replaced is back.
+    await c.sync();
+    expect(c.get(t1.id)?.amount).toBe(100);
+    expect(c.aside().map((x) => x.row.id)).toEqual([t1.id]);
+
+    // New edits from B wait too; nothing about this was uploaded by A or C.
+    const t2 = b.add({ amount: 42 });
+    await b.sync();
+    const before = records().size;
+    await c.sync();
+    expect(c.get(t2.id)).toBeUndefined();
+    expect(c.aside()).toHaveLength(2);
+    expect(records().size).toBe(before);
+    // B itself keeps its entries and is told they are on hold.
+    expect((await b.holds.ownHeld()).map((o) => o.decision)).toEqual(['hold', 'hold']);
+
+    // The head merges: every phone applies them.
+    const rule = (await a.holds.loadScreenContext()).holds[0];
+    await a.holds.decideRule(rule.id, 'merge');
+    await a.sync();
+    await c.sync();
+    expect(a.get(t1.id)?.amount).toBe(555);
+    expect(c.get(t1.id)?.amount).toBe(555);
+    expect(c.get(t2.id)?.amount).toBe(42);
+    expect(c.aside()).toHaveLength(0);
+  });
+
+  it('discards one entry: never applied, and its sender can delete it', async () => {
+    const { a, b, c } = await household();
+    await a.holds.holdEdits({ deviceId: 'B', day: null });
+    await a.sync();
+    await c.sync();
+    const bad = b.add({ amount: 1 });
+    const good = b.add({ amount: 2 });
+    await b.sync();
+    await a.sync();
+    await a.holds.decideEntry('transactions', good.id, 'merge');
+    await a.holds.decideEntry('transactions', bad.id, 'discard');
+    await a.sync();
+    await c.sync();
+    expect(c.get(good.id)?.amount).toBe(2);
+    expect(c.get(bad.id)).toBeUndefined();
+    expect(c.aside().map((x) => x.row.id)).toEqual([bad.id]);
+
+    await b.sync();
+    expect((await b.holds.ownHeld()).filter((o) => o.decision === 'discard').map((o) => o.row.id)).toEqual([bad.id]);
+    expect(await b.holds.deleteOwnDiscarded()).toBe(1);
+    expect(b.get(bad.id)?.deletedAt).toBeTruthy();
+  });
+
+  it('sets malformed entries aside on every phone instead of storing them', async () => {
+    const { a, c } = await household();
+    const broken = { ...txn({ deviceId: 'B', updatedAt: nextTime() }), amount: 'lots' } as unknown as Row;
+    const space = householdSpace(key, 'house');
+    const s = server.spaces.get(space.id)!;
+    records().set(recordKey(space, 'transactions', broken.id), { seq: ++s.head, payload: sealRecord(space, 'transactions', broken) });
+    expect((await c.sync()).setAside).toBe(1);
+    expect(c.get(broken.id)).toBeUndefined();
+    expect(c.aside()[0]).toMatchObject({ reason: 'invalid' });
+    // Only discarding is offered for it; merging can't make it readable.
+    await a.sync();
+    await a.holds.decideEntry('transactions', broken.id, 'merge');
+    expect(a.get(broken.id)).toBeUndefined();
+  });
+
+  it('ignores rules not made by the head, and hands the role over', async () => {
+    const { a, b, c, t1 } = await household();
+    await expect(c.holds.holdEdits({ deviceId: 'B', day: null })).rejects.toThrow('Only the household head');
+    // A modified app on C writes a rule anyway: the others ignore it.
+    await c.raw('sync_holds', { holdDevice: 'B', since: null, until: null, tbl: null, recordId: null, decision: 'hold', note: null });
+    await c.sync();
+    await b.edit(t1.id, { amount: 777 });
+    await b.sync();
+    await a.sync();
+    expect(a.get(t1.id)?.amount).toBe(777);
+
+    await a.holds.handOverHead('C');
+    await a.sync();
+    await c.sync();
+    expect(c.holds.isHead()).toBe(true);
+    await expect(a.holds.holdEdits({ deviceId: 'B', day: null })).rejects.toThrow('Only the household head');
   });
 });
 

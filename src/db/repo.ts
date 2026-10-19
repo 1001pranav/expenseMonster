@@ -101,8 +101,97 @@ export async function applyRemote<K extends TableName>(table: K, rows: Row<K>[])
   if (!rows.length) return;
   const cols = columnsOf(table);
   const stored = rows.map((r) => foldUnknown(r as unknown as Record<string, unknown>, cols) as unknown as Row<K>);
+  await keepReplaced(table, stored);
   await writeRows(table, stored);
   getState().putRows(table, stored);
+}
+
+// ── versions replaced by other phones' edits (services/holds.ts) ─────────────
+
+/** Keep the local version of each row another phone's edit is about to replace. */
+async function keepReplaced(table: TableName, incoming: { id: string; updatedAt: string }[]): Promise<void> {
+  const ids = incoming.map((r) => r.id);
+  const local = await getDb().getAllAsync<Record<string, unknown> & { id: string; updatedAt: string }>(`SELECT * FROM "${table}" WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+  const next = new Map(incoming.map((r) => [r.id, r.updatedAt]));
+  const replaced = local.filter((r) => next.get(r.id) !== r.updatedAt);
+  if (!replaced.length) return;
+  const at = now();
+  await getDb().transaction((tx) =>
+    tx.runManyAsync(
+      'INSERT OR REPLACE INTO row_history (tbl, id, updatedAt, row, savedAt) VALUES (?, ?, ?, ?, ?)',
+      replaced.map((r) => [table, r.id, r.updatedAt, JSON.stringify(expandExtra(r)), at]),
+    ),
+  );
+}
+
+/** Earlier versions of a row, newest first. */
+export async function historyOf(table: TableName, id: string): Promise<BaseRow[]> {
+  const rows = await getDb().getAllAsync<{ row: string }>('SELECT row FROM row_history WHERE tbl = ? AND id = ? ORDER BY updatedAt DESC', [table, id]);
+  return rows.map((r) => JSON.parse(r.row));
+}
+
+/** Forget replaced versions older than `days`. */
+export async function pruneHistory(days: number): Promise<void> {
+  await getDb().runAsync('DELETE FROM row_history WHERE savedAt < ?', [new Date(Date.now() - days * 86_400_000).toISOString()]);
+}
+
+/**
+ * Show this version of a row on this phone only: written as is (its updatedAt kept), and recorded
+ * as what every cloud space last synced, so it is not uploaded as an edit.
+ */
+export async function setLocalVersion(table: TableName, row: BaseRow): Promise<void> {
+  await writeRows(table, [foldUnknown(row as unknown as Record<string, unknown>, columnsOf(table)) as never]);
+  await getDb().runAsync('UPDATE cloud_records SET updatedAt = ? WHERE tbl = ? AND id = ?', [row.updatedAt, table, row.id]);
+}
+
+/** Remove a row from this phone only (no tombstone): it was another phone's, set aside for review. */
+export async function dropLocal(table: TableName, id: string): Promise<void> {
+  await getDb().runAsync(`DELETE FROM "${table}" WHERE id = ?`, [id]);
+}
+
+/** Rows last saved by `deviceId` (all phones when null), in a time range when given, or one row by id. */
+export async function rowsSavedBy(table: TableName, by: { deviceId?: string | null; since?: string | null; until?: string | null; id?: string | null }): Promise<BaseRow[]> {
+  const filters: [string, string | null | undefined][] = [
+    ['id = ?', by.id],
+    ['deviceId = ?', by.deviceId],
+    ['updatedAt >= ?', by.since],
+    ['updatedAt < ?', by.until],
+  ];
+  const used = filters.filter(([, v]) => v) as [string, string][];
+  if (!used.length) return [];
+  const where = used.map(([sql]) => sql);
+  const params = used.map(([, v]) => v);
+  return expanded(await getDb().getAllAsync<BaseRow>(`SELECT * FROM "${table}" WHERE ${where.join(' AND ')}`, params));
+}
+
+// ── rows set aside for review (services/holds.ts) ─────────────────────────────
+
+export interface AsideRecord {
+  tbl: string;
+  row: BaseRow;
+  reason: 'invalid' | 'held';
+  receivedAt: string;
+}
+
+/** Set rows aside instead of applying them; one version per row (`ordered`: as for holdRecords). */
+export async function setAside(records: Omit<AsideRecord, 'receivedAt'>[], ordered: boolean): Promise<void> {
+  if (!records.length) return;
+  const current = new Map((await asideRecords()).map((a) => [`${a.tbl}:${a.row.id}`, a.row]));
+  const keep = records.filter((r) => replacesHeld(current.get(`${r.tbl}:${r.row.id}`), r.row, ordered));
+  if (!keep.length) return;
+  const at = now();
+  await getDb().transaction((tx) =>
+    tx.runManyAsync('INSERT OR REPLACE INTO aside_records (tbl, id, row, reason, receivedAt) VALUES (?, ?, ?, ?, ?)', keep.map((r) => [r.tbl, r.row.id, JSON.stringify(r.row), r.reason, at])),
+  );
+}
+
+export async function asideRecords(): Promise<AsideRecord[]> {
+  const rows = await getDb().getAllAsync<{ tbl: string; row: string; reason: AsideRecord['reason']; receivedAt: string }>('SELECT tbl, row, reason, receivedAt FROM aside_records ORDER BY receivedAt DESC');
+  return rows.map((r) => ({ tbl: r.tbl, row: JSON.parse(r.row), reason: r.reason, receivedAt: r.receivedAt }));
+}
+
+export async function releaseAside(table: string, id: string): Promise<void> {
+  await getDb().runAsync('DELETE FROM aside_records WHERE tbl = ? AND id = ?', [table, id]);
 }
 
 // Rows read for sending or comparing with another phone's carry their `extra` fields unfolded.
@@ -277,6 +366,9 @@ export async function saveSettings(patch: Partial<Settings>): Promise<void> {
 }
 
 // ── peers ──────────────────────────────────────────────────────────────────
+
+/** Forget every paired phone (this phone left the household). */
+export const forgetPeers = () => getDb().runAsync('DELETE FROM peers');
 
 export const listPeers = () => getDb().getAllAsync<Peer>('SELECT * FROM peers ORDER BY pairedAt');
 

@@ -21,6 +21,7 @@ import { listPeers } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { bootstrap } from '@/services/bootstrap';
 import { cloudConfigured, cloudSyncNow, cloudSyncSoon, type CloudResult } from '@/services/cloud';
+import { publishDevice } from '@/services/holds';
 import { startLiveSync } from '@/services/livesync';
 import { holdSync, isSyncHeld, releaseSync, useSyncHold } from '@/services/syncHold';
 import { vaultSyncSoon } from '@/services/vault';
@@ -139,6 +140,11 @@ function App() {
   useEffect(() => {
     if (ready && identity.onboarded) scheduleSoon();
   }, [ready, version, identity.onboarded]);
+
+  // Family phones show this phone by name (household head, review).
+  useEffect(() => {
+    if (ready && identity.onboarded) publishDevice().catch((e) => logFailure('could not publish this phone to the household', e, 'warn'));
+  }, [ready, identity.onboarded, identity.deviceName]);
 
   // Optional cloud sync: upload edits shortly after they happen (no-op unless the user turned it on).
   useEffect(() => {

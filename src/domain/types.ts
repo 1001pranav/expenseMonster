@@ -240,6 +240,35 @@ export interface SmsFormat extends BaseRow {
   active: 0 | 1;
 }
 
+/** A phone in the household. Each phone publishes its own (id = its deviceId). */
+export interface Device extends BaseRow {
+  name: string;
+}
+
+/** The household's one shared record (id "household"): who is head. Only the head can change it. */
+export interface HouseholdInfo extends BaseRow {
+  headDeviceId: string | null;
+}
+
+export type HoldDecision = 'hold' | 'merge' | 'discard';
+
+/**
+ * A head's rule about edits from other phones (domain/sync/holds.ts). It covers one entry
+ * (tbl + recordId), or edits by one phone (holdDevice), saved in a time range (since/until), or both.
+ */
+export interface SyncHold extends BaseRow {
+  /** Phone whose edits are covered; null = any phone (with a time range). (`deviceId` is who made the rule.) */
+  holdDevice: string | null;
+  /** Edits saved at or after this UTC time ("a particular day" = that day's local midnight to the next). */
+  since: string | null;
+  /** Edits saved before this UTC time. */
+  until: string | null;
+  tbl: string | null;
+  recordId: string | null;
+  decision: HoldDecision;
+  note: string | null;
+}
+
 export interface Peer {
   deviceId: string;
   name: string;
@@ -263,9 +292,16 @@ export interface TableMap {
   budgets: Budget;
   rules: CategoryRule;
   sms_formats: SmsFormat;
+  devices: Device;
+  household: HouseholdInfo;
+  sync_holds: SyncHold;
 }
 export type TableName = keyof TableMap;
+// Control tables first: a file or page that changes the head or a rule is applied before the data it covers.
 export const SYNC_TABLES: TableName[] = [
+  'devices',
+  'household',
+  'sync_holds',
   'categories',
   'members',
   'accounts',

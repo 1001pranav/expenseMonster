@@ -117,7 +117,17 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   budgets: { categoryId: TN, month: TN, amount: IN0 },
   rules: { pattern: TN, categoryId: TN },
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
+  devices: { name: TN },
+  household: { headDeviceId: T },
+  sync_holds: { holdDevice: T, since: T, until: T, tbl: T, recordId: T, decision: TN, note: T },
 };
+
+/** Tables created after v1, by the migration that created them (older migrations must skip them). */
+const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5 };
+const tablesAt = (version: number) => (Object.keys(TABLES) as TableName[]).filter((t) => (CREATED_IN[t] ?? 1) <= version);
+
+/** Column → SQL type, as checked on rows from other phones (domain/sync/validate.ts). */
+export const columnDefsOf = (table: TableName): Record<string, string> => ({ ...COMMON, ...TABLES[table] });
 
 /** Every column, including `extra`: fields from a newer app version (domain/sync/forward.ts). */
 export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table]), EXTRA];
@@ -139,7 +149,7 @@ function createTable(name: TableName, withExtra = true): string {
 export const MIGRATIONS: string[] = [
   [
     // v1 tables (later tables get their own migration below).
-    ...(Object.keys(TABLES) as TableName[]).filter((t) => t !== 'sms_formats').map((t) => createTable(t, false)),
+    ...tablesAt(1).map((t) => createTable(t, false)),
     'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT);',
     'CREATE TABLE IF NOT EXISTS peers (deviceId TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, lastSentAt TEXT, lastReceivedAt TEXT, pairedAt TEXT NOT NULL);',
     'CREATE INDEX IF NOT EXISTS txn_when ON transactions(occurredAt);',
@@ -158,7 +168,17 @@ export const MIGRATIONS: string[] = [
   // v4: keep data from newer app versions (domain/sync/forward.ts): unknown fields per row, and
   // whole records of tables this version doesn't have yet (never synced from here).
   [
-    ...(Object.keys(TABLES) as TableName[]).map((t) => `ALTER TABLE "${t}" ADD COLUMN "${EXTRA}" TEXT;`),
+    ...tablesAt(3).map((t) => `ALTER TABLE "${t}" ADD COLUMN "${EXTRA}" TEXT;`),
     'CREATE TABLE IF NOT EXISTS held_records (tbl TEXT NOT NULL, id TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (tbl, id));',
+  ].join('\n'),
+  // v5: household head and review (domain/sync/holds.ts, services/holds.ts). Synced: phones, who is
+  // head, the head's rules. Local only: rows set aside for review, and versions replaced by other
+  // phones' edits (so a held edit can be undone without asking anyone).
+  [
+    createTable('devices'),
+    createTable('household'),
+    createTable('sync_holds'),
+    'CREATE TABLE IF NOT EXISTS aside_records (tbl TEXT NOT NULL, id TEXT NOT NULL, row TEXT NOT NULL, reason TEXT NOT NULL, receivedAt TEXT NOT NULL, PRIMARY KEY (tbl, id));',
+    'CREATE TABLE IF NOT EXISTS row_history (tbl TEXT NOT NULL, id TEXT NOT NULL, updatedAt TEXT NOT NULL, row TEXT NOT NULL, savedAt TEXT NOT NULL, PRIMARY KEY (tbl, id, updatedAt));',
   ].join('\n'),
 ];

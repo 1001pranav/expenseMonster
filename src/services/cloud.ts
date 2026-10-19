@@ -95,6 +95,8 @@ export interface CloudResult {
   unreadable: number;
   /** Records only a newer app version shows: kept until this phone is updated. */
   held: number;
+  /** Records set aside for the household head's review. */
+  setAside: number;
 }
 
 const STATUS_KEY = 'cloud.status';
@@ -147,6 +149,7 @@ async function pull(space: Space, rules: SpaceRules): Promise<Omit<CloudResult, 
   let received = 0;
   let unreadable = 0;
   let held = 0;
+  let setAside = 0;
   for (;;) {
     const page = await rpc<PulledRecord[]>('emx_records_pull', { p_space: space.id, p_token: space.token, p_after: cursor, p_limit: PAGE });
     if (!page.length) break;
@@ -154,11 +157,12 @@ async function pull(space: Space, rules: SpaceRules): Promise<Omit<CloudResult, 
     received += r.received;
     unreadable += r.unreadable;
     held += r.held;
+    setAside += r.setAside;
     cursor = Number(page[page.length - 1].seq);
     await setMeta(cursorKey(space), String(cursor));
     if (page.length < PAGE) break;
   }
-  return { received, unreadable, held, pendingConflicts: (await loadConflicts()).length };
+  return { received, unreadable, held, setAside, pendingConflicts: (await loadConflicts()).length };
 }
 
 /**
@@ -232,6 +236,7 @@ export async function syncSpace(space: Space, rules: SpaceRules): Promise<CloudR
     total.received += again.received;
     total.unreadable += again.unreadable;
     total.held += again.held;
+    total.setAside += again.setAside;
     total.pendingConflicts = again.pendingConflicts;
   }
   return total;

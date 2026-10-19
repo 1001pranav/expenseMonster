@@ -14,7 +14,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 | Insurance | Premiums and renewals with alerts 30, 7 and 1 day before |
 | Reminders | Local notifications for every due item, with **Pay now / Mark paid / Snooze** actions |
 | Payments | UPI hand-off (`upi://pay`) to any UPI app. The app then asks whether the payment succeeded, because UPI apps don't report the result back |
-| Household | Members, who-owes-whom, simplified settle-up |
+| Household | Members, who-owes-whom, simplified settle-up. A household head can hold back, merge or discard edits from a phone, a day or one entry |
 | Insights | Category donut, 12-month income vs expense, savings trend, daily heat-calendar, budgets, card spend, debt payoff projection |
 
 ## Data storage
@@ -59,6 +59,17 @@ Setup:
    Without them, the cloud option is hidden. A test fails the build if a secret / service_role key is set.
 
 The anon key ships inside the APK, so anyone can call the functions. Without the household key they can neither read nor write a household's records.
+
+## Household head and review
+
+When a phone sends bad data, the household doesn't have to take it. Source: `src/domain/sync/holds.ts`, `src/services/holds.ts`.
+
+- **Damaged entries are never stored.** Every phone checks each entry it receives against the column types (`src/domain/sync/validate.ts`): an amount that isn't a whole number, a missing date, an unknown transaction type. A failing entry is **set aside** on that phone instead of being applied, so it can't break a screen.
+- **One phone is the household head.** Household → *Household head & review*: any phone can take the role while nobody has it, and the head can hand it to another phone. If two phones claim it before syncing, the earlier claim wins on every phone.
+- **The head can hold edits back:** everything from one phone, everything saved on one day (by one phone or by all), or a single entry. Every phone then sets matching entries aside, including ones it already applied. In that case it shows the version the edit replaced again, kept for 90 days for this purpose, or hides the entry if it was new.
+- **The head decides:** *Merge* applies the entries on every phone, *Discard* keeps them aside for good. This works per entry or for a whole rule. Damaged entries can only be discarded. Everyone sees what is waiting and who is reviewing it.
+- **Nothing is deleted or rewritten on the server.** Each phone only decides what it shows, from the same rules. The phone whose entries are held keeps them. If they are discarded, its user is asked to **delete them** or **separate this phone** (it leaves with all its data as a household of its own).
+- **The head role is kept by the app, not the server.** The server can't read anything, so it can't check roles: every phone ignores rules and head changes that the current head didn't make. A modified app could ignore them too. Removing a phone so that it can't read the family's future entries needs a new household key (planned).
 
 ## Optional cloud backup (password-encrypted)
 
