@@ -1,0 +1,20 @@
+// Local Expo module: reads the text of a (password-protected) PDF with its position on the page,
+// for importing CDSL/NSDL consolidated account statements (src/domain/cas.ts).
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+
+android {
+  namespace "expo.modules.caspdf"
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  // Apache PDFBox, Android port (Apache-2.0): opens encrypted PDFs and reports where each word sits.
+  implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
+}

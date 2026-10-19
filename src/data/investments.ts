@@ -171,3 +171,53 @@ export async function saveExchange(x: ExchangeInput): Promise<{ sale: Trade; pur
   const purchase = await saveInvestment({ ...common, ...x.buy, side: 'buy', cash: difference > 0 ? { ...x.pay, amount: difference } : null });
   return { sale, purchase, cash: difference };
 }
+
+export type CasAction =
+  | { kind: 'price'; holdingId: string }
+  | { kind: 'link'; holdingId: string }
+  | { kind: 'add'; cost: Paise }
+  | { kind: 'skip' };
+
+/**
+ * Apply a statement's holdings (domain/casImport.ts), each as the user chose: update the price of
+ * a matched holding, link an existing one (its ISIN is set) and update its price, or add it as an
+ * opening balance: a purchase with no money moved, at the cost the user confirmed, dated the
+ * statement date. Quantities of matched holdings are never changed: the statement doesn't say what
+ * a difference cost.
+ */
+export async function applyCasImport(
+  x: { asOf: YMD; owner: string | null; scope: Scope },
+  items: { line: { isin: string; name: string; kind: 'equity' | 'fund'; quantity: number; price: Paise }; action: CasAction }[],
+): Promise<{ priced: number; added: number }> {
+  let priced = 0;
+  let added = 0;
+  const price = (holdingId: string, p: Paise) => update('holdings', holdingId, { priceNow: p, priceAsOf: x.asOf, priceSource: 'cas' });
+  for (const { line, action } of items) {
+    if (action.kind === 'price') {
+      await price(action.holdingId, line.price);
+      priced++;
+    } else if (action.kind === 'link') {
+      await update('holdings', action.holdingId, { symbol: line.isin });
+      await price(action.holdingId, line.price);
+      priced++;
+    } else if (action.kind === 'add') {
+      const trade = await saveInvestment({
+        side: 'buy',
+        holding: { assetClass: line.kind === 'equity' ? 'equity' : 'mf', form: null, fundType: null, name: line.name || line.isin, symbol: line.isin, unit: line.kind === 'equity' ? 'share' : 'unit', purity: null, memberId: x.owner },
+        tradeDate: x.asOf,
+        amount: action.cost,
+        quantity: line.quantity,
+        unitPrice: null,
+        charges: 0,
+        taxes: 0,
+        refRate: null,
+        cash: null,
+        note: 'Opening balance from a consolidated account statement',
+        scope: x.scope,
+      });
+      await price(trade.holdingId, line.price);
+      added++;
+    }
+  }
+  return { priced, added };
+}

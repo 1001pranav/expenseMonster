@@ -30,7 +30,7 @@ jest.mock('@/db/repo', () => {
 // Imported after the mock.
 /* eslint-disable import/first */
 import { deleteTransaction, restoreTransaction } from '../actions';
-import { deleteInvestment, saveExchange, saveInvestment, setPrice, type InvestmentInput } from '../investments';
+import { applyCasImport, deleteInvestment, saveExchange, saveInvestment, setPrice, type InvestmentInput } from '../investments';
 /* eslint-enable import/first */
 
 const tables = () => getState().tables;
@@ -147,6 +147,27 @@ describe('saving investments', () => {
     await saveInvestment({ ...gold, holding: { ...(gold.holding as object), name: '22K chain', purity: '916' } as never });
     expect(await setPrice(a.holdingId, 7_800_00, { sameMetal: true })).toBe(2);
     expect(tables().holdings.filter((h) => h.priceNow === 7_800_00).map((h) => h.name).sort()).toEqual(['24K gold coin', 'Another coin']);
+  });
+
+  it('applies a statement: prices matched holdings, links one, adds another as an opening balance', async () => {
+    const coin = await saveInvestment({ ...gold, holding: { ...(gold.holding as object), assetClass: 'mf', unit: 'unit', name: 'PPFAS', symbol: '122639' } as never });
+    const infy = await saveInvestment({ ...gold, holding: { ...(gold.holding as object), assetClass: 'equity', unit: 'share', name: 'Infosys', symbol: 'INE009A01021' } as never });
+    const fund = { isin: 'INF879O01027', name: 'PARAG PARIKH', kind: 'fund' as const, quantity: 1_234_567, price: 92_46 };
+    const r = await applyCasImport({ asOf: '2026-10-31', owner: 'me', scope: 'household' }, [
+      { line: { isin: 'INE009A01021', name: 'INFOSYS', kind: 'equity', quantity: 25_000, price: 1520_40 }, action: { kind: 'price', holdingId: infy.holdingId } },
+      { line: fund, action: { kind: 'link', holdingId: coin.holdingId } },
+      { line: { isin: 'INE040A01034', name: 'HDFC BANK', kind: 'equity', quantity: 40_000, price: 1700_00 }, action: { kind: 'add', cost: 60_000_00 } },
+      { line: { isin: 'INE002A01018', name: 'RELIANCE', kind: 'equity', quantity: 1_000, price: 2950_00 }, action: { kind: 'skip' } },
+    ]);
+    expect(r).toEqual({ priced: 2, added: 1 });
+    const h = (name: string) => tables().holdings.find((x) => x.name === name)!;
+    expect(h('Infosys')).toMatchObject({ priceNow: 1520_40, priceAsOf: '2026-10-31', priceSource: 'cas' });
+    expect(h('PPFAS')).toMatchObject({ symbol: 'INF879O01027', priceNow: 92_46 });
+    expect(h('HDFC BANK')).toMatchObject({ assetClass: 'equity', unit: 'share', memberId: 'me', symbol: 'INE040A01034', priceNow: 1700_00 });
+    const opening = tables().trades.find((t) => t.holdingId === h('HDFC BANK').id)!;
+    // No money moved, so no transaction: it isn't spending, and the month's invested total is unchanged.
+    expect(opening).toMatchObject({ amount: 60_000_00, quantity: 40_000, txnId: null, tradeDate: '2026-10-31' });
+    expect(tables().holdings.some((x) => x.name === 'RELIANCE')).toBe(false);
   });
 });
 
