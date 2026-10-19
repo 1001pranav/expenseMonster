@@ -126,6 +126,7 @@ export default function Investments() {
         ) : null}
       </Card>
 
+      <Button title="Import CDSL / NSDL statement" icon="document-text-outline" variant="secondary" onPress={() => router.push('/investments/cas')} />
       {held.some((x) => x.holding.assetClass === 'mf') ? (
         <Button title="Get today's fund prices (AMFI)" icon="cloud-download-outline" variant="secondary" loading={fetching} onPress={getFundPrices} />
       ) : null}

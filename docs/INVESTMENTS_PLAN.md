@@ -3,8 +3,8 @@
 Status: decisions agreed (§8). **Phases 1 and 2 are built** (§7). Phase 2: current prices (one
 gold/silver rate per purity), value and gain not yet taken, guided jewellery exchange, what went
 over the metal's worth, and capital gains on the Tax screen (§6). **Phase 3 has started: fund prices
-from AMFI are built** (§3b). Share prices are researched (§3c): import of a bhavcopy the user
-downloads, pending a real sample file. Then a gold/silver reference rate.
+from AMFI are built** (§3b). Share prices come from the user's own CDSL/NSDL statement (§3c, built;
+to be tuned on real statements). Then a gold/silver reference rate.
 
 ## 3b. Online prices: mutual funds (built)
 
@@ -199,31 +199,46 @@ spending.
 purchases, so FIFO works per instalment, which is what the tax rules need. A switch between
 schemes is a sale in one holding and a purchase in another on the same day.
 
-## 3c. Online prices: shares (researched, not built)
+## 3c. Share prices: from the consolidated account statement (built)
 
-Researched October 2026. India has no official, free, per-stock price API like AMFI's NAV file. The
-options, with what was confirmed and what wasn't:
+**Decision:** share prices (and fund values) come only from the person's own CDSL or NSDL
+consolidated account statement (CAS), imported on the phone. Nothing else. Researched and **ruled out**,
+so nothing in the app goes near the exchanges' or anyone's terms:
+- **The app downloading NSE's daily price file.** NSE's terms prohibit automated collection from
+  its website, and its servers block anything that doesn't look like a browser.
+- **Unofficial Yahoo or Google endpoints.**
+- **Broker APIs.** Every member would need their own developer keys and a daily login.
+- **Paid CAS-parsing services.** The whole portfolio would go to a third party.
 
-| Option | Cost | Terms | Practical | Verdict |
-|---|---|---|---|---|
-| **App downloads NSE's daily bhavcopy** (every stock's close, CM-UDiFF zip on `nsearchives.nseindia.com`) | Free | NSE's Terms of Use prohibit "systematic or automated data collection (including scraping…)" from the website without written permission; commercial use of market data is priced by NSE Data | NSE rejects requests that don't look like a browser (403s are widely reported); file names carry a version and changed in July 2024 (old CSV discontinued 8 Jul 2024) | **No.** Making it work means disguising the app as a browser to get past NSE's blocking, against its terms. I won't build that |
-| **User downloads the bhavcopy in their browser and opens it in the app** (NSE or BSE) | Free | A person downloading a file NSE offers for download, for their own use | One download every week or month; picked with the document picker the app already uses for `.emx` files (it only registers for shared images, on purpose), and `fflate` (already a dependency) unzips | **Recommended.** Same privacy as AMFI: the whole file is read on the phone, nothing about holdings leaves it |
-| Broker APIs (Angel One SmartAPI, Upstox: data reported free; Zerodha Kite: ₹500/month for data) | Free–₹500/mo | Each person's own account and keys, for their own use | Every family member registers a developer app, keeps API secrets on the phone, and logs in again every day (TOTP). Far too much for end-of-day values | No, maybe later as an option for one power user |
-| Yahoo/Google finance endpoints | Free | Unofficial; their terms don't allow it | Change or vanish without notice | No |
-| CDSL/NSDL monthly eCAS (consolidated statement PDF emailed to every demat holder) | Free | The user's own statement | Has every holding with month-end value, and could *import* holdings too. Needs on-device PDF text extraction (PAN-protected), which the app doesn't have. Commercial CAS-parsing APIs mean uploading your whole portfolio to a third party: not acceptable here | Good **phase 4** candidate (import + valuation), on-device only |
-| Licensed feed (NSE Data, vendors) | Paid | Proper licence | Server needed | Only if the app is ever commercial (also needed for AMFI data then) |
+The AMFI fund prices (§3b) are a separate, permitted source (personal, non-commercial use) and stay.
 
-**Recommended build:** "Import price file". The user downloads the day's bhavcopy from NSE's (or
-BSE's) website, then picks it under Investments → *Import price file*. The app unzips it, reads columns **by
-header name** (as for AMFI), and matches shares by **ISIN** first, then ticker (`symbol`). It then
-shows old → new closing prices with the file's trade date, and saves only on Apply (`priceSource:
-'nse'`/`'bse'`). Shares gain an optional ISIN, which is on every contract note and statement and is
-unambiguous across exchanges.
+**How it works:**
+- **Reading the PDF.** `modules/cas-pdf` is a local Expo module (Android) that opens the
+  PAN-protected PDF with PDFBox-Android 2.0.27.0 (Apache-2.0) and returns each word with its
+  position. Hindi-overlay words are dropped. The equivalent public package (`expo-pdf-text-extract`,
+  MIT) was read, but vendoring ~60 lines avoids depending on a 13-star project. It needs a new build
+  (CI builds it); older builds say so.
+- **Rebuilding rows.** `domain/cas.ts` rebuilds rows from the positions. A row is used only if it
+  **adds up**: among its numbers, quantity × price = value within 0.5%. Anything else is counted as
+  unreadable, never guessed. Learned from the open-source casparser (MIT): CDSL share and fund
+  tables, NSDL summary rows, pledged balances, wrapped names, holdings printed twice.
+- **Matching.** One line per ISIN. A CAS is one person's, so rows match that person's or joint
+  holdings by ISIN (kept in `symbol`), never another member's. A fund linked to AMFI keeps getting
+  daily prices after its symbol becomes the ISIN.
+- **Choosing what to save.** The user picks, per holding: update price (`priceSource: 'cas'`,
+  dated the statement), link to a holding the app already has, add as an opening balance, or skip.
+  An opening balance has no money moving and a confirmed cost. The cost is pre-filled from the
+  statement for funds, or "today's value", labelled as counting gains from today. Quantities of
+  matched holdings are never changed; a difference is shown.
+- **Privacy.** The picked copy is deleted after reading, and the password isn't stored.
+- **Improving the reader without anyone's statement.** "Share an anonymised copy" (offered when
+  rows didn't add up) shares the layout with names, PAN, account/folio/phone numbers and e-mails
+  masked. ISINs, headings, dates and amounts are kept: the person sees this and decides.
 
-**Not yet verified:** the exact current UDiFF column names (one guide names `TckrSymb`, `ISIN`,
-`ClsPric`; `TradDt` and `SctySrs` were not confirmed), BSE's current file format, and BSE's terms. Before
-building, test the parser against a **real downloaded file** from each exchange. This sandbox
-can't reach either site.
+**Limits:** values are as on the statement date (monthly when there were transactions, otherwise
+half-yearly; one can be downloaded on demand). **It hasn't been run against a real statement yet**: the
+tests use layouts rebuilt from casparser's documented rows. The first real statements, or their
+anonymised copies, are how it gets tuned.
 
 ## 4. UX
 
