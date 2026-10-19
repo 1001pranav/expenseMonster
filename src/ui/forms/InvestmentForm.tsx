@@ -20,7 +20,7 @@ import {
   type TradeNumbers,
 } from '@/domain/investments';
 import { formatINR, parseAmount, type Paise } from '@/domain/money';
-import type { AssetClass, PayMethod, Scope, Trade } from '@/domain/types';
+import type { AssetClass, FundType, PayMethod, Scope, Trade } from '@/domain/types';
 import { deleteInvestment, saveInvestment } from '@/data/investments';
 import { saveTransaction } from '@/data/actions';
 import { useMembers, useSelfId, useTable, useToday } from '@/data/hooks';
@@ -84,6 +84,7 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
   const [owner, setOwner] = useState<string>(''); // '' = joint
+  const [fundType, setFundType] = useState<FundType | null>(null);
   const [purpose, setPurpose] = useState<Purpose>('investment');
 
   const [amountText, setAmountText] = useState(rupeesText(existing?.amount ?? cashTxn?.amount ?? prefill?.amount ?? null));
@@ -196,7 +197,7 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
           side,
           holding: chosen
             ? { id: chosen.id }
-            : { assetClass, form, name: newName, symbol: symbol.trim() || null, unit, purity: isMetal ? purity : null, memberId: owner || null },
+            : { assetClass, form, fundType: assetClass === 'mf' ? fundType : null, name: newName, symbol: symbol.trim() || null, unit, purity: isMetal ? purity : null, memberId: owner || null },
           tradeDate: date,
           amount,
           quantity: hasQuantity ? quantity : null,
@@ -316,6 +317,21 @@ export function InvestmentForm({ side: initialSide = 'buy', tradeId, holdingId, 
                 onChangeText={setName}
                 placeholder={defaultHoldingName(assetClass, form, purity) || (assetClass === 'equity' ? 'Infosys' : assetClass === 'mf' ? 'Parag Parikh Flexi Cap' : 'What is it?')}
               />
+              {assetClass === 'mf' ? (
+                <ChipSelect
+                  label="The fund invests in"
+                  value={fundType}
+                  onChange={setFundType}
+                  allowNone
+                  options={[
+                    { value: 'equity', label: 'Shares (equity)' },
+                    { value: 'debt', label: 'Debt' },
+                    { value: 'hybrid', label: 'Hybrid' },
+                    { value: 'gold', label: 'Gold' },
+                    { value: 'international', label: 'International' },
+                  ]}
+                />
+              ) : null}
               {assetClass === 'equity' || assetClass === 'mf' ? (
                 <TextField label={assetClass === 'equity' ? 'Symbol (optional)' : 'Scheme code (optional)'} value={symbol} onChangeText={setSymbol} placeholder={assetClass === 'equity' ? 'INFY' : 'AMFI code'} autoCapitalize="characters" />
               ) : null}

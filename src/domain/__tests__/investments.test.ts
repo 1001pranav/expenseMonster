@@ -8,7 +8,10 @@ import {
   ledger,
   legacyInvestmentExpenses,
   parseQuantity,
+  portfolioValue,
+  premiumOverMetal,
   quantityText,
+  sameMetal,
   summarizeHoldings,
   unitFor,
 } from '../investments';
@@ -20,6 +23,7 @@ const holding = (over: Partial<Holding>): Holding => ({
   ...base(),
   assetClass: 'gold',
   form: 'jewellery',
+  fundType: null,
   name: '22K gold',
   symbol: null,
   unit: 'g',
@@ -191,5 +195,29 @@ describe('investments are not spending', () => {
   it('finds older entries filed under Investments as spending', () => {
     const old = txn({ categoryId: 'cat_invest' });
     expect(legacyInvestmentExpenses([old, txn({ categoryId: 'cat_food' }), { ...old, id: 'x', deletedAt: 'y' }])).toEqual([old]);
+  });
+});
+
+describe('value and making charges', () => {
+  it('values only what has a price and a complete quantity, and says how many it could not', () => {
+    const priced = { invested: 70_000_00, value: 75_000_00, soldOut: false };
+    const noPrice = { invested: 20_000_00, value: null, soldOut: false };
+    const sold = { invested: 0, value: null, soldOut: true };
+    expect(portfolioValue([priced, noPrice, sold] as never)).toEqual({ invested: 90_000_00, value: 75_000_00, valuedCost: 70_000_00, unvalued: 1 });
+  });
+
+  it('shows how much went over the metal when the day rate was noted', () => {
+    // 10 g at a ₹7,000 board rate (₹70,000 of metal), paid ₹80,340.
+    expect(premiumOverMetal(trade({ amount: 80_340_00, quantity: 10_000, refRate: 7_000_00 }))).toEqual({ metal: 70_000_00, premium: 10_340_00, share: 10_340_00 / 70_000_00 });
+    expect(premiumOverMetal(trade({ amount: 80_340_00, quantity: 10_000 }))).toBeNull();
+    expect(premiumOverMetal(trade({ side: 'sell', amount: 1, quantity: 1, refRate: 1 }))).toBeNull();
+  });
+
+  it('applies one rate to the same metal and purity, by weight only', () => {
+    const g22 = holding({});
+    expect(sameMetal(g22, holding({ form: 'coin' }))).toBe(true);
+    expect(sameMetal(g22, holding({ purity: '999' }))).toBe(false);
+    expect(sameMetal(g22, holding({ form: 'etf', unit: 'unit' }))).toBe(false);
+    expect(sameMetal(g22, holding({ form: 'sgb' }))).toBe(false);
   });
 });

@@ -1,9 +1,10 @@
 import { toISO, todayYMD, type YMD } from '@/domain/dates';
 import { uuidv7 } from '@/domain/ids';
-import { SALE_FLAG } from '@/domain/investments';
+import { SALE_FLAG, sameMetal } from '@/domain/investments';
 import type { Paise } from '@/domain/money';
-import type { AssetClass, Holding, PayMethod, QuantityUnit, Scope, Trade, Transaction } from '@/domain/types';
+import type { AssetClass, FundType, Holding, PayMethod, QuantityUnit, Scope, Trade, Transaction } from '@/domain/types';
 import { findById, insert, remove, update } from '@/db/repo';
+import { getState } from '@/db/store';
 import { saveTransaction } from './actions';
 
 /**
@@ -14,6 +15,7 @@ import { saveTransaction } from './actions';
 export interface NewHolding {
   assetClass: AssetClass;
   form: string | null;
+  fundType: FundType | null;
   name: string;
   symbol: string | null;
   unit: QuantityUnit;
@@ -117,4 +119,50 @@ export async function deleteInvestment(tradeId: string): Promise<void> {
 export const setHoldingClosed = (holdingId: string, closed: boolean) => update('holdings', holdingId, { closed: closed ? 1 : 0 });
 
 /** Rename, change owner, or set the last known price of a holding. */
-export const updateHolding = (holdingId: string, patch: Partial<Pick<Holding, 'name' | 'symbol' | 'memberId' | 'priceNow' | 'priceAsOf' | 'note'>>) => update('holdings', holdingId, patch);
+export const updateHolding = (holdingId: string, patch: Partial<Pick<Holding, 'name' | 'symbol' | 'memberId' | 'fundType' | 'priceNow' | 'priceAsOf' | 'note'>>) => update('holdings', holdingId, patch);
+
+/** Set a holding's current price (paise per unit); for gold or silver by weight, every holding of that metal and purity. */
+export async function setPrice(holdingId: string, price: Paise, opts: { sameMetal?: boolean } = {}): Promise<number> {
+  const holding = findById('holdings', holdingId);
+  if (!holding) throw new Error('That holding no longer exists');
+  const asOf = todayYMD();
+  const targets = opts.sameMetal ? getState().tables.holdings.filter((h) => h.id === holding.id || sameMetal(holding, h)) : [holding];
+  for (const h of targets) await update('holdings', h.id, { priceNow: price, priceAsOf: asOf });
+  return targets.length;
+}
+
+export interface ExchangeInput {
+  date: YMD;
+  /** The old piece: what the jeweller valued it at, and how much of it (null = all of it). */
+  old: { holdingId: string; quantity: number | null; value: Paise; deductions: Paise };
+  /** The new piece, at its full price (charges and GST included). */
+  buy: Omit<InvestmentInput, 'side' | 'tradeDate' | 'cash' | 'scope' | 'note'>;
+  /** How the difference was paid or received. */
+  pay: Omit<CashSide, 'amount'>;
+  note: string | null;
+  scope: Scope;
+}
+
+/**
+ * Old jewellery traded in for new (docs/INVESTMENTS_PLAN.md §3a): a sale of the old piece with no
+ * cash, and a purchase of the new one at its full price. Only the difference moves as money: paid
+ * on top with the purchase, or received with the sale when the old piece was worth more.
+ */
+export async function saveExchange(x: ExchangeInput): Promise<{ sale: Trade; purchase: Trade; cash: Paise }> {
+  const difference = x.buy.amount - x.old.value;
+  const common = { tradeDate: x.date, note: x.note, scope: x.scope };
+  const sale = await saveInvestment({
+    ...common,
+    side: 'sell',
+    holding: { id: x.old.holdingId },
+    amount: x.old.value,
+    quantity: x.old.quantity,
+    unitPrice: null,
+    charges: x.old.deductions,
+    taxes: 0,
+    refRate: null,
+    cash: difference < 0 ? { ...x.pay, method: x.pay.method === 'card' ? 'bank' : x.pay.method, amount: -difference } : null,
+  });
+  const purchase = await saveInvestment({ ...common, ...x.buy, side: 'buy', cash: difference > 0 ? { ...x.pay, amount: difference } : null });
+  return { sale, purchase, cash: difference };
+}

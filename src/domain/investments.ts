@@ -1,5 +1,6 @@
 import type { Paise } from './money';
 import { flagsOf, isLive } from './transactions';
+import type { YMD } from './dates';
 import type { AssetClass, Holding, QuantityUnit, Trade, Transaction } from './types';
 
 /**
@@ -183,6 +184,31 @@ export interface Realised {
   gain: Paise | null;
   /** Sold more than the recorded purchases: the cost covers only what was recorded ("at least" this gain). */
   beyondRecorded: boolean;
+  /**
+   * The purchases this sale used up, with their share of what it brought in: one sale can be partly
+   * short-term and partly long-term for tax. Empty when the cost is unknown.
+   */
+  parts: SalePart[];
+}
+
+export interface SalePart {
+  boughtOn: YMD;
+  quantity: number | null;
+  cost: Paise;
+  proceeds: Paise;
+}
+
+/** Share `total` across `weights` in proportion, the last taking the rounding remainder. */
+function shareOut(total: Paise, weights: number[]): Paise[] {
+  const sum = weights.reduce((a, w) => a + w, 0);
+  if (!sum) return weights.map((_, i) => (i === weights.length - 1 ? total : 0));
+  let given = 0;
+  return weights.map((w, i) => {
+    if (i === weights.length - 1) return total - given;
+    const v = Math.round((total * w) / sum);
+    given += v;
+    return v;
+  });
 }
 
 export interface HoldingSummary {
@@ -211,6 +237,7 @@ export function liveTrades(trades: Trade[], transactions: Transaction[]): Trade[
 }
 
 interface Lot {
+  date: YMD;
   quantity: number | null;
   cost: Paise;
   charges: Paise;
@@ -227,14 +254,16 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
   const realised: Realised[] = [];
   for (const tr of ordered) {
     if (tr.side === 'buy') {
-      lots.push({ quantity: tr.quantity, cost: tr.amount, charges: tr.charges + tr.taxes });
+      lots.push({ date: tr.tradeDate, quantity: tr.quantity, cost: tr.amount, charges: tr.charges + tr.taxes });
       continue;
     }
     let cost: Paise | null = 0;
     let beyondRecorded = false;
+    const used: Omit<SalePart, 'proceeds'>[] = [];
     if (tr.quantity === null) {
       // "Sold all of it": everything still held. With nothing recorded, the cost is unknown, not zero.
       cost = lots.length ? lots.reduce((a, l) => a + l.cost, 0) : null;
+      used.push(...lots.map((l) => ({ boughtOn: l.date, quantity: l.quantity, cost: l.cost })));
       lots = [];
     } else {
       let need = tr.quantity;
@@ -249,6 +278,7 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
         const part = take === lot.quantity ? lot.cost : Math.round((lot.cost * take) / lot.quantity);
         const partCharges = take === lot.quantity ? lot.charges : Math.round((lot.charges * take) / lot.quantity);
         if (cost !== null) cost += part;
+        used.push({ boughtOn: lot.date, quantity: take, cost: part });
         lot.cost -= part;
         lot.charges -= partCharges;
         lot.quantity -= take;
@@ -257,7 +287,13 @@ export function ledger(holding: Holding, trades: Trade[]): HoldingSummary {
       }
       if (need > 0 && cost !== null) beyondRecorded = true;
     }
-    realised.push({ trade: tr, proceeds: tr.amount, cost, gain: cost === null ? null : tr.amount - cost, beyondRecorded });
+    // What each purchase's share brought in: by quantity when every quantity is known, else by cost.
+    // Beyond what was recorded, the rest of the proceeds belong to purchases the app doesn't know.
+    const byQuantity = used.every((u) => u.quantity !== null) && tr.quantity !== null;
+    const covered = byQuantity && beyondRecorded ? Math.round((tr.amount * used.reduce((a, u) => a + (u.quantity ?? 0), 0)) / tr.quantity!) : tr.amount;
+    const shares = shareOut(covered, used.map((u) => (byQuantity ? (u.quantity ?? 0) : u.cost)));
+    const parts = cost === null ? [] : used.map((u, i) => ({ ...u, proceeds: shares[i] }));
+    realised.push({ trade: tr, proceeds: tr.amount, cost, gain: cost === null ? null : tr.amount - cost, beyondRecorded, parts });
   }
   const quantity = lots.reduce((a, l) => a + (l.quantity ?? 0), 0);
   const quantityComplete = holding.unit !== 'none' && lots.length > 0 && lots.every((l) => l.quantity !== null);
@@ -311,3 +347,45 @@ export function defaultHoldingName(assetClass: AssetClass, form: string | null, 
   }
   return meta.forms.find((x) => x.value === form)?.label ?? '';
 }
+
+// ── current value and what went over the metal ───────────────────────────────
+
+export interface PortfolioValue {
+  /** Cost of everything held. */
+  invested: Paise;
+  /** Current value of the holdings that have a price and a complete quantity. */
+  value: Paise;
+  /** Cost of those same holdings: value − valuedCost is the gain not yet taken. */
+  valuedCost: Paise;
+  /** Holdings that can't be valued (no price, or a purchase with no quantity). */
+  unvalued: number;
+}
+
+export function portfolioValue(summaries: HoldingSummary[]): PortfolioValue {
+  const out: PortfolioValue = { invested: 0, value: 0, valuedCost: 0, unvalued: 0 };
+  for (const s of summaries) {
+    if (s.soldOut) continue;
+    out.invested += s.invested;
+    if (s.value === null) out.unvalued++;
+    else {
+      out.value += s.value;
+      out.valuedCost += s.invested;
+    }
+  }
+  return out;
+}
+
+/**
+ * For jewellery and coins bought with the day's market rate noted: how much of the price went over
+ * the metal's worth (making charges, GST, the jeweller's margin), which isn't recovered on sale.
+ */
+export function premiumOverMetal(t: Trade): { metal: Paise; premium: Paise; share: number } | null {
+  if (t.side !== 'buy' || !t.refRate || !t.quantity) return null;
+  const metal = Math.round((t.quantity * t.refRate) / 1000);
+  if (!metal) return null;
+  return { metal, premium: t.amount - metal, share: (t.amount - metal) / metal };
+}
+
+/** Holdings that one metal rate applies to: same metal and purity, by weight (not ETFs or bonds). */
+export const sameMetal = (a: Holding, b: Holding) =>
+  (a.assetClass === 'gold' || a.assetClass === 'silver') && a.assetClass === b.assetClass && a.purity === b.purity && a.unit === 'g' && b.unit === 'g' && a.form !== 'sgb' && b.form !== 'sgb';

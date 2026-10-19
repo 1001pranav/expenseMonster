@@ -242,12 +242,15 @@ export interface SmsFormat extends BaseRow {
 
 export type AssetClass = 'gold' | 'silver' | 'equity' | 'mf' | 'fixed' | 'other';
 export type QuantityUnit = 'g' | 'share' | 'unit' | 'none';
+export type FundType = 'equity' | 'debt' | 'hybrid' | 'gold' | 'international';
 
 /** Something the family owns: "22K gold", "INFY", a fund. Its quantity and cost come from its trades. */
 export interface Holding extends BaseRow {
   assetClass: AssetClass;
   /** jewellery | coin | digital | sgb | etf | sip | lumpsum | fd | ppf | ... (domain/investments.ts). */
   form: string | null;
+  /** Mutual funds: what the fund invests in, which decides the tax on gains. Null = not said. */
+  fundType: FundType | null;
   name: string;
   /** NSE/BSE ticker, AMFI scheme code. */
   symbol: string | null;

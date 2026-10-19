@@ -30,13 +30,13 @@ jest.mock('@/db/repo', () => {
 // Imported after the mock.
 /* eslint-disable import/first */
 import { deleteTransaction, restoreTransaction } from '../actions';
-import { deleteInvestment, saveInvestment, type InvestmentInput } from '../investments';
+import { deleteInvestment, saveExchange, saveInvestment, setPrice, type InvestmentInput } from '../investments';
 /* eslint-enable import/first */
 
 const tables = () => getState().tables;
 const gold: InvestmentInput = {
   side: 'buy',
-  holding: { assetClass: 'gold', form: 'coin', name: '24K gold coin', symbol: null, unit: 'g', purity: '999', memberId: null },
+  holding: { assetClass: 'gold', form: 'coin', fundType: null, name: '24K gold coin', symbol: null, unit: 'g', purity: '999', memberId: null },
   tradeDate: '2026-10-12',
   amount: 75_000_00,
   quantity: 10_000,
@@ -106,4 +106,47 @@ describe('saving investments', () => {
     await deleteInvestment(buy.id);
     expect(tables().transactions).toHaveLength(0);
   });
+
+  it('trades in old jewellery: only the difference is paid, the new piece costs its full price', async () => {
+    const old = await saveInvestment({ ...gold, holding: { ...(gold.holding as object), form: 'jewellery', name: 'Old chain' } as never, amount: 40_000_00, quantity: 10_000 });
+    const x = await saveExchange({
+      date: '2026-10-15',
+      old: { holdingId: old.holdingId, quantity: null, value: 70_000_00, deductions: 2_000_00 },
+      buy: { ...gold, holding: { ...(gold.holding as object), form: 'jewellery', name: 'New necklace' } as never, amount: 1_10_000_00, quantity: 14_000 },
+      pay: { method: 'card', accountId: null, cardId: 'c1' },
+      note: null,
+      scope: 'household',
+    });
+    expect(x.cash).toBe(40_000_00);
+    expect(x.sale.txnId).toBeNull();
+    const paid = tables().transactions.find((t) => t.id === x.purchase.txnId)!;
+    expect(paid).toMatchObject({ amount: 40_000_00, method: 'card', cardId: 'c1', flags: null });
+    const [necklace, chain] = ['New necklace', 'Old chain'].map((n) => summarizeHoldings(tables().holdings, tables().trades, tables().transactions).find((s) => s.holding.name === n)!);
+    expect(necklace).toMatchObject({ invested: 1_10_000_00, quantity: 14_000 });
+    expect(chain).toMatchObject({ soldOut: true });
+    expect(chain.realised[0].gain).toBe(30_000_00);
+  });
+
+  it('when the old piece is worth more, the difference comes back with the sale', async () => {
+    const old = await saveInvestment({ ...gold, amount: 1_00_000_00 });
+    const x = await saveExchange({
+      date: '2026-10-15',
+      old: { holdingId: old.holdingId, quantity: null, value: 1_20_000_00, deductions: 0 },
+      buy: { ...gold, holding: { id: old.holdingId }, amount: 1_00_000_00 },
+      pay: { method: 'card', accountId: 'a1', cardId: 'c1' },
+      note: null,
+      scope: 'household',
+    });
+    expect(x.purchase.txnId).toBeNull();
+    expect(tables().transactions.find((t) => t.id === x.sale.txnId)).toMatchObject({ amount: 20_000_00, method: 'bank', flags: 'sale' });
+  });
+
+  it('sets one gold rate for every holding of that purity', async () => {
+    const a = await saveInvestment(gold);
+    await saveInvestment({ ...gold, holding: { ...(gold.holding as object), name: 'Another coin' } as never });
+    await saveInvestment({ ...gold, holding: { ...(gold.holding as object), name: '22K chain', purity: '916' } as never });
+    expect(await setPrice(a.holdingId, 7_800_00, { sameMetal: true })).toBe(2);
+    expect(tables().holdings.filter((h) => h.priceNow === 7_800_00).map((h) => h.name).sort()).toEqual(['24K gold coin', 'Another coin']);
+  });
 });
+
