@@ -3,33 +3,39 @@ import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { formatDay, isoToYMD, relativeDay, type YMD } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
+import { isFamilyTransfer } from '@/domain/settle';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
+import { useStore } from '@/db/store';
 import { fonts, gradients, radius, space, useTheme, type GradientName } from '../theme';
 import { GradientFill, GradientTile } from './Aurora';
 import { Card, ListRow, Money, Pill, Row, Txt, type IconName } from './core';
 
 const METHOD_LABEL: Record<Transaction['method'], string> = { upi: 'UPI', bank: 'Bank', cash: 'Cash', card: 'Card', wallet: 'Wallet' };
 
-export function txnTitle(t: Transaction, cat?: Category) {
+export function txnTitle(t: Transaction, cat?: Category, nameOf?: (memberId: string | null) => string) {
   if (t.type === 'transfer' && t.linkType === 'card') return 'Card bill payment';
+  if (isFamilyTransfer(t) && nameOf && t.memberId && t.toMemberId) return `${nameOf(t.memberId)} → ${nameOf(t.toMemberId)}`;
   if (t.type === 'settlement') return 'Settlement';
   return t.payee || cat?.name || (t.type === 'income' ? 'Income' : 'Expense');
 }
 
 export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Category; card?: CreditCard; onPress?: () => void }) {
   const { colors } = useTheme();
+  const members = useStore((s) => s.tables.members);
+  const selfId = useStore((s) => s.identity.selfMemberId);
+  const nameOf = (id: string | null) => (id === selfId ? 'You' : (members.find((m) => m.id === id)?.name ?? 'Someone'));
   const sign = t.type === 'expense' ? -1 : t.type === 'income' ? 1 : 0;
-  const icon: IconName = t.type === 'transfer' ? 'swap-horizontal' : t.type === 'settlement' ? 'people' : ((cat?.icon as IconName) ?? (t.type === 'income' ? 'arrow-down' : 'arrow-up'));
+  const icon: IconName = isFamilyTransfer(t) ? 'people' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? (t.type === 'income' ? 'arrow-down' : 'arrow-up'));
   const color = t.type === 'transfer' || t.type === 'settlement' ? colors.info : (cat?.color ?? colors.textMuted);
-  const meta = [cat && t.payee ? cat.name : null, t.method === 'card' && card ? card.name : METHOD_LABEL[t.method]].filter(Boolean).join(' · ');
+  const meta = [t.type === 'settlement' ? 'Settlement' : null, cat && t.payee ? cat.name : null, t.method === 'card' && card ? card.name : METHOD_LABEL[t.method]].filter(Boolean).join(' · ');
   const flags = flagsOf(t);
   return (
     <ListRow
       onPress={onPress ?? (() => router.push(`/txn/${t.id}`))}
       icon={icon}
       iconColor={color}
-      title={txnTitle(t, cat)}
+      title={txnTitle(t, cat, nameOf)}
       subtitle={
         <Row gap={0.75}>
           <Txt variant="small" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>

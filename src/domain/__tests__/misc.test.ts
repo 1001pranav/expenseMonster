@@ -1,7 +1,7 @@
 import { budgetUsage } from '../budget';
 import { findDuplicate } from '../dedupe';
 import { computeDues, computeReminders } from '../dues';
-import { memberBalances, simplifyDebts } from '../settle';
+import { isFamilyTransfer, memberBalances, memberForVpa, simplifyDebts } from '../settle';
 import { monthTotals, ruleKey, suggestCategory } from '../transactions';
 import { at, base, bill, biller, card, txn } from './fixtures';
 
@@ -14,6 +14,11 @@ describe('dedupe', () => {
     expect(findDuplicate({ ...existing[0], sourceRef: null, occurredAt: '2026-09-12T10:08:00Z' }, existing)?.kind).toBe('likely');
     expect(findDuplicate({ ...existing[0], sourceRef: null, occurredAt: '2026-09-12T10:20:00Z' }, existing)).toBeNull();
     expect(findDuplicate({ ...existing[0], sourceRef: null, amount: 251_00 }, existing)).toBeNull();
+  });
+  it('matches a settlement paid from the app with the bank SMS for it', () => {
+    const settled = [txn({ type: 'settlement', memberId: 'me', toMemberId: 'priya', amount: 500_00, occurredAt: '2026-09-12T10:00:00Z' })];
+    expect(findDuplicate({ ...settled[0], type: 'transfer', occurredAt: '2026-09-12T10:03:00Z' }, settled)?.kind).toBe('likely');
+    expect(findDuplicate({ ...settled[0], type: 'transfer', toMemberId: null, occurredAt: '2026-09-12T10:03:00Z' }, settled)).toBeNull();
   });
 });
 
@@ -30,6 +35,32 @@ describe('settle up', () => {
       { from: 'priya', to: 'me', amount: 500_00 },
       { from: 'amma', to: 'me', amount: 500_00 },
     ]);
+  });
+});
+
+describe('family transfers', () => {
+  const members = [
+    { ...base(), id: 'me', name: 'Me', upiId: 'me@okaxis', phone: null, color: '#000' },
+    { ...base(), id: 'priya', name: 'Priya', upiId: ' Priya@OKSBI ', phone: null, color: '#000' },
+    { ...base(), id: 'gone', name: 'Gone', upiId: 'gone@ybl', phone: null, color: '#000', deletedAt: '2026-09-01T00:00:00Z' },
+  ];
+
+  it('finds the family member a UPI ID belongs to, never yourself or a removed member', () => {
+    expect(memberForVpa('priya@oksbi', members, 'me')?.id).toBe('priya');
+    expect(memberForVpa('me@okaxis', members, 'me')).toBeUndefined();
+    expect(memberForVpa('gone@ybl', members, 'me')).toBeUndefined();
+    expect(memberForVpa(null, members, 'me')).toBeUndefined();
+  });
+
+  it('only a settlement changes who owes whom; neither counts as spending', () => {
+    const t = [
+      txn({ type: 'transfer', memberId: 'me', toMemberId: 'priya', amount: 2_000_00, occurredAt: at('2026-09-02') }),
+      txn({ type: 'settlement', memberId: 'me', toMemberId: 'priya', amount: 500_00, occurredAt: at('2026-09-03') }),
+    ];
+    expect(t.map(isFamilyTransfer)).toEqual([true, true]);
+    expect(isFamilyTransfer(txn({ type: 'transfer', linkType: 'card' }))).toBe(false);
+    expect(memberBalances(t)).toEqual({ me: 500_00, priya: -500_00 });
+    expect(monthTotals(t, '2026-09').expense).toBe(0);
   });
 });
 

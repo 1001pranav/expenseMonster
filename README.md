@@ -6,7 +6,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 
 | Area | What it does |
 |---|---|
-| Transactions | Expense, income, transfer and settlement. Category splits, equal split with family members, private entries |
+| Transactions | Expense, income, transfer and settlement. Transfers go between your accounts, to a credit card, or to a family member (counted towards who owes whom only if you say so; UPI payments to a member's saved UPI ID are captured as family transfers, not spending). Category splits, equal split with family members, private entries |
 | Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Paste a bank SMS**: the app never asks for SMS permission or reads your inbox; copy a bank message and paste it, or add entries manually. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
 | Loans & EMIs | Borrowed and lent loans, reducing or flat interest, amortisation schedule, prepayment simulator, overdue EMIs |
 | Credit cards | Statement day and due day per card. Purchases on or before the statement day go on this bill; anything after goes on the next one. Refunds reduce the cycle. Bill payments are **transfers, not expenses**, so spending is never counted twice. Bank statement amounts can override the computed total |
