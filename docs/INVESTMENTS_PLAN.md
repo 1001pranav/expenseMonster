@@ -1,7 +1,8 @@
 # Investments: plan
 
-Status: decisions agreed (§8). **Phase 1 is built** (§7): buying and selling, investment transfers,
-the Investments screen, Invested on Home and Insights, converting old expenses. Next: phase 2. Covers gold/silver, shares, and how investments interact with
+Status: decisions agreed (§8). **Phases 1 and 2 are built** (§7). Phase 2: current prices (one
+gold/silver rate per purity), value and gain not yet taken, guided jewellery exchange, what went
+over the metal's worth, and capital gains on the Tax screen (§6). Next: phase 3 (online prices). Covers gold/silver, shares, and how investments interact with
 spending, family sync and tax.
 
 ## 1. Where the request is right and where I disagree
@@ -233,6 +234,17 @@ Also: file sync (`.emx`), cloud backup and restore all iterate `SYNC_TABLES`, so
 up new tables automatically. Each one gets a round-trip test.
 
 ## 6. Tax (ties into the existing Tax screen)
+
+**Built** (`domain/capitalGains.ts`). The app applies only the rules it could confirm, for sales from
+23 July 2024. Listed shares and equity funds: long term after more than 12 months, 20% short term,
+12.5% long term above ₹1.25 lakh a year. Physical and digital gold and silver: long term after more
+than 24 months, 12.5% long term without indexation, short term at the slab rate. Sources: the Income
+Tax Department's pages on the Finance (No. 2) Act 2024, plus secondary sources saying the 2025 and
+2026 budgets left these unchanged. Gold/silver ETFs and funds (sources disagree after the April 2023
+and 2024 changes), Sovereign Gold Bonds, and debt, hybrid and international funds are **listed with
+their gain and the reason, not estimated**. So are sales whose cost is unknown. Funds record what they
+invest in (`holdings.fundType`, migration v8) for this. Section numbers aren't shown: the
+Income-tax Act 2025 renumbered them from April 2026.
 
 - Realized gains per sell, FIFO across lots, short-term vs long-term by holding period per asset
   class. Equity has a 12-month threshold; gold and debt funds follow different rules that changed

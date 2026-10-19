@@ -1,11 +1,16 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { View } from 'react-native';
+import { CAPITAL_GAINS_RULES, capitalGains } from '@/domain/capitalGains';
+import { summarizeHoldings } from '@/domain/investments';
 import { taxSummary, type TaxSection } from '@/domain/tax';
 import { useTable, useToday } from '@/data/hooks';
 import { Button, Card, Divider, EmptyState, IconCircle, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
+
+const R = CAPITAL_GAINS_RULES;
+const pct = (rate: number) => `${+(rate * 100).toFixed(2)}%`;
 
 const META: Record<TaxSection, { title: string; body: string; icon: IconName; tip: string }> = {
   '80C': {
@@ -45,6 +50,23 @@ export default function Tax() {
   const total = sections.reduce((a, s) => a + s.claimed, 0);
   const tracked = sections.filter((s) => s.lines.length);
   const headroom80C = sections.find((s) => s.section === '80C')?.headroom ?? 0;
+  const holdings = useTable('holdings');
+  const trades = useTable('trades');
+  const gains = useMemo(() => capitalGains(summarizeHoldings(holdings, trades, transactions), fy), [holdings, trades, transactions, fy]);
+  const anyGains = gains.listedEquity.short || gains.listedEquity.long || gains.otherAsset.short || gains.otherAsset.long || gains.unestimated.length;
+  const gainRow = (label: string, value: number, tax?: { amount: number; how: string }) => (
+    <View key={label} style={{ gap: 2, paddingVertical: space(0.75) }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt variant="small">{label}</Txt>
+        <Money value={value} variant="small" signed colorBySign decimals="never" />
+      </Row>
+      {tax ? (
+        <Txt variant="caption" tone="muted">
+          {tax.how}: about {money(tax.amount, { decimals: 'never' })}
+        </Txt>
+      ) : null}
+    </View>
+  );
 
   return (
     <Screen title="Tax saver" subtitle={`${fy.label} · old tax regime`} back>
@@ -125,6 +147,62 @@ export default function Tax() {
           </Section>
         );
       })}
+
+      {anyGains ? (
+        <Section title={`Capital gains · ${fy.label}`}>
+          <Card style={{ gap: space(0.5) }}>
+            <Txt variant="small" tone="muted">
+              From investments sold this year, under either tax regime. Short or long term by how long each purchase was held, earliest purchases sold first.
+            </Txt>
+            {gains.listedEquity.short || gains.listedEquity.long ? (
+              <>
+                <Divider />
+                <Txt variant="bodyStrong">Shares and equity funds</Txt>
+                {gainRow(`Short term (${R.listedEquity.longAfterMonths} months or less)`, gains.listedEquity.short, { amount: gains.tax.equityShort, how: `Taxed at ${pct(R.listedEquity.shortRate)}` })}
+                {gainRow('Long term', gains.listedEquity.long, { amount: gains.tax.equityLong, how: `${pct(R.listedEquity.longRate)} on gains above ${money(R.listedEquity.longExemption, { compact: true })} a year` })}
+              </>
+            ) : null}
+            {gains.otherAsset.short || gains.otherAsset.long ? (
+              <>
+                <Divider />
+                <Txt variant="bodyStrong">Gold and silver (physical, digital)</Txt>
+                <View style={{ paddingVertical: space(0.75) }}>
+                  <Row style={{ justifyContent: 'space-between' }}>
+                    <Txt variant="small">Short term ({R.otherAsset.longAfterMonths} months or less)</Txt>
+                    <Money value={gains.otherAsset.short} variant="small" signed colorBySign decimals="never" />
+                  </Row>
+                  <Txt variant="caption" tone="muted">
+                    Added to your income, taxed at your slab rate
+                  </Txt>
+                </View>
+                {gainRow('Long term', gains.otherAsset.long, { amount: gains.tax.otherLong, how: `Taxed at ${pct(R.otherAsset.longRate)}, no indexation` })}
+              </>
+            ) : null}
+            {gains.unestimated.length ? (
+              <>
+                <Divider />
+                <Txt variant="bodyStrong">Not estimated: check with your CA</Txt>
+                {gains.unestimated.map((u, i) => (
+                  <View key={`${u.holding.id}-${i}`} style={{ paddingVertical: space(0.5) }}>
+                    <Row style={{ justifyContent: 'space-between' }} gap={1}>
+                      <Txt variant="small" style={{ flex: 1 }} numberOfLines={1}>
+                        {u.holding.name}
+                      </Txt>
+                      {u.gain !== null ? <Money value={u.gain} variant="small" signed colorBySign decimals="never" /> : <Txt variant="small" tone="muted">gain unknown</Txt>}
+                    </Row>
+                    <Txt variant="caption" tone="muted">
+                      {u.reason}
+                    </Txt>
+                  </View>
+                ))}
+              </>
+            ) : null}
+            <Txt variant="caption" tone="faint" style={{ marginTop: space(0.5) }}>
+              An estimate, not tax advice. Losses are netted within each line only (the return's set-off rules can do more). Surcharge and cess not included. Rules: {R.source}
+            </Txt>
+          </Card>
+        </Section>
+      ) : null}
 
       <Card tone="alt" style={{ gap: 6 }}>
         <Txt variant="bodyStrong">Good to know</Txt>

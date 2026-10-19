@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { formatDay, isoToYMD } from '@/domain/dates';
-import { ASSET_CLASSES, ASSET_ORDER, formatQuantity, investedByOwner, legacyInvestmentExpenses, summarizeHoldings } from '@/domain/investments';
+import { ASSET_CLASSES, ASSET_ORDER, formatQuantity, investedByOwner, legacyInvestmentExpenses, portfolioValue, summarizeHoldings } from '@/domain/investments';
 import { useMembers, useSelfId, useTable } from '@/data/hooks';
 import { Button, Card, Divider, EmptyState, ListRow, Money, Row, Section, Txt, type IconName } from '@/ui/components/core';
 import { Screen } from '@/ui/components/Screen';
@@ -23,6 +23,7 @@ export default function Investments() {
   const held = summaries.filter((s) => !s.soldOut && !s.holding.closed);
   const sold = summaries.filter((s) => s.soldOut || s.holding.closed);
   const owners = investedByOwner(held);
+  const worth = portfolioValue(held);
   const realised = summaries.flatMap((s) => s.realised).filter((r) => r.gain !== null);
   const legacy = useMemo(() => legacyInvestmentExpenses(txns), [txns]);
   const nameOf = (id: string) => (id === selfId ? 'You' : (members.find((m) => m.id === id)?.name ?? 'Someone'));
@@ -38,7 +39,16 @@ export default function Investments() {
         iconColor={colors.income}
         title={s.holding.name}
         subtitle={[qty, members.length > 1 ? whose : null].filter(Boolean).join(' · ')}
-        right={<Money value={s.invested} decimals="never" />}
+        right={
+          s.value !== null ? (
+            <View style={{ alignItems: 'flex-end' }}>
+              <Money value={s.value} decimals="never" />
+              <Money value={s.value - s.invested} decimals="never" variant="small" signed colorBySign />
+            </View>
+          ) : (
+            <Money value={s.invested} decimals="never" />
+          )
+        }
         chevron
         onPress={() => router.push(`/investments/${s.holding.id}`)}
       />
@@ -46,12 +56,33 @@ export default function Investments() {
   };
 
   return (
-    <Screen title="Investments" subtitle="At cost: what was put in" back footer={<Button title="Invest / sell" icon="add" size="lg" onPress={() => router.push('/investments/new')} />}>
+    <Screen title="Investments" subtitle="What was put in, and what it's worth where a price is set" back footer={<Button title="Invest / sell" icon="add" size="lg" onPress={() => router.push('/investments/new')} />}>
       <Card style={{ gap: space(1) }}>
         <Txt variant="small" tone="muted">
-          Household total
+          Household total, at cost
         </Txt>
         <Money value={owners.total} variant="h1" decimals="never" />
+        {worth.valuedCost ? (
+          <>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Txt variant="small" tone="muted">
+                {worth.unvalued ? 'Worth now (priced holdings)' : 'Worth now'}
+              </Txt>
+              <Money value={worth.value} decimals="never" />
+            </Row>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Txt variant="small" tone="muted">
+                Gain not yet taken
+              </Txt>
+              <Money value={worth.value - worth.valuedCost} decimals="never" signed colorBySign />
+            </Row>
+          </>
+        ) : null}
+        {worth.unvalued && held.length ? (
+          <Txt variant="small" tone="faint">
+            {worth.unvalued === held.length ? 'Set a current price on a holding to see what it is worth.' : `${worth.unvalued} without a price: counted at cost.`}
+          </Txt>
+        ) : null}
         {Object.keys(owners.byMember).length ? (
           <View style={{ gap: 4 }}>
             {Object.entries(owners.byMember).map(([id, v]) => (
