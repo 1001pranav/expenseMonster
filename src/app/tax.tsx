@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { CAPITAL_GAINS_RULES, capitalGains } from '@/domain/capitalGains';
 import { summarizeHoldings } from '@/domain/investments';
 import { taxSummary, type TaxSection } from '@/domain/tax';
-import { useTable, useToday } from '@/data/hooks';
+import { useMembers, useSelfId, useTable, useToday } from '@/data/hooks';
 import { Button, Card, Divider, EmptyState, IconCircle, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
+import { ChipSelect } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -52,8 +53,15 @@ export default function Tax() {
   const headroom80C = sections.find((s) => s.section === '80C')?.headroom ?? 0;
   const holdings = useTable('holdings');
   const trades = useTable('trades');
-  const gains = useMemo(() => capitalGains(summarizeHoldings(holdings, trades, transactions), fy), [holdings, trades, transactions, fy]);
-  const anyGains = gains.listedEquity.short || gains.listedEquity.long || gains.otherAsset.short || gains.otherAsset.long || gains.unestimated.length;
+  const members = useMembers();
+  const selfId = useSelfId();
+  // Gains are taxed in the owner's hands, and the yearly exemption is per person: one owner at a time.
+  const [owner, setOwner] = useState<string>(selfId || '');
+  const summaries = useMemo(() => summarizeHoldings(holdings, trades, transactions), [holdings, trades, transactions]);
+  const owners = useMemo(() => [...new Set(summaries.filter((x) => x.realised.length).map((x) => x.holding.memberId ?? ''))], [summaries]);
+  const gains = useMemo(() => capitalGains(summaries.filter((x) => (x.holding.memberId ?? '') === owner), fy), [summaries, owner, fy]);
+  const anyGains = owners.length > 0;
+  const ownerGains = gains.listedEquity.short || gains.listedEquity.long || gains.otherAsset.short || gains.otherAsset.long || gains.unestimated.length;
   const gainRow = (label: string, value: number, tax?: { amount: number; how: string }) => (
     <View key={label} style={{ gap: 2, paddingVertical: space(0.75) }}>
       <Row style={{ justifyContent: 'space-between' }}>
@@ -154,6 +162,23 @@ export default function Tax() {
             <Txt variant="small" tone="muted">
               From investments sold this year, under either tax regime. Short or long term by how long each purchase was held, earliest purchases sold first.
             </Txt>
+            {owners.length > 1 || (owners[0] ?? '') !== owner ? (
+              <ChipSelect
+                value={owner}
+                onChange={(v) => setOwner(v ?? '')}
+                options={[...new Set([owner, ...owners])].map((id) => ({ value: id, label: id === '' ? 'Joint' : id === selfId ? 'Mine' : (members.find((m) => m.id === id)?.name ?? 'Someone') }))}
+              />
+            ) : null}
+            {owner === '' ? (
+              <Txt variant="small" tone="warn">
+                Jointly held: the gain is taxed in the hands of whoever paid for it, so split it between you before using these figures.
+              </Txt>
+            ) : null}
+            {!ownerGains ? (
+              <Txt variant="small" tone="faint">
+                No sales this year for this owner.
+              </Txt>
+            ) : null}
             {gains.listedEquity.short || gains.listedEquity.long ? (
               <>
                 <Divider />
