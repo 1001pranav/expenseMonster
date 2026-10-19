@@ -150,6 +150,13 @@ Choices to note:
 
 ## 5. Sync and compatibility (step 0: must ship first)
 
+**Status: built** (`domain/sync/forward.ts`, migration v4). Unknown fields are kept in each row's
+`extra` column and sent out again when the row is edited. Records of unknown tables wait in
+`held_records`, and the Sync screen asks the user to update. After an update both are applied
+(`adoptForwardData`). New values of existing fields (e.g. `linkType: 'investment'`) need nothing:
+they are stored as text, and an older phone treats such a row as the nearest thing it knows (a
+transfer). Investments must be designed so that this degrades safely. What follows is the original analysis.
+
 Today an older app version that receives a cloud record for a table it doesn't know logs it as
 *unreadable* and skips it (`services/sync.ts`, `unknown table`). It then moves its read position
 past that record and never sees it again. Unknown *columns* are dropped by the `TABLES` whitelist,

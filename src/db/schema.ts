@@ -1,3 +1,4 @@
+import { EXTRA } from '@/domain/sync/forward';
 import type { TableName } from '@/domain/types';
 
 const COMMON: Record<string, string> = {
@@ -118,10 +119,16 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
 };
 
-export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table])];
+/** Every column, including `extra`: fields from a newer app version (domain/sync/forward.ts). */
+export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table]), EXTRA];
 
-function createTable(name: TableName): string {
-  const cols = { ...COMMON, ...TABLES[name] };
+/**
+ * Migrations run on fresh installs too, with today's column lists. So a column added to an existing
+ * table needs an ALTER TABLE migration *and* must be left out of the CREATE in older migrations
+ * (as `extra` is for v1/v2), or a fresh install would add it twice.
+ */
+function createTable(name: TableName, withExtra = true): string {
+  const cols = { ...COMMON, ...TABLES[name], ...(withExtra ? { [EXTRA]: T } : {}) };
   const body = Object.entries(cols)
     .map(([c, def]) => `"${c}" ${def}`)
     .join(', ');
@@ -132,7 +139,7 @@ function createTable(name: TableName): string {
 export const MIGRATIONS: string[] = [
   [
     // v1 tables (later tables get their own migration below).
-    ...(Object.keys(TABLES) as TableName[]).filter((t) => t !== 'sms_formats').map(createTable),
+    ...(Object.keys(TABLES) as TableName[]).filter((t) => t !== 'sms_formats').map((t) => createTable(t, false)),
     'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT);',
     'CREATE TABLE IF NOT EXISTS peers (deviceId TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, lastSentAt TEXT, lastReceivedAt TEXT, pairedAt TEXT NOT NULL);',
     'CREATE INDEX IF NOT EXISTS txn_when ON transactions(occurredAt);',
@@ -142,10 +149,16 @@ export const MIGRATIONS: string[] = [
     'CREATE INDEX IF NOT EXISTS bills_biller ON bills(billerId);',
   ].join('\n'),
   // v2: user-taught SMS formats.
-  createTable('sms_formats'),
+  createTable('sms_formats', false),
   // v3: per-record cloud sync. For each household record: the server seq this phone last saw and
   // the updatedAt it had then. A row whose updatedAt differs has local edits to push.
   [
     'CREATE TABLE IF NOT EXISTS cloud_records (space TEXT NOT NULL, tbl TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (space, tbl, id));',
+  ].join('\n'),
+  // v4: keep data from newer app versions (domain/sync/forward.ts): unknown fields per row, and
+  // whole records of tables this version doesn't have yet (never synced from here).
+  [
+    ...(Object.keys(TABLES) as TableName[]).map((t) => `ALTER TABLE "${t}" ADD COLUMN "${EXTRA}" TEXT;`),
+    'CREATE TABLE IF NOT EXISTS held_records (tbl TEXT NOT NULL, id TEXT NOT NULL, row TEXT NOT NULL, PRIMARY KEY (tbl, id));',
   ].join('\n'),
 ];

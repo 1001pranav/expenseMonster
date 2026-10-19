@@ -3,8 +3,10 @@
  * supabase/migrations/20261010000000_emx_records.sql (shared seq, compare-and-swap on the base seq,
  * write token). Each phone gets its own copy of the services and its own in-memory "database".
  */
-import { buildBundle } from '@/domain/sync/bundle';
+import { buildBundle, validateBundle } from '@/domain/sync/bundle';
 import { keyFromPassphrase, newKey, seal } from '@/domain/sync/crypto';
+import { expandExtra, foldUnknown, replacesHeld } from '@/domain/sync/forward';
+import { householdSpace, recordKey, sealRecord } from '@/domain/sync/records';
 import { formatRecoveryCode, newSalt, newVaultId, newWriteToken, saltBytes } from '@/domain/sync/vault';
 import type { ConflictPolicy } from '@/domain/sync/merge';
 import type { BaseRow, TableName } from '@/domain/types';
@@ -114,7 +116,14 @@ globalThis.fetch = (async (url: string, init: { body: string }) => {
 // The phone's own store instance, filled in after it loads.
 type StoreRef = { get?: () => ReturnType<typeof import('@/db/store').getState> };
 
-function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string, { seq: number; updatedAt: string }>; meta: Map<string, string> }, device: string, store: StoreRef) {
+// What this app version stores for a transaction; anything else goes to `extra`, as in db/repo.ts.
+const TXN_COLUMNS = [...Object.keys(txn({})), 'extra'];
+const fold = (t: string, r: Row): Row => (t === 'transactions' ? foldUnknown(r, TXN_COLUMNS) : r);
+const expand = (r: Row): Row => expandExtra({ ...r });
+
+type FakeDb = { tables: Map<string, Map<string, Row>>; marks: Map<string, { seq: number; updatedAt: string }>; meta: Map<string, string>; held: Map<string, Row> };
+
+function fakeRepo(db: FakeDb, device: string, store: StoreRef) {
   const table = (t: string) => db.tables.get(t) ?? db.tables.set(t, new Map()).get(t)!;
   const markKey = (space: string, t: string, id: string) => `${space}|${t}|${id}`;
   return {
@@ -124,14 +133,17 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
         .filter((r) => db.marks.get(markKey(space, t, r.id))?.updatedAt !== r.updatedAt)
         .sort((x, y) => (x.id < y.id ? -1 : 1))
         .slice(0, limit)
-        .map((r) => ({ row: { ...r }, base: db.marks.get(markKey(space, t, r.id))?.seq ?? 0 })),
+        .map((r) => ({ row: expand(r), base: db.marks.get(markKey(space, t, r.id))?.seq ?? 0 })),
     getSyncMarks: async (space: string, t: string, ids: string[]) =>
       new Map(ids.filter((id) => db.marks.has(markKey(space, t, id))).map((id) => [id, db.marks.get(markKey(space, t, id))!])),
     setSyncMarks: async (space: string, marks: { table: string; id: string; seq: number; updatedAt: string }[]) => {
       for (const m of marks) db.marks.set(markKey(space, m.table, m.id), { seq: m.seq, updatedAt: m.updatedAt });
     },
-    rowsByIds: async (t: string, ids: string[]) => new Map(ids.filter((id) => table(t).has(id)).map((id) => [id, { ...table(t).get(id)! }])),
-    applyRemote: async (t: string, rows: Row[]) => rows.forEach((r) => table(t).set(r.id, { ...r })),
+    rowsByIds: async (t: string, ids: string[]) => new Map(ids.filter((id) => table(t).has(id)).map((id) => [id, expand(table(t).get(id)!)])),
+    applyRemote: async (t: string, rows: Row[]) => rows.forEach((r) => table(t).set(r.id, fold(t, { ...r }))),
+    holdRecords: async (records: { tbl: string; row: Row }[], ordered: boolean) => {
+      for (const r of records) if (replacesHeld(db.held.get(`${r.tbl}:${r.row.id}`), r.row, ordered)) db.held.set(`${r.tbl}:${r.row.id}`, r.row);
+    },
     update: async (t: string, id: string, patch: Partial<Row>) => {
       const row = { ...table(t).get(id)!, ...patch, updatedAt: nextTime(), deviceId: device };
       table(t).set(id, row);
@@ -140,7 +152,7 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
     getMeta: async (k: string) => db.meta.get(k) ?? null,
     setMeta: async (k: string, v: string | null) => void (v === null ? db.meta.delete(k) : db.meta.set(k, v)),
     listPeers: async () => [],
-    allRows: async (t: string) => [...table(t).values()],
+    allRows: async (t: string) => [...table(t).values()].map(expand),
     loadTables: async () => EMPTY_TABLES,
     saveIdentity: async (patch: object) => store.get!().setIdentity(patch),
     saveSettings: async (patch: object) => store.get!().setSettings(patch),
@@ -150,7 +162,7 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
 }
 
 function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
-  const db = { tables: new Map<string, Map<string, Row>>(), marks: new Map(), meta: new Map<string, string>() };
+  const db: FakeDb = { tables: new Map(), marks: new Map(), meta: new Map(), held: new Map() };
   const store: StoreRef = {};
   const repo = fakeRepo(db, device, store);
   // Keystore stand-in: household key plus the backup's secrets.
@@ -199,6 +211,8 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     rows: () => [...txns().values()],
     conflicts: () => sync.loadConflicts(),
     resolve: (keys: string[], choice: 'mine' | 'theirs') => sync.resolveConflicts(keys, choice),
+    merge: (bundle: Parameters<typeof sync.mergeBundle>[0]) => sync.mergeBundle(bundle, 'newest'),
+    held: db.held,
   };
 }
 
@@ -333,6 +347,62 @@ describe('per-record cloud sync between two phones', () => {
     // A different key means a different space: nothing crosses over.
     expect(server.spaces.size).toBe(2);
     expect((await a.sync()).received).toBe(0);
+  });
+});
+
+describe('data from a newer app version', () => {
+  let key: Uint8Array;
+  beforeEach(() => {
+    server.reset();
+    key = newKey();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  /** What a phone on a newer version uploads: the same sealed records, of tables and fields this version lacks. */
+  function uploadFromNewerApp(table: string, row: Row) {
+    const space = householdSpace(key, 'house');
+    if (!server.spaces.has(space.id)) server.spaces.set(space.id, { token: space.token, head: 0 });
+    const s = server.spaces.get(space.id)!;
+    const recs = server.records.get(space.id) ?? server.records.set(space.id, new Map()).get(space.id)!;
+    recs.set(recordKey(space, table as TableName, row.id), { seq: ++s.head, payload: sealRecord(space, table as TableName, row) });
+  }
+
+  it('keeps records of unknown tables and unknown fields, and sends the fields back after an edit here', async () => {
+    const old = makePhone('OLD', key, 'ask');
+    const holding = { ...txn({ deviceId: 'NEW' }), name: '22K gold', grams: 10500 } as unknown as Row;
+    uploadFromNewerApp('holdings', holding);
+    const bought = { ...txn({ type: 'transfer', amount: 70_000_00, deviceId: 'NEW', updatedAt: nextTime() }), linkType: 'investment', holdingId: holding.id } as unknown as Row;
+    uploadFromNewerApp('transactions', bought);
+
+    const first = await old.sync();
+    expect(first).toMatchObject({ received: 1, held: 1, unreadable: 0 });
+    expect(old.held.get(`holdings:${holding.id}`)).toMatchObject({ name: '22K gold', grams: 10500 });
+    expect(JSON.parse(old.get(bought.id)!.extra as string)).toEqual({ holdingId: holding.id });
+
+    // Edited on the old phone: the field it doesn't know goes back up with the edit.
+    await old.edit(bought.id, { note: 'Akshaya Tritiya' });
+    expect((await old.sync()).sent).toBe(1);
+    const space = householdSpace(key, 'house');
+    const { openRecord } = jest.requireActual('@/domain/sync/records') as typeof import('@/domain/sync/records');
+    const rk = recordKey(space, 'transactions', bought.id);
+    const sent = openRecord(space, rk, records().get(rk)!.payload).r as unknown as Row;
+    expect(sent).toMatchObject({ note: 'Akshaya Tritiya', holdingId: holding.id, linkType: 'investment' });
+    expect(sent.extra).toBeUndefined();
+
+    // Held records are not downloaded again, and nothing about them is uploaded from here.
+    expect(await old.check()).toBeNull();
+    expect(records().size).toBe(2);
+  });
+
+  it('keeps unknown tables from a file instead of rejecting it, newest edit winning', async () => {
+    const old = makePhone('OLD', key, 'ask');
+    const v1 = { ...txn({ deviceId: 'NEW', updatedAt: '2026-05-01T00:00:00.000Z' }), name: 'INFY' } as unknown as Row;
+    const v2 = { ...v1, name: 'Infosys', updatedAt: '2026-05-02T00:00:00.000Z' };
+    const file = (rows: Row[]) => validateBundle({ ...buildBundle({}, { householdId: 'house', deviceId: 'NEW', deviceName: 'New', since: null }), tables: { holdings: rows } });
+    expect((await old.merge(file([v2]))).held).toBe(1);
+    await old.merge(file([v1]));
+    expect(old.held.get(`holdings:${v1.id}`)?.name).toBe('Infosys');
+    expect(() => validateBundle({ ...file([v1]), tables: { 'x"; drop': [v1] } })).toThrow('Unknown table');
   });
 });
 

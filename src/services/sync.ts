@@ -3,11 +3,12 @@ import { File } from 'expo-file-system';
 import { syncedNowISO, syncedNowMs } from '@/domain/clock';
 import { randomBytes } from '@/domain/ids';
 import { buildBundle, bundleSize, validateBundle, type Bundle } from '@/domain/sync/bundle';
+import { isPlausibleTable, type HeldRecord } from '@/domain/sync/forward';
 import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sync/crypto';
 import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
 import { openRecord, planRecord, type Space } from '@/domain/sync/records';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
-import { allRows, applyRemote, getMeta, getSyncMarks, listPeers, loadTables, rowsByIds, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
+import { allRows, applyRemote, getMeta, getSyncMarks, holdRecords, listPeers, loadTables, rowsByIds, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
 import { logFailure, logWarn } from './diagnostics';
 import { writeCacheFile } from './files';
@@ -57,6 +58,8 @@ export interface ImportResult {
   autoResolved: number;
   /** Waiting for the user to pick (policy "ask"). */
   pendingConflicts: number;
+  /** Entries of a kind only a newer app version shows: kept until this phone is updated. */
+  held: number;
   /** Minutes the sender's clock appeared to be ahead of ours (timestamps are UTC). */
   clockAheadMinutes: number;
 }
@@ -108,7 +111,7 @@ export interface PulledRecord {
  * conflict only if this phone also changed it since it last synced it; everything else the server
  * has is simply newer. Remembers each record's seq so the next push edits from the right version.
  */
-export function applyRecords(space: Space, page: PulledRecord[], policy: ConflictPolicy): Promise<{ received: number; unreadable: number }> {
+export function applyRecords(space: Space, page: PulledRecord[], policy: ConflictPolicy): Promise<{ received: number; unreadable: number; held: number }> {
   return serialMerge(async () => {
     const pending = new Map((await loadConflicts()).map((c) => [`${c.table}:${c.local.id}`, c]));
     const names = new Map((await listPeers()).map((p) => [p.deviceId, p.name]));
@@ -116,13 +119,21 @@ export function applyRecords(space: Space, page: PulledRecord[], policy: Conflic
     const marks: { table: TableName; id: string; seq: number; updatedAt: string }[] = [];
     let received = 0;
     let unreadable = 0;
+    const held: HeldRecord[] = [];
     // Decrypt the page first, then look up local state per table in one query each.
     const opened: { seq: number; table: TableName; incoming: BaseRow }[] = [];
     for (const raw of page) {
       const seq = Number(raw.seq);
       try {
         const rec = openRecord(space, raw.record_key, raw.payload);
-        if (!SYNC_TABLES.includes(rec.t)) throw new Error(`unknown table ${rec.t}`);
+        if (!SYNC_TABLES.includes(rec.t)) {
+          if (!isPlausibleTable(rec.t)) throw new Error(`unknown table ${rec.t}`);
+          // From a newer app version: keep it for after the update instead of skipping it for good.
+          // The mark means it is not downloaded again, and not seen as edited here once applied.
+          held.push({ tbl: rec.t, row: rec.r });
+          marks.push({ table: rec.t, id: rec.r.id, seq, updatedAt: rec.r.updatedAt });
+          continue;
+        }
         opened.push({ seq, table: rec.t, incoming: rec.r });
       } catch (e) {
         logWarn(`cloud sync: skipped record #${seq} this household key can't open (${(e as Error).message})`);
@@ -152,16 +163,17 @@ export function applyRecords(space: Space, page: PulledRecord[], policy: Conflic
       marks.push({ table, id: incoming.id, seq, updatedAt: action.kind === 'same' ? local!.updatedAt : incoming.updatedAt });
     }
     for (const [table, rows] of writes) await applyRemote(table, rows as never[]);
+    await holdRecords(held, true);
     await setSyncMarks(space.id, marks);
     await saveConflicts([...pending.values()]);
-    return { received, unreadable };
+    return { received, unreadable, held: held.length };
   });
 }
 
 async function mergeBundleNow(bundle: Bundle, policy: ConflictPolicy): Promise<Omit<ImportResult, 'from' | 'clockAheadMinutes'>> {
   const peers = await listPeers();
   const lastSync = peers.find((p) => p.deviceId === bundle.fromDeviceId)?.lastReceivedAt ?? null;
-  const totals = { inserted: 0, updated: 0, skipped: 0, autoResolved: 0, pendingConflicts: 0 };
+  const totals = { inserted: 0, updated: 0, skipped: 0, autoResolved: 0, pendingConflicts: 0, held: 0 };
   // Conflicts are kept (not applied) until the user picks; newer files replace older pending ones.
   const pending = new Map((await loadConflicts()).map((c) => [`${c.table}:${c.local.id}`, c]));
   for (const table of SYNC_TABLES) {
@@ -176,6 +188,12 @@ async function mergeBundleNow(bundle: Bundle, policy: ConflictPolicy): Promise<O
     totals.autoResolved += plan.autoResolved;
     for (const c of plan.conflicts) pending.set(`${table}:${c.local.id}`, { table, from: bundle.fromName, local: c.local, incoming: c.incoming });
   }
+  // Tables from a newer app version (validateBundle checked the names): kept for after the update.
+  const held = Object.entries(bundle.tables as Record<string, BaseRow[]>)
+    .filter(([tbl]) => !SYNC_TABLES.includes(tbl as TableName))
+    .flatMap(([tbl, rows]) => rows.map((row) => ({ tbl, row })));
+  await holdRecords(held, false);
+  totals.held = held.length;
   totals.pendingConflicts = pending.size;
   await saveConflicts([...pending.values()]);
   return totals;

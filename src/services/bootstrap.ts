@@ -2,7 +2,7 @@ import { setClockOffset } from '@/domain/clock';
 import { uuidv7 } from '@/domain/ids';
 import { newKey } from '@/domain/sync/crypto';
 import { openDatabase } from '@/db/client';
-import { getMeta, insertMany, loadIdentity, loadSettings, loadTables, saveIdentity, setMeta } from '@/db/repo';
+import { adoptForwardData, getMeta, insertMany, loadIdentity, loadSettings, loadTables, saveIdentity, setMeta } from '@/db/repo';
 import { SEED_CATEGORIES } from '@/db/seed';
 import { getState } from '@/db/store';
 import { generateFixedBills } from '@/data/actions';
@@ -14,6 +14,8 @@ export async function bootstrap(): Promise<void> {
   await openDatabase();
   // Last known server clock correction (services/cloud.ts), before anything is stamped.
   setClockOffset(Number((await getMeta(CLOCK_META)) ?? 0));
+  // After an update: apply family data that arrived before this version could show it.
+  await adoptForwardData();
   let identity = await loadIdentity();
 
   if (!identity.deviceId) {

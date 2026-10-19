@@ -11,6 +11,8 @@ export interface BaseRow {
   deletedAt: string | null;
   deviceId: string;
   scope: Scope;
+  /** Fields from a newer app version, as JSON (domain/sync/forward.ts). Never edited by this version. */
+  extra?: string | null;
 }
 
 export type AccountType = 'bank' | 'cash' | 'wallet';
