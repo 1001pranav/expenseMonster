@@ -1,47 +1,61 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { gradients, useTheme, type GradientName } from '../theme';
+import { useTheme, type GradientName } from '../theme';
 import type { IconName } from './core';
 
 /**
- * The app's signature surface: deep ink lit by three soft glows (violet, rose, marigold)
- * with faint concentric rings, like light catching a coin. Used for hero cards and the lock screen.
- * Fills its parent; the parent should clip (overflow: 'hidden') and set the radius.
+ * The hero surface (lock screen, onboarding, hero cards): forest with an emerald glow at the top
+ * and cobalt at the bottom, so white text sits on a deep, even middle. Fills its parent.
  */
 export function Aurora({ variant = 'default' }: { variant?: 'default' | 'calm' }) {
   const { colors } = useTheme();
-  const [size, setSize] = useState({ w: 0, h: 0 });
   const id = useId().replace(/:/g, '');
-  const { w, h } = size;
-  const glow = (key: string, color: string, opacity: number) => (
-    <RadialGradient id={`${id}${key}`} cx="50%" cy="50%" rx="50%" ry="50%">
-      <Stop offset="0" stopColor={color} stopOpacity={opacity} />
-      <Stop offset="1" stopColor={color} stopOpacity={0} />
-    </RadialGradient>
-  );
-  const strength = variant === 'calm' ? 0.55 : 0.85;
+  const strength = variant === 'calm' ? 0.35 : 0.6;
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill} onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
-      {w > 0 ? (
-        <Svg width={w} height={h}>
-          <Defs>
-            {glow('a', colors.heroGlowA, strength)}
-            {glow('b', colors.heroGlowB, strength * 0.8)}
-            {glow('c', colors.heroGlowC, strength * 0.6)}
-          </Defs>
-          <Rect x={0} y={0} width={w} height={h} fill={colors.heroBase} />
-          <Ellipse cx={w * 0.05} cy={h * 0.1} rx={w * 0.7} ry={h * 0.9} fill={`url(#${id}a)`} />
-          <Ellipse cx={w * 1.0} cy={h * 0.05} rx={w * 0.55} ry={h * 0.75} fill={`url(#${id}b)`} />
-          <Ellipse cx={w * 0.75} cy={h * 1.05} rx={w * 0.6} ry={h * 0.6} fill={`url(#${id}c)`} />
-          {[0.18, 0.3, 0.42, 0.54].map((r) => (
-            <Circle key={r} cx={w * 0.95} cy={h * 0.95} r={Math.max(w, h) * r} stroke="#FFFFFF" strokeOpacity={0.06} strokeWidth={1} fill="none" />
-          ))}
-        </Svg>
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.heroBase }]} />
-      )}
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.heroBase }]}>
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={`${id}a`} cx="15%" cy="0%" r="75%">
+            <Stop offset="0" stopColor={colors.heroGlowA} stopOpacity={strength} />
+            <Stop offset="1" stopColor={colors.heroGlowA} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}b`} cx="100%" cy="100%" r="80%">
+            <Stop offset="0" stopColor={colors.heroGlowB} stopOpacity={strength} />
+            <Stop offset="1" stopColor={colors.heroGlowB} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}a)`} />
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}b)`} />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * The page behind every screen: the page colour with a green glow top-left and a blue one on the
+ * right, which is what makes the translucent cards read as glass. Drawn once per screen, static.
+ */
+export function Backdrop() {
+  const { colors } = useTheme();
+  const id = useId().replace(/:/g, '');
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}>
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={`${id}a`} cx="0%" cy="0%" r="70%">
+            <Stop offset="0" stopColor={colors.glowA} stopOpacity={colors.glowOpacity} />
+            <Stop offset="1" stopColor={colors.glowA} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}b`} cx="100%" cy="45%" r="65%">
+            <Stop offset="0" stopColor={colors.glowB} stopOpacity={colors.glowOpacity * 0.85} />
+            <Stop offset="1" stopColor={colors.glowB} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}a)`} />
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}b)`} />
+      </Svg>
     </View>
   );
 }
@@ -62,7 +76,10 @@ export function GradientFill({ from, to }: { from: string; to: string }) {
   );
 }
 
-/** Gradient tile with a white icon: quick actions, add-sheet entries, empty states. */
+/**
+ * Icon tile. `brand` is the one filled tile (forest, white icon: the + button, the app mark);
+ * every other name renders a neutral sage tile with a muted icon, so colour is left for state.
+ */
 export function GradientTile({
   icon,
   gradient = 'brand',
@@ -82,36 +99,32 @@ export function GradientTile({
   style?: StyleProp<ViewStyle>;
   children?: ReactNode;
 }) {
-  const [from, to] = pair ?? gradients[gradient];
-  const r = radius ?? size * 0.34;
-  // Shadow on the outer view: iOS clips shadows on views with overflow hidden.
+  const { colors } = useTheme();
+  const filled = gradient === 'brand' || Boolean(pair);
+  const bg = pair ? pair[1] : filled ? colors.primary : colors.surfaceAlt;
+  const fg = filled ? colors.primaryText : colors.textMuted;
+  const r = radius ?? size * 0.3;
   return (
-    <View style={[{ width: size, height: size, borderRadius: r, backgroundColor: to, shadowColor: to, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 }, style]}>
-      <View style={{ flex: 1, borderRadius: r, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-        <GradientFill from={from} to={to} />
-        {/* Soft top highlight for a little depth. */}
-        <View pointerEvents="none" style={{ position: 'absolute', top: -size * 0.45, left: -size * 0.2, width: size * 1.1, height: size * 0.9, borderRadius: size, backgroundColor: 'rgba(255,255,255,0.16)' }} />
-        {icon ? <Ionicons name={icon} size={iconSize ?? size * 0.46} color="#FFFFFF" /> : null}
-        {children}
-      </View>
+    <View style={[{ width: size, height: size, borderRadius: r, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }, style]}>
+      {icon ? <Ionicons name={icon} size={iconSize ?? size * 0.46} color={fg} /> : null}
+      {children}
     </View>
   );
 }
 
-/** The ExpenseMonster mascot: a friendly coin with horns. Mirrors scripts/brand/mark.js. */
-export function BrandMark({ size = 72, color = '#FFFFFF', ink = '#2A1F7A' }: { size?: number; color?: string; ink?: string }) {
+/** The ExpenseMonster mark: a horned monster peeking over the household ledger. Mirrors scripts/brand/mark.js. */
+export function BrandMark({ size = 72, color = '#E8F1EC', ink = '#0F5C4A' }: { size?: number; color?: string; ink?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel="ExpenseMonster">
-      <Path d="M30 34 C24 28 22 19 25 11 C30 17 36 22 43 25 Z" fill={color} />
-      <Path d="M70 34 C76 28 78 19 75 11 C70 17 64 22 57 25 Z" fill={color} />
-      <Circle cx={50} cy={56} r={34} fill={color} />
-      <Circle cx={50} cy={56} r={28} fill="none" stroke={ink} strokeOpacity={0.1} strokeWidth={2.5} />
-      <Ellipse cx={39} cy={49} rx={4.8} ry={6.2} fill={ink} />
-      <Ellipse cx={61} cy={49} rx={4.8} ry={6.2} fill={ink} />
-      <Circle cx={40.5} cy={46.8} r={1.6} fill="#FFFFFF" />
-      <Circle cx={62.5} cy={46.8} r={1.6} fill="#FFFFFF" />
-      <Path d="M36 62 Q50 64 64 62 Q62 78 50 78 Q38 78 36 62 Z" fill={ink} />
-      <Path d="M44 62.6 L47 69 L50 63 Z" fill={color} />
+    <Svg width={size} height={size} viewBox="0 4 100 100" accessibilityLabel="ExpenseMonster">
+      <Path d="M38 35 C31 31 28 22 30 14 C34 20 40 24 46 28 Z" fill={color} />
+      <Path d="M62 35 C69 31 72 22 70 14 C66 20 60 24 54 28 Z" fill={color} />
+      <Circle cx={50} cy={46} r={19} fill={color} />
+      <Ellipse cx={43} cy={43.5} rx={3.4} ry={4.4} fill={ink} />
+      <Ellipse cx={57} cy={43.5} rx={3.4} ry={4.4} fill={ink} />
+      <Rect x={22} y={52} width={56} height={34} rx={6} fill="#FFFFFF" />
+      <Path d="M31 66 H69 M31 75 H58" stroke={ink} strokeOpacity={0.35} strokeWidth={3} strokeLinecap="round" />
+      <Rect x={31} y={47} width={11} height={12} rx={5.5} fill="#C7DCD2" />
+      <Rect x={58} y={47} width={11} height={12} rx={5.5} fill="#C7DCD2" />
     </Svg>
   );
 }

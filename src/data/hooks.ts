@@ -67,11 +67,12 @@ export function useCardLedger(cardId: string | undefined) {
   const cards = useTable('cards');
   const txns = useTable('transactions');
   const overrides = useTable('card_overrides');
+  const loans = useTable('loans');
   const today = useToday();
   return useMemo(() => {
     const card = cards.find((c) => c.id === cardId);
-    return card ? { card, ledger: buildCardLedger(card, txns, overrides, today) } : null;
-  }, [cards, txns, overrides, today, cardId]);
+    return card ? { card, ledger: buildCardLedger(card, txns, overrides, today, undefined, loans) } : null;
+  }, [cards, txns, overrides, loans, today, cardId]);
 }
 
 export const useMembers = () => useTable('members');

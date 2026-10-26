@@ -64,6 +64,10 @@ export const TABLES: Record<TableName, Record<string, string>> = {
     closed: IN0,
     upiId: T,
     note: T,
+    // v12: an EMI on a credit card (cardId set) is billed on that card's statements.
+    cardId: T,
+    sourceTxnId: T,
+    processingFee: IN0,
   },
   billers: {
     name: TN,
@@ -115,7 +119,17 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   },
   incomes: { name: TN, amount: IN0, frequency: TN, nextDate: TN, accountId: T, categoryId: T, active: 'INTEGER NOT NULL DEFAULT 1' },
   budgets: { categoryId: TN, month: TN, amount: IN0 },
-  rules: { pattern: TN, categoryId: TN },
+  rules: {
+    pattern: TN,
+    categoryId: TN,
+    field: "TEXT NOT NULL DEFAULT 'payee'",
+    source: "TEXT NOT NULL DEFAULT 'any'",
+    method: T,
+    cardId: T,
+    accountId: T,
+    rename: T,
+    learned: 'INTEGER NOT NULL DEFAULT 1',
+  },
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
   devices: { name: TN, publicKey: T },
   household: { headDeviceId: T, keyId: T, removed: T },
@@ -133,6 +147,8 @@ const ADDED_IN: Partial<Record<TableName, Record<string, number>>> = {
   household: { keyId: 6, removed: 6 },
   holdings: { fundType: 8, priceSource: 9, faceValue: 10, couponRate: 10, maturityDate: 10 },
   trades: { amountUnknown: 11 },
+  loans: { cardId: 12, sourceTxnId: 12, processingFee: 12 },
+  rules: { field: 13, source: 13, method: 13, cardId: 13, accountId: 13, rename: 13, learned: 13 },
 };
 const EXTRA_ADDED_IN = 4;
 const tablesAt = (version: number) => (Object.keys(TABLES) as TableName[]).filter((t) => (CREATED_IN[t] ?? 1) <= version);
@@ -213,4 +229,8 @@ export const MIGRATIONS: string[] = [
   ['ALTER TABLE "holdings" ADD COLUMN "faceValue" INTEGER;', 'ALTER TABLE "holdings" ADD COLUMN "couponRate" REAL;', 'ALTER TABLE "holdings" ADD COLUMN "maturityDate" TEXT;'].join('\n'),
   // v11: nothing is mandatory: a trade can be saved without its amount, which is then unknown, not zero.
   'ALTER TABLE "trades" ADD COLUMN "amountUnknown" INTEGER NOT NULL DEFAULT 0;',
+  // v12: credit card EMIs. Existing loans get NULL / 0 and behave exactly as before.
+  ['ALTER TABLE "loans" ADD COLUMN "cardId" TEXT;', 'ALTER TABLE "loans" ADD COLUMN "sourceTxnId" TEXT;', 'ALTER TABLE "loans" ADD COLUMN "processingFee" INTEGER NOT NULL DEFAULT 0;'].join('\n'),
+  // v13: rules with conditions and actions. Existing rules were all learned from filing: learned = 1.
+  ['field', 'source', 'method', 'cardId', 'accountId', 'rename', 'learned'].map((c) => `ALTER TABLE "rules" ADD COLUMN "${c}" ${TABLES.rules[c]};`).join('\n'),
 ];

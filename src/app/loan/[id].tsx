@@ -12,6 +12,7 @@ import { Button, Card, Divider, EmptyState, IconButton, Money, Pill, Row, Sectio
 import { toast } from '@/ui/components/feedback';
 import { AmountField, Segmented } from '@/ui/components/forms';
 import { TxnRow, openPay } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -28,7 +29,7 @@ export default function LoanDetail() {
   const [mode, setMode] = useState<'reduce_tenure' | 'reduce_emi'>('reduce_tenure');
 
   const schedule = useMemo(() => (loan ? scheduleFor(loan) : []), [loan]);
-  const p = useMemo(() => (loan ? loanProgress(schedule, loanEmisPaid(loan, txns), today) : null), [loan, schedule, txns, today]);
+  const p = useMemo(() => (loan ? loanProgress(schedule, loanEmisPaid(loan, txns, today), today) : null), [loan, schedule, txns, today]);
   const payments = useMemo(() => txns.filter((t) => t.linkType === 'loan' && t.linkId === id && t.status === 'confirmed'), [txns, id]);
   const yearly = useMemo(() => {
     const map = new Map<string, { principal: number; interest: number }>();
@@ -63,12 +64,18 @@ export default function LoanDetail() {
   return (
     <Screen
       title={loan.name}
-      subtitle={`${loan.lender ?? (loan.direction === 'lent' ? 'Lent' : 'Loan')} · ${loan.ratePa}% ${loan.interestType === 'flat' ? 'flat' : ''}`}
+      subtitle={loan.cardId ? `EMI on ${loan.lender ?? 'your card'}, billed with its statement` : `${loan.lender ?? (loan.direction === 'lent' ? 'Lent' : 'Loan')} · ${loan.ratePa}% ${loan.interestType === 'flat' ? 'flat' : ''}`}
       back
       right={
         <>
-          <IconButton name="create-outline" label="Edit loan" onPress={() => router.push({ pathname: '/loan/new', params: { id: loan.id } })} />
-          <IconButton name="trash-outline" label="Delete loan" onPress={onDelete} />
+          <IconButton name="create-outline" label="Edit loan" onPress={() => router.push({ pathname: loan.cardId ? '/card-emi/new' : '/loan/new', params: { id: loan.id } })} />
+          <MoreMenu
+            title={loan.name}
+            actions={[
+              { label: loan.closed ? (loan.cardId ? 'Restart EMI plan' : 'Reopen loan') : loan.cardId ? 'Stop EMI plan (closed early)' : 'Mark loan closed', icon: loan.closed ? 'refresh-outline' : 'checkmark-done-outline', onPress: () => update('loans', loan.id, { closed: loan.closed ? 0 : 1 }) },
+              { label: 'Delete loan', icon: 'trash-outline', onPress: onDelete, destructive: true },
+            ]}
+          />
         </>
       }
       footer={due ? <Button title={loan.direction === 'lent' ? 'Record repayment' : `Pay EMI ${formatINR(due.amount ?? loan.emi)}`} icon="checkmark" size="lg" onPress={() => openPay(due)} /> : undefined}
@@ -85,7 +92,7 @@ export default function LoanDetail() {
           </ProgressRing>
           <View style={{ flex: 1, gap: 4 }}>
             <Txt variant="caption" tone="muted">
-              OUTSTANDING
+              Still to pay
             </Txt>
             <Money value={p.outstanding} variant="h1" decimals="never" fit="narrow" />
             {p.overdueCount ? <Pill label={`${p.overdueCount} EMI overdue`} tone="expense" /> : p.payoffDate ? <Txt variant="small" tone="muted">Free by {formatMonth(monthKey(p.payoffDate))}</Txt> : null}
@@ -106,7 +113,7 @@ export default function LoanDetail() {
         </Section>
       ) : null}
 
-      {loan.direction === 'borrowed' && loan.interestType === 'reducing' && p.emisLeft > 1 ? (
+      {!loan.cardId && loan.direction === 'borrowed' && loan.interestType === 'reducing' && p.emisLeft > 1 ? (
         <Section title="Prepayment simulator">
           <Card style={{ gap: space(1.5) }}>
             <AmountField label="Prepay a lump sum" value={prepay} onChange={setPrepay} placeholder="e.g. 200000" />
@@ -122,7 +129,7 @@ export default function LoanDetail() {
               <View style={{ gap: 6 }}>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Txt tone="muted">Interest saved</Txt>
-                  <Money value={sim.interestSaved} tone="income" variant="h3" />
+                  <Money value={sim.interestSaved} tone="good" variant="h3" />
                 </Row>
                 {mode === 'reduce_tenure' ? (
                   <Row style={{ justifyContent: 'space-between' }}>
@@ -188,7 +195,6 @@ export default function LoanDetail() {
         </Section>
       ) : null}
 
-      <Button title={loan.closed ? 'Reopen loan' : 'Mark loan closed'} variant="ghost" onPress={() => update('loans', loan.id, { closed: loan.closed ? 0 : 1 })} />
     </Screen>
   );
 }

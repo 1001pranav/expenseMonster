@@ -57,13 +57,13 @@ export default function Conflicts() {
             </Row>
             <Row>
               <Txt variant="caption" tone="muted" style={{ flex: 1 }}>
-                FIELD
+                Field
               </Txt>
               <Txt variant="caption" tone="primary" style={{ flex: 1.2 }}>
                 MINE
               </Txt>
               <Txt variant="caption" tone="info" style={{ flex: 1.2 }}>
-                {c.from.toUpperCase()}
+                {c.from}
               </Txt>
             </Row>
             {fields.map((f) => (

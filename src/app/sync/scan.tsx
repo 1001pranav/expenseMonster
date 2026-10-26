@@ -60,7 +60,7 @@ export default function ScanPair() {
 
   const switching = found && found.payload.householdId !== identity.householdId;
   return (
-    <Screen title="Scan pairing code" subtitle="On the other phone: Household → Sync → Show my QR" back scroll={false}>
+    <Screen title="Scan pairing code" subtitle="On the other phone: tap the initial at the top of Home, then Family phones, then Show QR" back scroll={false}>
       <View style={{ flex: 1, margin: space(2), borderRadius: radius.lg, overflow: 'hidden' }}>
         <CameraView style={{ flex: 1 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={(r) => onScan(r.data)} />
       </View>

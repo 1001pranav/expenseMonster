@@ -10,6 +10,7 @@ import { Button } from '../components/core';
 import { toast } from '../components/feedback';
 import { AmountField, ChipSelect, DateField, SwitchRow, TextField } from '../components/forms';
 import { Screen } from '../components/Screen';
+import { askForReminders } from '@/services/notifications';
 
 export function IncomeForm({ id }: { id?: string }) {
   const existing = useTable('incomes').find((i) => i.id === id);
@@ -29,6 +30,7 @@ export function IncomeForm({ id }: { id?: string }) {
     if (existing) await update('incomes', existing.id, data);
     else await insert('incomes', data);
     toast('Saved — we will remind you to mark it received', { tone: 'success' });
+    askForReminders();
     router.back();
   };
 

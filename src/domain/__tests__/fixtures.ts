@@ -1,4 +1,4 @@
-import type { BaseRow, Bill, Biller, CreditCard, Transaction } from '../types';
+import type { BaseRow, Bill, Biller, CategoryRule, CreditCard, Transaction } from '../types';
 
 let n = 0;
 export const base = (over: Partial<BaseRow> = {}): BaseRow => ({
@@ -94,3 +94,17 @@ export const at = (ymd: string) => {
   const [y, m, d] = ymd.split('-').map(Number);
   return new Date(y, m - 1, d, 12).toISOString();
 };
+
+export const rule = (over: Partial<CategoryRule> = {}): CategoryRule => ({
+  ...base(),
+  pattern: 'swiggy',
+  categoryId: 'food',
+  field: 'payee',
+  source: 'any',
+  method: null,
+  cardId: null,
+  accountId: null,
+  rename: null,
+  learned: 1,
+  ...over,
+});

@@ -11,6 +11,7 @@ import { toast } from '@/ui/components/feedback';
 import { AmountField, ChipSelect, DateField, Field, Segmented, SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
+import { askForReminders } from '@/services/notifications';
 
 const KINDS: { value: LoanKind; label: string }[] = [
   { value: 'home', label: 'Home' },
@@ -75,12 +76,16 @@ export default function LoanForm() {
       closed: 0 as const,
       upiId: upiId.trim() || null,
       note: null,
+      cardId: existing?.cardId ?? null,
+      sourceTxnId: existing?.sourceTxnId ?? null,
+      processingFee: existing?.processingFee ?? 0,
       scope,
     };
     try {
       if (existing) await update('loans', existing.id, data);
       else await insert('loans', data);
       toast(existing ? 'Loan updated' : 'Loan added — EMI reminders are on', { tone: 'success' });
+      askForReminders();
       router.back();
     } finally {
       setSaving(false);

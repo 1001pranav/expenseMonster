@@ -11,7 +11,8 @@ import { AmountField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
-export default function Budgets() {
+/** The page body, also shown inside the Insights tab. */
+export function BudgetsBody() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const today = useToday();
@@ -45,22 +46,22 @@ export default function Budgets() {
   };
 
   return (
-    <Screen title="Monthly budgets" subtitle="Alerts at 80% and 100% of each budget" back>
+    <>
       {total ? (
         <Card style={{ gap: space(1.25) }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="caption" tone="muted">
-              {formatMonth(month).toUpperCase()} · BUDGETED CATEGORIES
+              {formatMonth(month)}, budgeted categories
             </Txt>
             <Txt variant="caption" tone={over ? 'expense' : 'muted'}>
-              {over ? `${over} OVER` : `${daysLeft} DAYS LEFT`}
+              {over ? `${over} over budget` : `${daysLeft} days left`}
             </Txt>
           </Row>
           <Row gap={0.75} style={{ alignItems: 'baseline' }}>
             <Money value={spent} variant="h1" decimals="never" />
             <Txt tone="muted">of {money(total, { decimals: 'never' })}</Txt>
           </Row>
-          <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.income} />
+          <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.good} />
           <Txt variant="small" tone="muted">
             {spent < total ? `${money(total - spent, { decimals: 'never' })} left · about ${money(Math.floor((total - spent) / daysLeft), { decimals: 'never' })} a day` : `Over by ${money(spent - total, { decimals: 'never' })} this month`}
           </Txt>
@@ -84,7 +85,7 @@ export default function Budgets() {
               subtitle={
                 u ? (
                   <View style={{ gap: 4, marginTop: 4 }}>
-                    <ProgressBar value={u.ratio} color={u.level === 'over' ? colors.expense : u.level === 'warn' ? colors.warn : colors.income} height={6} />
+                    <ProgressBar value={u.ratio} color={u.level === 'over' ? colors.expense : u.level === 'warn' ? colors.warn : colors.good} height={6} />
                     <Txt variant="small" tone="muted">
                       {money(u.spent, { compact: true })} of {money(u.limit, { compact: true })}
                     </Txt>
@@ -116,6 +117,14 @@ export default function Budgets() {
         <Button title="Save" onPress={save} />
         <View style={{ height: space(1) }} />
       </Sheet>
+    </>
+  );
+}
+
+export default function Budgets() {
+  return (
+    <Screen title="Budgets" back>
+      <BudgetsBody />
     </Screen>
   );
 }

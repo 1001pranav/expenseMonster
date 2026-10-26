@@ -68,7 +68,7 @@ export function taxSummary(input: { policies: Policy[]; loans: Loan[]; transacti
 
   for (const l of input.loans) {
     if (l.deletedAt || l.direction !== 'borrowed' || (l.kind !== 'home' && l.kind !== 'education') || l.interestType === 'none') continue;
-    const paidCount = loanEmisPaid(l, input.transactions);
+    const paidCount = loanEmisPaid(l, input.transactions, today);
     const rows = scheduleFor(l).filter((r) => r.n <= paidCount && inFy(r.date));
     const principal = rows.reduce((a, r) => a + r.principal, 0);
     const interest = rows.reduce((a, r) => a + r.interest, 0);

@@ -19,7 +19,7 @@ import { space, useTheme } from '@/ui/theme';
 
 export default function Pay() {
   const { colors } = useTheme();
-  const { due: dueKey, upi } = useLocalSearchParams<{ due: string; upi?: string }>();
+  const { due: dueKey } = useLocalSearchParams<{ due: string; upi?: string }>();
   const dues = useDues(400);
   const today = useToday();
   const accounts = useTable('accounts');
@@ -27,6 +27,7 @@ export default function Pay() {
   const txns = useTable('transactions');
   const overrides = useTable('card_overrides');
   const billers = useTable('billers');
+  const loans = useTable('loans');
   const due = useMemo<DueItem | undefined>(() => {
     const found = dues.find((d) => d.key === dueKey);
     if (found || !dueKey?.startsWith('biller:')) return found;
@@ -54,10 +55,10 @@ export default function Pay() {
     if (due?.link?.type !== 'card') return null;
     const card = cards.find((c) => c.id === due.link!.id);
     if (!card) return null;
-    const unpaid = buildCardLedger(card, txns, overrides, today).cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
+    const unpaid = buildCardLedger(card, txns, overrides, today, undefined, loans).cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
     if (!unpaid.length) return null;
     return { total: unpaid.reduce((a, c) => a + c.remaining, 0), min: unpaid.reduce((a, c) => a + Math.min(c.minDue, c.remaining), 0) };
-  }, [due, cards, txns, overrides, today]);
+  }, [due, cards, txns, overrides, loans, today]);
 
   const [amount, setAmount] = useState<Paise | null>(due?.amount ?? null);
   const [method, setMethod] = useState<PayMethod>(due?.link?.type === 'card' ? 'bank' : 'upi');
@@ -153,6 +154,7 @@ export default function Pay() {
       ) : null}
 
       <AmountField key={amountKey} label={due.incoming ? 'Amount received' : 'Amount paid'} value={amount} onChange={setAmount} />
+      {canUpi ? <TextField label="Payee UPI ID" value={upiId} onChangeText={setUpiId} placeholder="biller@okhdfc" autoCapitalize="none" icon="at" hint="Needed to open your UPI app" /> : null}
       <ChipSelect
         label="Paid with"
         value={method}
@@ -170,7 +172,6 @@ export default function Pay() {
       {method === 'card' && cards.length ? <ChipSelect label="Which card?" value={cardId} onChange={setCardId} options={cards.map((c) => ({ value: c.id, label: c.name }))} /> : null}
       {method !== 'card' && accounts.length ? <ChipSelect label="From account" value={accountId} onChange={setAccountId} allowNone options={accounts.map((a) => ({ value: a.id, label: a.name }))} /> : null}
       <DateField label="Paid on" value={date} onChange={setDate} />
-      {canUpi ? <TextField label="Payee UPI ID" value={upiId} onChangeText={setUpiId} placeholder="biller@okhdfc" autoCapitalize="none" icon="at" hint="Saved on the bill / loan" /> : null}
 
       <Sheet visible={confirming} onClose={() => setConfirming(false)} title="Did the payment go through?">
         <Txt tone="muted">UPI apps don't tell us the result. Check your UPI app or bank SMS.</Txt>
@@ -185,7 +186,6 @@ export default function Pay() {
         />
         <Button title="No, it failed" variant="secondary" onPress={() => setConfirming(false)} />
       </Sheet>
-      {upi ? <Txt variant="small" tone="faint">Opened from reminder</Txt> : null}
     </Screen>
   );
 }

@@ -14,6 +14,7 @@ import { toast } from '@/ui/components/feedback';
 import { AmountField, DayOfMonthField, Field, SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
+import { askForReminders } from '@/services/notifications';
 
 export default function CardForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -38,6 +39,7 @@ export default function CardForm() {
       if (existing) await update('cards', existing.id, data);
       else await insert('cards', data);
       toast(existing ? 'Card updated' : 'Card added — purchases will be grouped by bill cycle', { tone: 'success' });
+      askForReminders();
       router.back();
     } finally {
       setSaving(false);

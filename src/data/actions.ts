@@ -4,7 +4,8 @@ import { findDuplicate } from '@/domain/dedupe';
 import type { DueItem } from '@/domain/dues';
 import type { Paise } from '@/domain/money';
 import { advance } from '@/domain/recurrence';
-import { ruleKey } from '@/domain/transactions';
+import { isLearned } from '@/domain/rules';
+import { isClearCapture, ruleKey } from '@/domain/transactions';
 import type { Bill, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { findById, insert, insertMany, remove, restore, update, type NewRow } from '@/db/repo';
 import { CATEGORY_FOR } from '@/db/seed';
@@ -48,15 +49,20 @@ export async function saveTransaction(draft: TxnDraft, id?: string): Promise<Tra
   return row;
 }
 
-/** Remember "merchant → category" after the user confirms or corrects one. */
+/**
+ * Remember "merchant → category" after the user confirms or corrects one. Only learned rules change
+ * this way: a rule the user wrote (or edited) for the same words is left as they set it.
+ */
 export async function learnRule(t: Pick<Transaction, 'payee' | 'vpa' | 'categoryId'>) {
   if (!t.categoryId) return;
   const key = ruleKey(t.payee, t.vpa);
   if (!key) return;
-  const existing = getState().tables.rules.find((r) => r.pattern === key);
+  const same = getState().tables.rules.filter((r) => r.pattern === key);
+  if (same.some((r) => !isLearned(r))) return;
+  const existing = same[0];
   if (existing?.categoryId === t.categoryId) return;
   if (existing) await update('rules', existing.id, { categoryId: t.categoryId });
-  else await insert('rules', { pattern: key, categoryId: t.categoryId, scope: 'household' });
+  else await insert('rules', { pattern: key, categoryId: t.categoryId, field: 'payee', source: 'any', method: null, cardId: null, accountId: null, rename: null, learned: 1, scope: 'household' });
 }
 
 export async function approveCapture(id: string, patch: Partial<Transaction> = {}) {
@@ -68,6 +74,17 @@ export async function approveCapture(id: string, patch: Partial<Transaction> = {
     await update('transactions', id, { attachment: null });
   }
   return row;
+}
+
+/**
+ * Approve a fresh capture on its own when it was read clearly and the setting allows it.
+ * Returns the saved row, or null when it should go to Review instead. Marked "auto-saved" so the
+ * Spending list can point it out for a few days.
+ */
+export async function autoSaveCapture(id: string): Promise<Transaction | null> {
+  const t = findById('transactions', id);
+  if (!t || !getState().settings.autoSaveCaptures || !isClearCapture(t)) return null;
+  return approveCapture(id, { flags: [t.flags, 'auto-saved'].filter(Boolean).join(',') });
 }
 
 /** Rejected captures are kept (as tombstone-like rows) so the same SMS is never offered again. */

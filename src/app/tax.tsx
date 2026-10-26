@@ -40,7 +40,8 @@ const META: Record<TaxSection, { title: string; body: string; icon: IconName; ti
   },
 };
 
-export default function Tax() {
+/** The page body, also shown inside the Insights tab. */
+export function TaxBody() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const today = useToday();
@@ -77,16 +78,16 @@ export default function Tax() {
   );
 
   return (
-    <Screen title="Tax saver" subtitle={`${fy.label} · old tax regime`} back>
-      <Card tone="primary" style={{ gap: space(1) }}>
-        <Txt variant="small" tone="inverse" style={{ opacity: 0.85 }}>
-          Deductions tracked so far
+    <>
+      <View style={{ gap: 4, paddingHorizontal: 4 }}>
+        <Txt variant="small" tone="muted">
+          Deductions tracked in {fy.label}, old tax regime
         </Txt>
-        <Money value={total} variant="display" tone="inverse" decimals="never" fit="narrow" />
-        <Txt variant="small" tone="inverse" style={{ opacity: 0.85 }}>
-          {headroom80C > 0 ? `${money(headroom80C, { compact: true })} of 80C still unused before 31 Mar` : '80C limit reached for this year'}
+        <Money value={total} variant="display" decimals="never" fit="narrow" />
+        <Txt variant="small" tone="muted">
+          {headroom80C > 0 ? `${money(headroom80C, { compact: true })} of 80C still unused before 31 March` : '80C limit reached for this year'}
         </Txt>
-      </Card>
+      </View>
 
       {!tracked.length ? (
         <Card>
@@ -114,11 +115,11 @@ export default function Tax() {
                     {meta.body}
                   </Txt>
                 </View>
-                {s.limit !== null && s.headroom === 0 ? <Pill label="Maxed" tone="income" /> : null}
+                {s.limit !== null && s.headroom === 0 ? <Pill label="Maxed" tone="good" /> : null}
               </Row>
               {s.limit !== null ? (
                 <View style={{ gap: 6 }}>
-                  <ProgressBar value={raw / s.limit} color={colors.income} height={6} />
+                  <ProgressBar value={raw / s.limit} color={colors.good} height={6} />
                   <Row style={{ justifyContent: 'space-between' }}>
                     <Txt variant="small" tone="muted">
                       {money(s.claimed, { compact: true })} of {money(s.limit, { compact: true })}
@@ -236,6 +237,14 @@ export default function Tax() {
         </Txt>
       </Card>
       <Button title="Add insurance policy" icon="add" variant="secondary" onPress={() => router.push('/policy/new')} />
+    </>
+  );
+}
+
+export default function Tax() {
+  return (
+    <Screen title="Tax saver" back>
+      <TaxBody />
     </Screen>
   );
 }

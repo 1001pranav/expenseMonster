@@ -16,11 +16,11 @@ import {
 } from 'react-native';
 import { formatINR, spokenINR, type FormatOptions, type Paise } from '@/domain/money';
 import { useStore } from '@/db/store';
-import { fonts, gradients, radius, shadow, space, type, useTheme, type Colors, type TypeVariant } from '../theme';
-import { Aurora, GradientFill, GradientTile } from './Aurora';
+import { fonts, radius, shadow, space, type, useTheme, type Colors, type TypeVariant } from '../theme';
+import { Aurora, GradientTile } from './Aurora';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
-type Tone = 'default' | 'muted' | 'faint' | 'primary' | 'income' | 'expense' | 'warn' | 'info' | 'inverse';
+type Tone = 'default' | 'muted' | 'faint' | 'primary' | 'good' | 'income' | 'expense' | 'warn' | 'info' | 'inverse';
 
 const toneColor = (c: Colors, tone: Tone) =>
   ({
@@ -28,10 +28,11 @@ const toneColor = (c: Colors, tone: Tone) =>
     muted: c.textMuted,
     faint: c.textFaint,
     primary: c.primary,
-    income: c.income,
-    expense: c.expense,
-    warn: c.warn,
-    info: c.info,
+    good: c.goodText,
+    income: c.incomeText,
+    expense: c.expenseText,
+    warn: c.warnText,
+    info: c.infoText,
     inverse: c.primaryText,
   })[tone];
 
@@ -85,9 +86,9 @@ export function Money({
 export function Card({ children, style, onPress, padded = true, tone }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; padded?: boolean; tone?: 'primary' | 'alt' }) {
   const { colors, dark } = useTheme();
   const hero = tone === 'primary';
-  const bg = hero ? colors.heroBase : tone === 'alt' ? colors.surfaceAlt : colors.surface;
+  const bg = hero ? colors.heroBase : tone === 'alt' ? colors.surfaceAlt : colors.glass;
   const body = [
-    { backgroundColor: bg, borderRadius: radius.lg, padding: padded ? space(2) : 0 },
+    { backgroundColor: bg, borderRadius: 20, padding: padded ? space(2) : 0 },
     hero ? { overflow: 'hidden' as const, padding: padded ? space(2.5) : 0 } : tone ? null : shadow(dark),
     style,
   ];
@@ -107,10 +108,19 @@ export function Card({ children, style, onPress, padded = true, tone }: { childr
   );
 }
 
-export function IconCircle({ name, color, size = 40, soft = true }: { name: IconName; color: string; size?: number; soft?: boolean }) {
+/**
+ * Rounded icon tile. Neutral (sage tile, muted icon) unless `state` is set: colour marks state
+ * (late, due, money in, done), never what kind of thing a row is. `color` is accepted for older
+ * call sites and ignored unless `soft` is false (a filled tile in that colour).
+ */
+export function IconCircle({ name, size = 40, soft = true, state, ...rest }: { name: IconName; color?: string; size?: number; soft?: boolean; state?: 'expense' | 'warn' | 'income' | 'good' }) {
+  const { colors } = useTheme();
+  const tint = state ? { expense: [colors.expenseSoft, colors.expenseText], warn: [colors.warnSoft, colors.warnText], income: [colors.incomeSoft, colors.incomeText], good: [colors.goodSoft, colors.goodText] }[state] : null;
+  const bg = !soft && rest.color ? rest.color : (tint?.[0] ?? colors.surfaceAlt);
+  const fg = !soft && rest.color ? '#fff' : (tint?.[1] ?? colors.textMuted);
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: soft ? `${color}22` : color, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name={name} size={size * 0.5} color={soft ? color : '#fff'} />
+    <View style={{ width: size, height: size, borderRadius: size * 0.3, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+      <Ionicons name={name} size={size * 0.5} color={fg} />
     </View>
   );
 }
@@ -141,7 +151,7 @@ export function Button({
   haptic?: boolean;
 }) {
   const { colors } = useTheme();
-  const bg = { primary: colors.primary, secondary: colors.surfaceAlt, ghost: 'transparent', danger: colors.expense, success: colors.income }[variant];
+  const bg = { primary: colors.primary, secondary: colors.surfaceAlt, ghost: 'transparent', danger: colors.expenseText, success: colors.good }[variant];
   const fg = { primary: colors.primaryText, secondary: colors.text, ghost: colors.primary, danger: '#fff', success: '#fff' }[variant];
   const h = { sm: 36, md: 48, lg: 56 }[size];
   return (
@@ -155,14 +165,12 @@ export function Button({
         onPress();
       }}
       style={({ pressed }) => [
-        { height: h, borderRadius: radius.pill, backgroundColor: bg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: space(size === 'sm' ? 1.75 : 2.5), gap: 8 },
-        variant === 'primary' && { overflow: 'hidden' },
+        { height: h, borderRadius: size === 'sm' ? 12 : radius.md, backgroundColor: bg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: space(size === 'sm' ? 1.75 : 2.5), gap: 8 },
         (disabled || loading) && { opacity: 0.45 },
         pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
         style,
       ]}
     >
-      {variant === 'primary' ? <GradientFill from={gradients.brand[0]} to={gradients.brand[1]} /> : null}
       {loading ? <ActivityIndicator color={fg} /> : icon ? <Ionicons name={icon} size={size === 'sm' ? 16 : 19} color={fg} /> : null}
       {title ? (
         <Text style={[type[size === 'sm' ? 'small' : 'bodyStrong'], { color: fg }]} numberOfLines={1}>
@@ -202,13 +210,14 @@ export function Chip({ label, selected, onPress, icon, color, compact }: { label
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      hitSlop={compact ? 4 : 2}
       style={({ pressed }) => [
         {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 6,
           paddingHorizontal: compact ? 10 : 14,
-          height: compact ? 32 : 38,
+          height: compact ? 40 : 44,
           borderRadius: radius.pill,
           backgroundColor: selected ? accent : colors.surface,
           borderWidth: 1,
@@ -225,15 +234,16 @@ export function Chip({ label, selected, onPress, icon, color, compact }: { label
   );
 }
 
-export function Pill({ label, tone = 'muted' }: { label: string; tone?: 'muted' | 'income' | 'expense' | 'warn' | 'primary' | 'info' }) {
+export function Pill({ label, tone = 'muted' }: { label: string; tone?: 'muted' | 'good' | 'income' | 'expense' | 'warn' | 'primary' | 'info' }) {
   const { colors } = useTheme();
   const map = {
     muted: [colors.surfaceAlt, colors.textMuted],
-    income: [colors.incomeSoft, colors.income],
-    expense: [colors.expenseSoft, colors.expense],
-    warn: [colors.warnSoft, colors.warn],
-    primary: [colors.primarySoft, colors.primary],
-    info: [colors.infoSoft, colors.info],
+    good: [colors.goodSoft, colors.goodText],
+    income: [colors.incomeSoft, colors.incomeText],
+    expense: [colors.expenseSoft, colors.expenseText],
+    warn: [colors.warnSoft, colors.warnText],
+    primary: [colors.primarySoft, colors.primaryOnSoft],
+    info: [colors.infoSoft, colors.infoText],
   }[tone];
   return (
     <View style={{ backgroundColor: map[0], paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, alignSelf: 'flex-start' }}>
@@ -274,7 +284,7 @@ export function ListRow({
       accessibilityRole={onPress ? 'button' : undefined}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceAlt }]}
     >
-      {leading ?? (icon ? <IconCircle name={icon} color={iconColor ?? colors.primary} /> : null)}
+      {leading ?? (icon ? <IconCircle name={icon} color={iconColor} /> : null)}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt variant="bodyStrong" numberOfLines={1}>
           {title}
@@ -318,14 +328,10 @@ export function Section({ title, action, onAction, children, style }: { title?: 
 }
 
 export function EmptyState({ icon, title, body, action, onAction }: { icon: IconName; title: string; body?: string; action?: string; onAction?: () => void }) {
-  const { colors } = useTheme();
   return (
     <View style={{ alignItems: 'center', paddingVertical: space(5), paddingHorizontal: space(3), gap: space(1.25) }}>
-      <View style={{ width: 112, height: 96, alignItems: 'center', justifyContent: 'center', marginBottom: space(0.5) }}>
-        <View style={{ position: 'absolute', width: 96, height: 96, borderRadius: 48, backgroundColor: colors.primarySoft }} />
-        <View style={{ position: 'absolute', top: 6, right: 4, width: 14, height: 14, borderRadius: 7, backgroundColor: gradients.sunset[0] }} />
-        <View style={{ position: 'absolute', bottom: 10, left: 6, width: 10, height: 10, borderRadius: 5, backgroundColor: gradients.mint[0] }} />
-        <GradientTile icon={icon} size={60} />
+      <View style={{ marginBottom: space(0.5) }}>
+        <GradientTile icon={icon} gradient="ink" size={64} radius={20} iconSize={30} />
       </View>
       <Txt variant="h3" style={{ textAlign: 'center' }}>
         {title}
@@ -363,7 +369,7 @@ export function Stat({ label, value, tone, compact }: { label: string; value: Pa
   return (
     <View style={{ flex: 1, gap: 2 }}>
       <Txt variant="caption" tone={tone === 'inverse' ? 'inverse' : 'muted'} style={tone === 'inverse' ? { opacity: 0.75 } : undefined}>
-        {label.toUpperCase()}
+        {label}
       </Txt>
       <Money value={value} variant="h3" tone={tone} compact={compact} decimals="never" fit="tight" />
     </View>

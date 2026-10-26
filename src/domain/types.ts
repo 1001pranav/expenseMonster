@@ -103,7 +103,7 @@ export interface Transaction extends BaseRow {
 }
 
 export type LoanDirection = 'borrowed' | 'lent';
-export type LoanKind = 'home' | 'car' | 'personal' | 'education' | 'gold' | 'business' | 'informal' | 'other';
+export type LoanKind = 'home' | 'car' | 'personal' | 'education' | 'gold' | 'business' | 'informal' | 'other' | 'card_emi';
 export type InterestType = 'reducing' | 'flat' | 'none';
 export interface Loan extends BaseRow {
   name: string;
@@ -124,6 +124,12 @@ export interface Loan extends BaseRow {
   closed: 0 | 1;
   upiId: string | null;
   note: string | null;
+  /** Card EMI: the card it's billed on (null for ordinary loans). */
+  cardId: string | null;
+  /** Card EMI: the purchase that was converted; it leaves its statement and is billed in instalments. */
+  sourceTxnId: string | null;
+  /** Card EMI: one-time processing fee, billed with the first instalment (GST added). */
+  processingFee: Paise;
 }
 
 export type BillerType =
@@ -221,10 +227,29 @@ export interface Budget extends BaseRow {
   amount: Paise;
 }
 
+/** Where a rule looks for its words: the payee (and UPI ID), or everything a screenshot / SMS said. */
+export type RuleField = 'payee' | 'text';
+/** Which captures a rule applies to. Typed entries only ever match "any" + payee rules. */
+export type RuleSource = 'any' | 'ocr' | 'sms';
+
+/**
+ * "When <field> contains <pattern> (in <source>), then …". Learned rules (learned = 1) are made
+ * from what the user files and only set the category; the user's own rules can also set how it
+ * was paid and rename the payee, and win over learned rules and past filing.
+ */
 export interface CategoryRule extends BaseRow {
-  /** Lower-case merchant / VPA fragment. */
+  /** Lower-case fragment to look for. */
   pattern: string;
+  /** Category to file under; '' leaves the category alone. */
   categoryId: string;
+  field: RuleField;
+  source: RuleSource;
+  method: PayMethod | null;
+  cardId: string | null;
+  accountId: string | null;
+  /** Payee name to use instead of what was read. */
+  rename: string | null;
+  learned: 0 | 1;
 }
 
 /** A bank SMS format taught by the user from one sample message (see parsers/custom.ts). */

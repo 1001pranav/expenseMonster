@@ -12,10 +12,11 @@ import { CardFace } from '@/ui/components/CardFace';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { AmountField } from '@/ui/components/forms';
 import { TxnRow } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { useTheme } from '@/ui/theme';
 
-const statusTone = (s: CycleSummary['status']) => (s === 'overdue' ? 'expense' : s === 'due' || s === 'partly_paid' ? 'warn' : s === 'paid' || s === 'nil' ? 'income' : 'muted');
+const statusTone = (s: CycleSummary['status']) => (s === 'overdue' ? 'expense' : s === 'due' || s === 'partly_paid' ? 'warn' : s === 'paid' || s === 'nil' ? 'good' : 'muted');
 
 export default function CardDetail() {
   const { colors } = useTheme();
@@ -23,6 +24,7 @@ export default function CardDetail() {
   const data = useCardLedger(id);
   const txns = useTable('transactions');
   const overrides = useTable('card_overrides');
+  const loans = useTable('loans');
   const cats = useCategoryMap();
   const today = useToday();
   const [selected, setSelected] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export default function CardDetail() {
     );
   }
   const { card, ledger } = data;
+  const plans = loans.filter((l) => l.cardId === card.id && !l.deletedAt);
   const view = cycles.find((c) => c.statementDate === selected) ?? ledger.current;
   const viewTxns = txns.filter((t) => view.transactionIds.includes(t.id)).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   const payments = txns.filter((t) => t.cardId === card.id && t.type === 'transfer' && t.linkType === 'card' && t.status === 'confirmed');
@@ -67,7 +70,7 @@ export default function CardDetail() {
       right={
         <>
           <IconButton name="create-outline" label="Edit card" onPress={() => router.push({ pathname: '/card/new', params: { id: card.id } })} />
-          <IconButton name="trash-outline" label="Delete card" onPress={onDelete} />
+          <MoreMenu title={card.name} actions={[{ label: 'Delete card', icon: 'trash-outline', onPress: onDelete, destructive: true }]} />
         </>
       }
       footer={unpaid ? <Button title={`Pay bill · ${formatINR(unpaid.remaining)} by ${formatDay(unpaid.dueDate)}`} icon="checkmark" size="lg" variant={unpaid.status === 'overdue' ? 'danger' : 'primary'} onPress={() => router.push({ pathname: '/pay', params: { due: `card:${card.id}:${unpaid.statementDate}` } })} /> : undefined}
@@ -76,13 +79,13 @@ export default function CardDetail() {
         <Row gap={2}>
           <View style={{ flex: 1 }}>
             <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              OUTSTANDING
+              Still to pay
             </Txt>
             <Money value={ledger.outstanding} variant="h2" style={{ color: '#fff' }} fit="tight" />
           </View>
           <View style={{ flex: 1 }}>
             <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              {ledger.daysToDue !== null ? (ledger.daysToDue < 0 ? 'OVERDUE' : `DUE IN ${ledger.daysToDue} DAYS`) : 'NO BILL DUE'}
+              {ledger.daysToDue !== null ? (ledger.daysToDue < 0 ? 'Late' : `Due in ${ledger.daysToDue} days`) : 'No bill due'}
             </Txt>
             <Money value={unpaid?.remaining ?? 0} variant="h2" style={{ color: '#fff' }} />
           </View>
@@ -130,14 +133,44 @@ export default function CardDetail() {
           ))}
         </Card>
         <Txt variant="small" tone="faint" style={{ paddingHorizontal: 4 }}>
-          Long-press a statement to enter the exact amount from your bank (fees, interest, GST).
+          Tap a statement to see its purchases. If the bank's total differs (fees, interest, GST), open it and tap Change amount.
         </Txt>
       </Section>
 
-      <Section title={view.status === 'unbilled' ? 'In this cycle' : `Statement ${formatDay(view.statementDate)}`}>
+      <Section
+        title={view.status === 'unbilled' ? 'In this cycle' : `Statement ${formatDay(view.statementDate)}`}
+        action={view.status === 'unbilled' ? undefined : 'Change amount'}
+        onAction={() => {
+          setActual(view.total);
+          setEditing(view);
+        }}
+      >
         <Card padded={false} style={{ overflow: 'hidden' }}>
-          {viewTxns.length ? viewTxns.map((t) => <TxnRow key={t.id} t={t} cat={cats.get(t.categoryId ?? '')} card={card} />) : <EmptyState icon="card-outline" title="No purchases" body="Mark UPI/SMS payments as credit-card to bring them here." />}
+          {view.emiLines.map((e) => (
+            <ListRow key={`${e.loanId}-${e.n}`} icon="albums-outline" title={e.name} subtitle={`EMI ${e.n} of ${e.of}`} right={<Money value={e.amount} />} onPress={() => router.push(`/loan/${e.loanId}`)} />
+          ))}
+          {viewTxns.length ? viewTxns.map((t) => <TxnRow key={t.id} t={t} cat={cats.get(t.categoryId ?? '')} card={card} />) : view.emiLines.length ? null : <EmptyState icon="card-outline" title="No purchases" body="Mark UPI or SMS payments as paid by credit card to bring them here." />}
         </Card>
+      </Section>
+
+      <Section title="EMIs on this card" action="Add" onAction={() => router.push({ pathname: '/card-emi/new', params: { cardId: card.id } })}>
+        {plans.length ? (
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {plans.map((l) => {
+              const billed = Math.min(l.tenureMonths, ledger.cycles.reduce((a, c) => a + c.emiLines.filter((e) => e.loanId === l.id).length, 0));
+              return <ListRow key={l.id} icon="albums-outline" title={l.name} subtitle={l.closed ? 'Stopped early' : `${billed} of ${l.tenureMonths} billed`} right={<Money value={l.principal} tone="muted" />} chevron onPress={() => router.push(`/loan/${l.id}`)} />;
+            })}
+          </Card>
+        ) : (
+          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+            Bought something on EMI with this card? Add it so each month's bill comes out right.
+          </Txt>
+        )}
+        {ledger.emiPrincipalLeft ? (
+          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+            {formatINR(ledger.emiPrincipalLeft)} of EMIs still to be billed. The bank keeps it blocked against your limit.
+          </Txt>
+        ) : null}
       </Section>
 
       {payments.length ? (

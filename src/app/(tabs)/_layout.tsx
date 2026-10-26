@@ -4,21 +4,21 @@ import { Tabs, router } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { Pressable, View } from 'react-native';
 import { usePending } from '@/data/hooks';
-import { GradientTile } from '@/ui/components/Aurora';
 import { Txt, type IconName } from '@/ui/components/core';
-import { radius, shadow, useTheme } from '@/ui/theme';
+import { fonts, useTheme } from '@/ui/theme';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 const TABS: Record<string, { label: string; icon: IconName; active: IconName }> = {
   index: { label: 'Home', icon: 'home-outline', active: 'home' },
-  activity: { label: 'Activity', icon: 'receipt-outline', active: 'receipt' },
+  activity: { label: 'Spending', icon: 'list-outline', active: 'list' },
   dues: { label: 'Dues', icon: 'calendar-outline', active: 'calendar' },
-  household: { label: 'Household', icon: 'people-outline', active: 'people' },
+  insights: { label: 'Insights', icon: 'bar-chart-outline', active: 'bar-chart' },
 };
 
+/** Flat bar on the page edge: four tabs and, in the middle, + which opens a new expense straight away. */
 function TabBar({ state, navigation, insets }: TabBarProps) {
-  const { colors, dark } = useTheme();
+  const { colors } = useTheme();
   const pending = usePending();
   const reviewCount = pending.transactions.length + pending.bills.length;
 
@@ -37,19 +37,19 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
           const event = navigation.emit({ type: 'tabPress', target: state.routes[index].key, canPreventDefault: true });
           if (!focused && !event.defaultPrevented) navigation.navigate(routeName);
         }}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 8 }}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, minHeight: 52 }}
       >
-        <View style={{ width: 52, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? colors.primarySoft : 'transparent' }}>
-          <Ionicons name={focused ? meta.active : meta.icon} size={22} color={focused ? colors.primary : colors.textFaint} />
+        <View>
+          <Ionicons name={focused ? meta.active : meta.icon} size={22} color={focused ? colors.primary : colors.textMuted} />
           {routeName === 'index' && reviewCount > 0 ? (
-            <View style={{ position: 'absolute', top: -2, right: 4, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.expense, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}>
-              <Txt variant="caption" style={{ color: '#fff', fontSize: 10 }}>
+            <View style={{ position: 'absolute', top: -4, right: -10, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.warnText, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}>
+              <Txt variant="caption" style={{ color: '#fff', fontSize: 10, lineHeight: 12 }}>
                 {reviewCount > 99 ? '99+' : reviewCount}
               </Txt>
             </View>
           ) : null}
         </View>
-        <Txt variant="caption" tone={focused ? 'primary' : 'faint'}>
+        <Txt variant="caption" style={{ color: focused ? colors.primary : colors.textMuted, fontFamily: focused ? fonts.bold : fonts.semibold }}>
           {meta.label}
         </Txt>
       </Pressable>
@@ -59,37 +59,33 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
   const routes = state.routes.map((r, i) => ({ name: r.name, i }));
   return (
     <View
-      style={[
-        {
-          position: 'absolute',
-          left: 12,
-          right: 12,
-          bottom: Math.max(insets.bottom, 12),
-          height: 68,
-          borderRadius: radius.xl,
-          backgroundColor: colors.tabBar,
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: 6,
-        },
-        shadow(dark),
-        !dark && { shadowOpacity: 0.12, elevation: 8 },
-      ]}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        paddingBottom: Math.max(insets.bottom, 8),
+        paddingTop: 6,
+        paddingHorizontal: 8,
+        backgroundColor: colors.tabBar,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        flexDirection: 'row',
+        alignItems: 'center',
+      }}
     >
       {routes.slice(0, 2).map((r) => tab(r.name, r.i))}
       <View style={{ flex: 1, alignItems: 'center' }}>
         <Pressable
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            router.push('/add');
+            router.push({ pathname: '/txn/new', params: { type: 'expense' } });
           }}
           accessibilityRole="button"
-          accessibilityLabel="Add transaction, scan, bill, loan or card"
-          style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.92 : 1 }, { translateY: -14 }] })}
+          accessibilityLabel="Add an expense"
+          style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
         >
-          <GradientTile size={58} radius={20} gradient="brand" style={{ borderWidth: 4, borderColor: colors.bg }}>
-            <Ionicons name="add" size={32} color="#FFFFFF" />
-          </GradientTile>
+          <Ionicons name="add" size={30} color={colors.primaryText} />
         </Pressable>
       </View>
       {routes.slice(2).map((r) => tab(r.name, r.i))}
@@ -103,7 +99,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="activity" />
       <Tabs.Screen name="dues" />
-      <Tabs.Screen name="household" />
+      <Tabs.Screen name="insights" />
     </Tabs>
   );
 }

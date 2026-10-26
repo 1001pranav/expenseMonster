@@ -12,6 +12,7 @@ import { Button, Chip } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { AmountField, ChipSelect, DateField, Field, SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
+import { askForReminders } from '@/services/notifications';
 
 const TYPES: { value: PolicyType; label: string }[] = [
   { value: 'health', label: 'Health' },
@@ -64,6 +65,7 @@ export default function PolicyForm() {
       if (existing) await update('policies', existing.id, data);
       else await insert('policies', data);
       toast('Policy saved — renewal alerts 30, 7 and 1 day before', { tone: 'success' });
+      askForReminders();
       router.back();
     } finally {
       setSaving(false);

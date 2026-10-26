@@ -1,27 +1,31 @@
-import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { insert, saveIdentity, saveSettings } from '@/db/repo';
 import { MEMBER_COLORS } from '@/db/seed';
 import { useStore } from '@/db/store';
-import { ensurePermission } from '@/services/notifications';
 import { vaultAvailable } from '@/services/vault';
 import { setPin } from '@/services/secure';
-import { Aurora, BrandMark, GradientTile } from '@/ui/components/Aurora';
-import { Button, Card, ListRow, Row, Txt, type IconName } from '@/ui/components/core';
+import { Button, IconCircle, Row, Txt, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
-import { radius, space, useTheme, type GradientName } from '@/ui/theme';
+import { fonts, space, useTheme } from '@/ui/theme';
 
-const STEPS = 4;
+type Start = 'fresh' | 'join';
+type Step = 'start' | 'name' | 'lock';
 
+/**
+ * First run asks how you're starting before anything else: starting fresh, joining a family
+ * phone (scan its code) or restoring a backup each need different steps. Notifications are
+ * asked for later, when the first bill or EMI is added.
+ */
 export default function Onboarding() {
   const { colors } = useTheme();
   const identity = useStore((s) => s.identity);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<Step>('start');
+  const [start, setStart] = useState<Start>('fresh');
   const [name, setName] = useState('');
   const [household, setHousehold] = useState(identity.householdName === 'Our home' ? '' : identity.householdName);
   const [pin, setPinValue] = useState('');
@@ -35,140 +39,114 @@ export default function Onboarding() {
     });
   }, []);
 
-  const next = async () => {
-    if (step === 0) {
-      if (!name.trim()) return toast('What should we call you?', { tone: 'error' });
-      if (!identity.selfMemberId) {
-        const me = await insert('members', { name: name.trim(), upiId: null, phone: null, color: MEMBER_COLORS[0], scope: 'household' });
-        await saveIdentity({ selfMemberId: me.id, deviceName: `${name.trim()}'s phone`, householdName: household.trim() || 'Our home' });
-      } else {
-        await saveIdentity({ householdName: household.trim() || 'Our home' });
-      }
+  const saveName = async () => {
+    if (!name.trim()) return toast('Enter your name', { tone: 'error' });
+    if (!identity.selfMemberId) {
+      const me = await insert('members', { name: name.trim(), upiId: null, phone: null, color: MEMBER_COLORS[0], scope: 'household' });
+      await saveIdentity({ selfMemberId: me.id, deviceName: `${name.trim()}'s phone`, householdName: household.trim() || 'Our home' });
+    } else {
+      await saveIdentity({ householdName: household.trim() || 'Our home' });
     }
-    if (step === 1) {
-      if (pin && !/^\d{6}$/.test(pin)) return toast('PIN must be 6 digits (or leave empty)', { tone: 'error' });
-      if (pin) await setPin(pin);
-      await saveSettings({ biometric: bio });
-    }
-    if (step < STEPS - 1) setStep(step + 1);
-    else finish();
+    setStep('lock');
+    // Joining: scan the family phone's code now; the lock step waits underneath.
+    if (start === 'join') router.push('/sync/scan');
   };
 
   const finish = async () => {
+    if (pin && !/^\d{6}$/.test(pin)) return toast('The PIN needs 6 digits, or leave it empty', { tone: 'error' });
+    if (pin) await setPin(pin);
+    await saveSettings({ biometric: bio });
     await saveIdentity({ onboarded: true });
     router.replace('/');
   };
 
-  const dots = (
-    <Row gap={0.75} style={{ justifyContent: 'center' }}>
-      {Array.from({ length: STEPS }, (_, i) => (
-        <View key={i} style={{ width: i === step ? 22 : 8, height: 8, borderRadius: 4, backgroundColor: i <= step ? colors.primary : colors.border }} />
-      ))}
-    </Row>
-  );
+  const choose = (s: Start) => {
+    setStart(s);
+    setStep('name');
+  };
+
+  if (step === 'start') {
+    return (
+      <Screen contentStyle={{ paddingTop: space(6), gap: space(3) }}>
+        <View style={{ gap: space(1.5), paddingHorizontal: 4 }}>
+          <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+            <Txt style={{ fontFamily: fonts.display, fontSize: 26, color: colors.primaryText }}>₹</Txt>
+          </View>
+          <Txt style={{ fontFamily: fonts.display, fontSize: 32, lineHeight: 38, letterSpacing: -1 }}>Your family's money, kept on your phone</Txt>
+          <Txt tone="muted">Spending, EMIs, card bills and reminders. No account to create, nothing to sign up for.</Txt>
+        </View>
+        <View style={{ gap: space(1.25) }}>
+          <Txt variant="bodyStrong" tone="muted" style={{ paddingHorizontal: 4 }}>
+            How are you starting?
+          </Txt>
+          <Choice icon="add" title="Start fresh" body="Your name, then an optional lock" selected onPress={() => choose('fresh')} />
+          <Choice icon="qr-code-outline" title="Join my family" body="Scan the code on a family member's phone" onPress={() => choose('join')} />
+          {vaultAvailable ? <Choice icon="cloud-download-outline" title="Restore a backup" body="On a new phone, with your recovery code" onPress={() => router.push({ pathname: '/settings/cloud-backup', params: { restore: '1' } })} /> : null}
+        </View>
+        <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+          We'll ask about notifications when you add your first bill.
+        </Txt>
+      </Screen>
+    );
+  }
+
+  if (step === 'name') {
+    return (
+      <Screen
+        back={false}
+        contentStyle={{ paddingTop: space(4) }}
+        footer={
+          <Row gap={1}>
+            <Button title="Back" variant="secondary" onPress={() => setStep('start')} />
+            <Button title={start === 'join' ? 'Continue and scan the code' : 'Continue'} onPress={saveName} style={{ flex: 1 }} size="lg" />
+          </Row>
+        }
+      >
+        <Txt style={{ fontFamily: fonts.display, fontSize: 28, lineHeight: 34 }}>What should we call you?</Txt>
+        <TextField label="Your name" value={name} onChangeText={setName} placeholder="For example, Asha" autoCapitalize="words" autoFocus />
+        {start === 'fresh' ? <TextField label="Household name (optional)" value={household} onChangeText={setHousehold} placeholder="For example, The Sharmas" autoCapitalize="words" /> : null}
+        {start === 'join' ? <Txt tone="muted">Next, scan the code on the other phone. They open it by tapping the initial at the top of Home, then Family phones, then Show QR.</Txt> : null}
+      </Screen>
+    );
+  }
 
   return (
     <Screen
+      contentStyle={{ paddingTop: space(4) }}
       footer={
-        <View style={{ gap: space(1.5) }}>
-          {dots}
-          <Row gap={1}>
-            {step > 0 ? <Button title="Back" variant="secondary" onPress={() => setStep(step - 1)} /> : null}
-            <Button title={step === STEPS - 1 ? 'Start using ExpenseMonster' : 'Continue'} onPress={next} style={{ flex: 1 }} size="lg" />
-          </Row>
-          {step > 0 && step < STEPS - 1 ? <Button title="Skip" variant="ghost" size="sm" onPress={() => setStep(step + 1)} /> : null}
+        <View style={{ gap: space(1) }}>
+          <Button title="Start using ExpenseMonster" onPress={finish} size="lg" />
+          {pin ? null : (
+            <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
+              You can add a lock later from the initial on Home.
+            </Txt>
+          )}
         </View>
       }
-      contentStyle={{ paddingTop: space(4) }}
     >
-      {step === 0 ? (
-        <>
-          <View style={{ borderRadius: radius.xl, overflow: 'hidden', padding: space(3), gap: space(1.5), backgroundColor: colors.heroBase }}>
-            <Aurora />
-            <BrandMark size={84} />
-            <Txt variant="h1" style={{ color: '#FFFFFF' }}>
-              Your household's money, on your phone only
-            </Txt>
-            <Txt style={{ color: 'rgba(255,255,255,0.78)' }}>Expenses, EMIs, credit cards, bills and insurance — with reminders before every due date.</Txt>
-            <Row gap={0.75} wrap>
-              {['No account', 'No ads', 'Encrypted', 'Cloud optional'].map((t) => (
-                <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' }}>
-                  <Ionicons name="checkmark" size={13} color="#FFFFFF" />
-                  <Txt variant="small" style={{ color: '#FFFFFF' }}>
-                    {t}
-                  </Txt>
-                </View>
-              ))}
-            </Row>
-          </View>
-          <TextField label="Your name" value={name} onChangeText={setName} placeholder="Pranav" autoCapitalize="words" autoFocus />
-          <TextField label="Household name" value={household} onChangeText={setHousehold} placeholder="The Sharmas" autoCapitalize="words" />
-          {vaultAvailable ? (
-            <Card padded={false} style={{ overflow: 'hidden' }}>
-              <ListRow
-                icon="cloud-download-outline"
-                iconColor={colors.primary}
-                title="Restore from cloud backup"
-                subtitle="New phone? Recovery code + password brings everything back"
-                chevron
-                onPress={() => router.push({ pathname: '/settings/cloud-backup', params: { restore: '1' } })}
-              />
-            </Card>
-          ) : null}
-        </>
-      ) : null}
-
-      {step === 1 ? (
-        <>
-          <Hero icon="lock-closed" gradient="violet" title="Lock it" body="Your data is already encrypted on this phone. Add a lock so nobody can open the app on your unlocked phone." />
-          <TextField label="6-digit PIN (optional)" value={pin} onChangeText={(v) => setPinValue(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secure />
-          {bioAvailable ? <SwitchRow icon="finger-print" label="Unlock with fingerprint / face" value={bio} onChange={setBio} /> : null}
-        </>
-      ) : null}
-
-      {step === 2 ? (
-        <>
-          <Hero icon="people" gradient="ocean" title="Joining your family?" body="If someone at home already uses ExpenseMonster, scan the QR code on their phone (Household → Sync → Show my QR)." />
-          <Card padded={false} style={{ overflow: 'hidden' }}>
-            <ListRow icon="scan" iconColor={colors.primary} title="Scan family QR code" subtitle="Share bills, loans and expenses" chevron onPress={() => router.push('/sync/scan')} />
-          </Card>
-          <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
-            Starting fresh? Just continue. You can pair later.
-          </Txt>
-        </>
-      ) : null}
-
-      {step === 3 ? (
-        <>
-          <Hero icon="notifications" gradient="sunset" title="Never miss a due date" body="Reminders before every EMI, card bill, utility bill and insurance renewal. Generated on this phone." />
-          <Card padded={false} style={{ overflow: 'hidden' }}>
-            <ListRow
-              icon="notifications-outline"
-              iconColor={colors.warn}
-              title="Allow reminders"
-              subtitle="Local notifications"
-              chevron
-              onPress={async () => toast((await ensurePermission()) ? 'Reminders on' : 'You can enable them later in Settings', { tone: 'success' })}
-            />
-          </Card>
-          <Card tone="alt" style={{ gap: 6 }}>
-            <Txt variant="bodyStrong">Tip: share screenshots</Txt>
-            <Txt variant="small" tone="muted">
-              After paying in GPay or PhonePe, tap Share → ExpenseMonster. The amount, payee and UPI reference are read on the phone.
-            </Txt>
-          </Card>
-        </>
-      ) : null}
+      <Txt style={{ fontFamily: fonts.display, fontSize: 28, lineHeight: 34 }}>Lock the app</Txt>
+      <Txt tone="muted">Your data is already encrypted on this phone. A lock stops anyone who picks up your unlocked phone from opening it.</Txt>
+      <TextField label="6-digit PIN (optional)" value={pin} onChangeText={(v) => setPinValue(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secure />
+      {bioAvailable ? <SwitchRow icon="finger-print" label="Unlock with fingerprint or face" value={bio} onChange={setBio} /> : null}
     </Screen>
   );
 }
 
-function Hero({ icon, title, body, gradient }: { icon: IconName; title: string; body: string; gradient: GradientName }) {
+function Choice({ icon, title, body, selected, onPress }: { icon: IconName; title: string; body: string; selected?: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
   return (
-    <View style={{ gap: space(1.5), marginBottom: space(1) }}>
-      <GradientTile icon={icon} gradient={gradient} size={68} radius={24} />
-      <Txt variant="h1">{title}</Txt>
-      <Txt tone="muted">{body}</Txt>
-    </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space(1.75), padding: space(2), minHeight: 78, borderRadius: 20, backgroundColor: pressed ? colors.surfaceAlt : colors.surface, borderWidth: 1.5, borderColor: selected ? colors.primary : colors.border })}
+    >
+      <IconCircle name={icon} size={44} state={selected ? 'good' : undefined} />
+      <View style={{ flex: 1 }}>
+        <Txt variant="bodyStrong">{title}</Txt>
+        <Txt variant="small" tone="muted">
+          {body}
+        </Txt>
+      </View>
+    </Pressable>
   );
 }

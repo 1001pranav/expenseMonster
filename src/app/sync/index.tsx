@@ -26,6 +26,7 @@ export default function Sync() {
   const [peers, setPeers] = useState<Peer[]>([]);
   const [qr, setQr] = useState<{ value: string; fp: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
   const [deviceName, setDeviceName] = useState(identity.deviceName);
   const [householdName, setHouseholdName] = useState(identity.householdName);
 
@@ -123,7 +124,7 @@ export default function Sync() {
   };
 
   return (
-    <Screen title="Sync with family" subtitle={cloudOn ? "End-to-end encrypted · cloud sync on" : "Phone to phone · end-to-end encrypted"} back>
+    <Screen title="Family phones" subtitle={cloudOn ? "End-to-end encrypted · cloud sync on" : "Phone to phone · end-to-end encrypted"} back>
       <Card tone="alt" style={{ gap: 6 }}>
         <Txt variant="bodyStrong">How it works</Txt>
         <Txt variant="small" tone="muted">
@@ -166,7 +167,7 @@ export default function Sync() {
                   leading={<Avatar name={p.name} color={colors.primary} />}
                   title={p.name}
                   subtitle={`Sent ${p.lastSentAt ? formatDay(isoToYMD(p.lastSentAt)) : 'never'} · received ${p.lastReceivedAt ? formatDay(isoToYMD(p.lastReceivedAt)) : 'never'}`}
-                  right={<Button title="Send" size="sm" icon="paper-plane" loading={busy === p.deviceId} onPress={() => send(p)} />}
+                  right={!cloudOn || showFiles ? <Button title="Send" size="sm" icon="paper-plane" loading={busy === p.deviceId} onPress={() => send(p)} /> : null}
                 />
               </View>
             ))
@@ -178,10 +179,14 @@ export default function Sync() {
         </Card>
       </Section>
 
-      <Row gap={1}>
-        <Button title="Send all" icon="share-outline" variant="secondary" loading={busy === 'all'} onPress={() => send(null)} style={{ flex: 1 }} />
-        <Button title="Receive" icon="download-outline" variant="secondary" loading={busy === 'receive'} onPress={pick} style={{ flex: 1 }} />
-      </Row>
+      {!cloudOn || showFiles ? (
+        <Row gap={1}>
+          <Button title="Send all" icon="share-outline" variant="secondary" loading={busy === 'all'} onPress={() => send(null)} style={{ flex: 1 }} />
+          <Button title="Receive" icon="download-outline" variant="secondary" loading={busy === 'receive'} onPress={pick} style={{ flex: 1 }} />
+        </Row>
+      ) : (
+        <Button title="Share by file instead" variant="ghost" size="sm" onPress={() => setShowFiles(true)} />
+      )}
 
       {cloudConfigured ? (
         <Section title="Cloud sync (optional)">
@@ -212,10 +217,11 @@ export default function Sync() {
           <Segmented
             value={policy}
             onChange={(v) => saveSettings({ syncConflictPolicy: v })}
+            // "File wins" can undo newer edits, so it's only shown to phones already set to it.
             options={[
               { value: 'ask', label: 'Ask me' },
               { value: 'newest', label: 'Newest edit' },
-              { value: 'incoming', label: 'File wins' },
+              ...(policy === 'incoming' ? [{ value: 'incoming' as const, label: 'File wins' }] : []),
             ]}
           />
           <Txt variant="small" tone="muted">

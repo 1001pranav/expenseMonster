@@ -1,5 +1,4 @@
 import * as LocalAuthentication from 'expo-local-authentication';
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { saveSettings } from '@/db/repo';
@@ -41,7 +40,7 @@ export default function Settings() {
   };
 
   return (
-    <Screen title="Settings" back>
+    <Screen title="Lock, privacy and look" back>
       <Section title="Security">
         <Card style={{ gap: 0 }}>
           <ListRow icon="keypad" iconColor={colors.primary} title={pinSet ? 'Change PIN' : 'Set a 6-digit PIN'} subtitle="Stored as a salted hash in the Android Keystore" chevron onPress={() => setPinSheet(true)} />
@@ -71,42 +70,13 @@ export default function Settings() {
           </View>
           <SwitchRow icon="eye-off" label="Block screenshots" description="Also hides amounts in the recent-apps view" value={settings.screenSecure} onChange={(v) => saveSettings({ screenSecure: v })} />
           <SwitchRow icon="trash-bin" label="Erase after 10 wrong PINs" value={settings.wipeAfterFailures} onChange={(v) => saveSettings({ wipeAfterFailures: v })} />
+          <SwitchRow icon="flash-outline" label="Save clear screenshots automatically" description="When the amount, payee and category are all certain. You get Undo, and anything unsure still waits for a check." value={settings.autoSaveCaptures} onChange={(v) => saveSettings({ autoSaveCaptures: v })} />
           <SwitchRow icon="image" label="Delete screenshots after approval" description="Keeps only the numbers you approved" value={settings.deleteCapturesAfterApproval} onChange={(v) => saveSettings({ deleteCapturesAfterApproval: v })} />
         </Card>
       </Section>
 
-      <Section title="Backup">
+      <Section title="Reminders and sharing">
         <Card padded={false} style={{ overflow: 'hidden' }}>
-          <ListRow
-            icon="cloud-upload-outline"
-            iconColor={colors.primary}
-            title="Cloud backup"
-            subtitle={settings.vaultSync ? 'On · encrypted with your password' : 'Off · sync everything, encrypted with a password only you know'}
-            chevron
-            onPress={() => router.push('/settings/cloud-backup')}
-          />
-        </Card>
-      </Section>
-
-      <Section title="Assistant">
-        <Card padded={false} style={{ overflow: 'hidden' }}>
-          <ListRow icon="sparkles" iconColor={colors.primary} title="On-device assistant" subtitle="Optional Gemma download · answers questions about your money" chevron onPress={() => router.push('/settings/assistant')} />
-        </Card>
-      </Section>
-
-      <Section title="Capture & reminders">
-        <Card padded={false} style={{ overflow: 'hidden' }}>
-          <ListRow
-            icon="chatbubble-ellipses"
-            iconColor={colors.info}
-            title="Bank SMS formats"
-            subtitle="Paste messages and teach your bank's format"
-            chevron
-            onPress={() => router.push('/settings/sms')}
-          />
-          <Divider inset={space(9)} />
-          <ListRow icon="bug-outline" iconColor={colors.info} title="Error log" subtitle="Errors, warnings and shared screenshots · share it to report a problem" chevron onPress={() => router.push('/settings/diagnostics')} />
-          <Divider inset={space(9)} />
           <ListRow
             icon="notifications"
             iconColor={colors.warn}

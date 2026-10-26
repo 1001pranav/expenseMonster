@@ -50,6 +50,7 @@ export function TextField({
   maxLength,
   autoCapitalize,
   icon,
+  onFocus,
 }: {
   label?: string;
   value: string;
@@ -64,6 +65,7 @@ export function TextField({
   maxLength?: number;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   icon?: IconName;
+  onFocus?: () => void;
 }) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -94,7 +96,10 @@ export function TextField({
           autoFocus={autoFocus}
           maxLength={maxLength}
           autoCapitalize={autoCapitalize}
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            onFocus?.();
+          }}
           onBlur={() => setFocused(false)}
           accessibilityLabel={label ?? placeholder}
           style={[type.body, { flex: 1, color: colors.text, paddingVertical: multiline ? 12 : 0, textAlignVertical: multiline ? 'top' : 'center' }]}
@@ -145,7 +150,7 @@ export function SwitchRow({ label, description, value, onChange, icon }: { label
 }
 
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   return (
     <View style={{ flexDirection: 'row', backgroundColor: colors.surfaceAlt, borderRadius: radius.pill, padding: 4 }}>
       {options.map((o) => {
@@ -156,7 +161,7 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
             onPress={() => onChange(o.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            style={{ flex: 1, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? colors.surface : 'transparent' }}
+            style={{ flex: 1, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? (dark ? 'rgba(255,255,255,0.16)' : colors.elevated) : 'transparent' }}
           >
             <Txt variant="small" tone={active ? 'default' : 'muted'} numberOfLines={1}>
               {o.label}
@@ -221,7 +226,7 @@ export function DateField({ label, value, onChange, quick = true, allowFuture = 
           onPress={() => setOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={`Pick date, currently ${formatDay(value, { year: true })}`}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
         >
           <Ionicons name="calendar-outline" size={16} color={colors.primary} />
           <Txt variant="small">{quick && (value === today || value === addDays(today, -1)) ? 'Other date' : `${formatDay(value, { year: true })} · ${relativeDay(value, today)}`}</Txt>

@@ -42,7 +42,7 @@ function lastCompleteMonths(today: YMD, count: number): string[] {
  */
 export function monthlyEmi(loans: Loan[], transactions: Transaction[] = [], today?: YMD): Paise {
   const live = transactions.filter(isLive);
-  const owing = (l: Loan) => !today || l.tenureMonths <= 0 || loanProgress(scheduleFor(l), loanEmisPaid(l, live), today).emisLeft > 0;
+  const owing = (l: Loan) => !today || l.tenureMonths <= 0 || loanProgress(scheduleFor(l), loanEmisPaid(l, live, today), today).emisLeft > 0;
   return loans.filter((l) => !l.deletedAt && !l.closed && l.direction === 'borrowed' && l.emi > 0 && owing(l)).reduce((a, l) => a + l.emi, 0);
 }
 
@@ -114,7 +114,7 @@ export function financialHealth(input: HealthInput, today: YMD, money: (p: Paise
   if (!cards.length) {
     out.push({ key: 'card_utilisation', label: 'Card utilisation', value: '—', status: 'unknown', reason: 'No credit cards with a limit set.' });
   } else {
-    const owed = cards.reduce((a, c) => a + Math.max(0, buildCardLedger(c, input.transactions, input.cardOverrides, today).outstanding), 0);
+    const owed = cards.reduce((a, c) => a + Math.max(0, buildCardLedger(c, input.transactions, input.cardOverrides, today, undefined, input.loans).outstanding), 0);
     const limit = cards.reduce((a, c) => a + (c.creditLimit ?? 0), 0);
     const ratio = owed / limit;
     out.push({

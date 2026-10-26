@@ -1,77 +1,91 @@
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
-import Animated, { Easing, SlideInDown } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { Easing, SlideInDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GradientTile } from '@/ui/components/Aurora';
-import { Txt, type IconName } from '@/ui/components/core';
-import { radius, space, useTheme, type GradientName } from '@/ui/theme';
+import { scheduleOnRN } from 'react-native-worklets';
+import { Card, IconButton, IconCircle, Txt, type IconName } from '@/ui/components/core';
+import { space, useTheme } from '@/ui/theme';
 
-interface Tile {
+interface Entry {
   label: string;
+  hint: string;
   icon: IconName;
-  gradient: GradientName;
   href: Parameters<typeof router.push>[0];
+  income?: boolean;
 }
 
-/** The centre "+" sheet: every create flow is two touches from anywhere. */
-export default function AddSheet() {
+const ENTRIES: Entry[] = [
+  { label: 'A bill', hint: 'Electricity, rent, internet, recharge, gas', icon: 'flash-outline', href: '/biller/new' },
+  { label: 'A loan', hint: 'Home, car, personal, or money you lent', icon: 'home-outline', href: '/loan/new' },
+  { label: 'A credit card', hint: 'Know each bill before the bank sends it', icon: 'card-outline', href: '/card/new' },
+  { label: 'An EMI on a card', hint: 'Something you bought on no-cost or interest EMI', icon: 'albums-outline', href: '/card-emi/new' },
+  { label: 'Insurance', hint: 'Reminders 30, 7 and 1 day before renewal', icon: 'shield-checkmark-outline', href: '/policy/new' },
+  { label: 'Regular income', hint: 'Salary, or rent you receive', icon: 'arrow-up', href: '/income/new', income: true },
+  { label: 'An investment', hint: 'Buy or sell gold, shares, funds, bonds, deposits', icon: 'trending-up-outline', href: '/investments/new' },
+];
+
+/** "Set up a reminder": things you add once. Drag down, tap ✕ or the backdrop to close. */
+export default function SetupSheet() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const drag = useSharedValue(0);
+  const close = () => router.back();
 
-  const capture: Tile[] = [
-    { label: 'Expense', icon: 'arrow-up', gradient: 'rose', href: { pathname: '/txn/new', params: { type: 'expense' } } },
-    { label: 'Income', icon: 'arrow-down', gradient: 'mint', href: { pathname: '/txn/new', params: { type: 'income' } } },
-    { label: 'Scan screenshot', icon: 'scan', gradient: 'violet', href: '/scan' },
-    { label: 'Paste SMS', icon: 'chatbubble-ellipses', gradient: 'ocean', href: '/paste-sms' },
-    { label: 'Transfer', icon: 'swap-horizontal', gradient: 'ink', href: { pathname: '/txn/new', params: { type: 'transfer' } } },
-    { label: 'Settle up', icon: 'people', gradient: 'brand', href: '/settle' },
-    { label: 'Invest / sell', icon: 'trending-up', gradient: 'mint', href: '/investments/new' },
-  ];
-  const setup: Tile[] = [
-    { label: 'Bill', icon: 'flash', gradient: 'marigold', href: '/biller/new' },
-    { label: 'Loan / EMI', icon: 'trending-down', gradient: 'violet', href: '/loan/new' },
-    { label: 'Credit card', icon: 'card', gradient: 'rose', href: '/card/new' },
-    { label: 'Insurance', icon: 'shield-checkmark', gradient: 'mint', href: '/policy/new' },
-    { label: 'Salary / income', icon: 'briefcase', gradient: 'sunset', href: '/income/new' },
-    { label: 'Member', icon: 'person-add', gradient: 'ocean', href: '/member/new' },
-  ];
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .onUpdate((e) => {
+      drag.set(Math.max(0, e.translationY));
+    })
+    .onEnd((e) => {
+      if (e.translationY > 120 || e.velocityY > 900) scheduleOnRN(close);
+      else drag.set(withTiming(0, { duration: 160 }));
+    });
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.get() }] }));
 
-  const go = (href: Tile['href']) => {
+  const go = (href: Entry['href']) => {
     router.back();
     setTimeout(() => router.push(href), 10);
   };
 
-  const grid = (tiles: Tile[]) => (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: space(1.5) }}>
-      {tiles.map((t) => (
-        <Pressable key={t.label} onPress={() => go(t.href)} accessibilityRole="button" style={({ pressed }) => ({ width: '33.33%', alignItems: 'center', gap: 8, opacity: pressed ? 0.6 : 1 })}>
-          <GradientTile icon={t.icon} gradient={t.gradient} size={58} iconSize={26} />
-          <Txt variant="small" style={{ textAlign: 'center', paddingHorizontal: 2 }} numberOfLines={2}>
-            {t.label}
-          </Txt>
-        </Pressable>
-      ))}
-    </View>
-  );
-
   return (
     <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-      <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }} onPress={() => router.back()} accessibilityLabel="Close" />
-      {/* Timing, not a spring: Reanimated 4's spring defaults (mass 4, stiffness 900) made damping(18) wobble. */}
-      <Animated.View entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))} style={{ backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: space(2.5), paddingBottom: insets.bottom + space(3), gap: space(2.5) }}>
-        <View style={{ alignItems: 'center' }}>
-          <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
-        </View>
-        <Txt variant="h2">What would you like to add?</Txt>
-        <Txt variant="caption" tone="muted">
-          RECORD
-        </Txt>
-        {grid(capture)}
-        <Txt variant="caption" tone="muted">
-          SET UP & REMIND
-        </Txt>
-        {grid(setup)}
-      </Animated.View>
+      <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }} onPress={close} accessibilityLabel="Close" />
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          entering={SlideInDown.duration(220).easing(Easing.out(Easing.cubic))}
+          style={[{ backgroundColor: colors.bg, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: space(2), paddingTop: space(1.25), paddingBottom: insets.bottom + space(3), gap: space(1.5) }, sheetStyle]}
+        >
+          <View style={{ alignItems: 'center' }}>
+            <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="h2">Set up a reminder</Txt>
+              <Txt variant="small" tone="muted">
+                Add it once and get reminded every time
+              </Txt>
+            </View>
+            <IconButton name="close" label="Close" filled onPress={close} />
+          </View>
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {ENTRIES.map((e, i) => (
+              <View key={e.label}>
+                {i ? <View style={{ height: 1, backgroundColor: colors.surfaceAlt, marginLeft: space(8.5) }} /> : null}
+                <Pressable onPress={() => go(e.href)} accessibilityRole="button" style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space(1.5), paddingHorizontal: space(2), minHeight: 62, backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}>
+                  <IconCircle name={e.icon} state={e.income ? 'income' : undefined} />
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="bodyStrong">{e.label}</Txt>
+                    <Txt variant="small" tone="muted">
+                      {e.hint}
+                    </Txt>
+                  </View>
+                </Pressable>
+              </View>
+            ))}
+          </Card>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }

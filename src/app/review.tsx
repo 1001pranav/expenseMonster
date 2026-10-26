@@ -1,14 +1,13 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { View } from 'react-native';
 import { formatDay, isoToYMD, relativeDay } from '@/domain/dates';
 import { flagsOf } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
 import { remove, update } from '@/db/repo';
 import { approveCapture, rejectCapture } from '@/data/actions';
 import { useCategoryMap, usePending, useTable, useToday } from '@/data/hooks';
-import { Button, Card, Chip, EmptyState, IconButton, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
-import { Sheet, toast } from '@/ui/components/feedback';
+import { Button, Card, EmptyState, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
+import { toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
 import { space, useTheme } from '@/ui/theme';
@@ -20,8 +19,6 @@ export default function Review() {
   const cards = useTable('cards');
   const billers = useTable('billers');
   const today = useToday();
-  const [cardFor, setCardFor] = useState<Transaction | null>(null);
-  const narrow = useWindowDimensions().width < 360;
 
   const approve = async (t: Transaction) => {
     await approveCapture(t.id);
@@ -40,20 +37,19 @@ export default function Review() {
 
   return (
     <Screen
-      title="Review"
-      subtitle="Nothing is recorded until you approve it"
+      title="Check captures"
+      subtitle="Nothing is saved until you approve it"
       back
+      footer={confident.length > 1 ? <Button title={`Approve ${confident.length} that were read clearly`} icon="checkmark-done" variant="success" size="lg" onPress={approveConfident} /> : undefined}
     >
       {transactions.length + bills.length === 0 ? (
         <EmptyState icon="checkmark-done-circle-outline" title="All caught up" body="Share a payment screenshot from GPay / PhonePe to ExpenseMonster, or paste a bank SMS." action="Scan a screenshot" onAction={() => router.replace('/scan')} />
       ) : null}
 
-      {confident.length > 1 ? <Button title={`Approve ${confident.length} high-confidence`} icon="checkmark-done" variant="secondary" onPress={approveConfident} /> : null}
-
       {transactions.length ? (
         <Section title={`Transactions · ${transactions.length}`}>
           <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
-            Swipe right to approve, left to reject. Tap to edit.
+            Tap one to change it. Swipe it sideways for Approve and Reject.
           </Txt>
           <View style={{ gap: space(1.25) }}>
             {transactions.map((t) => {
@@ -63,7 +59,7 @@ export default function Review() {
               const dup = flags.some((f) => f.startsWith('duplicate'));
               return (
                 <Card key={t.id} padded={false} style={{ overflow: 'hidden' }}>
-                  <SwipeRow left={[{ label: 'Approve', icon: 'checkmark', color: colors.income, onPress: () => approve(t) }]} right={[{ label: 'Reject', icon: 'close', color: colors.expense, onPress: () => reject(t) }]}>
+                  <SwipeRow left={[{ label: 'Approve', icon: 'checkmark', color: colors.good, onPress: () => approve(t) }]} right={[{ label: 'Reject', icon: 'close', color: colors.expense, onPress: () => reject(t) }]}>
                     <View style={{ padding: space(2), gap: space(1.25) }}>
                       <Row gap={1.5}>
                         <IconCircle name={t.type === 'income' ? 'arrow-down' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? 'arrow-up')} color={t.type === 'income' ? colors.income : (cat?.color ?? colors.expense)} />
@@ -73,24 +69,26 @@ export default function Review() {
                           </Txt>
                           <Txt variant="small" tone="muted" numberOfLines={1}>
                             {relativeDay(isoToYMD(t.occurredAt), today)} · {t.source === 'sms' ? 'SMS' : 'Screenshot'}
-                            {t.method === 'card' ? ` · ${card?.name ?? 'Credit card'}` : ` · ${t.method.toUpperCase()}`}
+                            {t.method === 'card' ? ` · ${card?.name ?? 'Credit card'}` : ` · ${t.method === 'upi' ? 'UPI' : t.method.charAt(0).toUpperCase() + t.method.slice(1)}`}
                           </Txt>
                         </View>
                         <Money value={t.type === 'expense' ? -t.amount : t.amount} variant="h3" tone={t.type === 'income' ? 'income' : 'default'} />
                       </Row>
                       <Row gap={1} wrap>
-                        {cat ? <Pill label={cat.name} tone="primary" /> : <Pill label="No category" tone="warn" />}
-                        {dup ? <Pill label="Possible duplicate" tone="expense" /> : null}
-                        {t.linkType === 'bill' ? <Pill label="Pays a bill" tone="info" /> : null}
-                        {t.linkType === 'card' ? <Pill label="Card bill payment" tone="info" /> : null}
-                        {flags.includes('refund') ? <Pill label="Refund" tone="income" /> : null}
-                        {(t.confidence ?? 1) < 0.7 ? <Pill label="Check amount" tone="warn" /> : null}
+                        {[
+                          dup ? <Pill key="dup" label="Possible duplicate" tone="expense" /> : null,
+                          (t.confidence ?? 1) < 0.7 ? <Pill key="amt" label="Check the amount" tone="warn" /> : null,
+                          cat ? <Pill key="cat" label={cat.name} tone="primary" /> : <Pill key="nocat" label="No category" tone="warn" />,
+                          t.linkType === 'bill' ? <Pill key="bill" label="Pays a bill" tone="info" /> : null,
+                          t.linkType === 'card' ? <Pill key="cardbill" label="Card bill payment" tone="info" /> : null,
+                          flags.includes('refund') ? <Pill key="refund" label="Refund" tone="income" /> : null,
+                        ]
+                          .filter(Boolean)
+                          .slice(0, 2)}
                       </Row>
                       <Row gap={1}>
-                        <Button title={narrow ? '' : 'Approve'} label="Approve" size="sm" variant="success" icon="checkmark" onPress={() => approve(t)} style={{ flex: 1 }} />
-                        <IconButton name="create-outline" label="Edit" filled onPress={() => router.push(`/txn/${t.id}`)} />
-                        {t.type === 'expense' ? <IconButton name={t.method === 'card' ? 'card' : 'card-outline'} label="Paid with credit card?" filled color={t.method === 'card' ? colors.primary : undefined} onPress={() => setCardFor(t)} /> : null}
-                        <IconButton name="close" label="Reject" filled onPress={() => reject(t)} />
+                        <Button title="Approve" size="sm" variant="success" icon="checkmark" onPress={() => approve(t)} style={{ flex: 1 }} />
+                        <Button title="Change" size="sm" variant="secondary" onPress={() => router.push(`/txn/${t.id}`)} style={{ flex: 1 }} />
                       </Row>
                     </View>
                   </SwipeRow>
@@ -128,46 +126,6 @@ export default function Review() {
         </Section>
       ) : null}
 
-      <Sheet visible={Boolean(cardFor)} onClose={() => setCardFor(null)} title="Paid with which credit card?">
-        <Txt tone="muted">The purchase moves to that card's current billing cycle, and its bill will include it.</Txt>
-        {cards.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {cards.map((c) => (
-              <Chip
-                key={c.id}
-                icon="card"
-                label={`${c.name}${c.last4 ? ` ••${c.last4}` : ''}`}
-                selected={cardFor?.cardId === c.id && cardFor?.method === 'card'}
-                onPress={async () => {
-                  if (!cardFor) return;
-                  await update('transactions', cardFor.id, { method: 'card', cardId: c.id, accountId: null });
-                  setCardFor(null);
-                  toast(`Moved to ${c.name}`, { tone: 'success' });
-                }}
-              />
-            ))}
-            {cardFor?.method === 'card' ? (
-              <Chip
-                label="Not a card payment"
-                onPress={async () => {
-                  if (!cardFor) return;
-                  await update('transactions', cardFor.id, { method: cardFor.vpa || cardFor.sourceRef ? 'upi' : 'bank', cardId: null });
-                  setCardFor(null);
-                }}
-              />
-            ) : null}
-          </View>
-        ) : (
-          <Button
-            title="Add a credit card"
-            icon="add"
-            onPress={() => {
-              setCardFor(null);
-              router.push('/card/new');
-            }}
-          />
-        )}
-      </Sheet>
     </Screen>
   );
 }

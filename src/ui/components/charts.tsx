@@ -87,7 +87,7 @@ export function Donut({ slices, size = 168, stroke = 22, onSelect, centerLabel }
         </Svg>
         <View style={{ alignItems: 'center', maxWidth: size - stroke * 2 - 8 }}>
           <Txt variant="caption" tone="muted" numberOfLines={1}>
-            {selected ? selected.label.toUpperCase() : (centerLabel ?? 'TOTAL')}
+            {selected ? selected.label : (centerLabel ?? 'Total')}
           </Txt>
           <Money value={selected ? selected.value : total} variant="h3" compact />
           {selected && total ? (
@@ -121,9 +121,62 @@ export function Donut({ slices, size = 168, stroke = 22, onSelect, centerLabel }
   );
 }
 
+/**
+ * Ranked horizontal bars: one row per slice, biggest first, each with its share of the total.
+ * Easier to compare than donut arcs, and every slice stays visible and tappable.
+ */
+export function RankedBars({ slices, onSelect, initial = 6 }: { slices: Slice[]; onSelect?: (key: string) => void; initial?: number }) {
+  const { colors } = useTheme();
+  const [all, setAll] = useState(false);
+  const total = slices.reduce((a, s) => a + s.value, 0);
+  const max = Math.max(1, ...slices.map((s) => s.value));
+  const shown = all ? slices : slices.slice(0, initial);
+  return (
+    <View style={{ gap: space(1.5) }}>
+      {shown.map((s) => {
+        const share = total ? Math.round((s.value / total) * 100) : 0;
+        return (
+          <Pressable
+            key={s.key}
+            onPress={onSelect ? () => onSelect(s.key) : undefined}
+            disabled={!onSelect}
+            accessibilityRole="button"
+            accessibilityLabel={`${s.label} ${formatINR(s.value)}, ${share} percent`}
+            style={({ pressed }) => ({ gap: 6, opacity: pressed ? 0.6 : 1 })}
+          >
+            <Row gap={1}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: s.color }} />
+              <Txt variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
+                {s.label}
+              </Txt>
+              <Money value={s.value} variant="bodyStrong" decimals="never" />
+              <Txt variant="small" tone="muted" style={{ width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] }}>
+                {share}%
+              </Txt>
+            </Row>
+            <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.chartTrack, overflow: 'hidden' }}>
+              <View style={{ width: `${(s.value / max) * 100}%`, height: 8, borderRadius: 4, backgroundColor: s.color }} />
+            </View>
+          </Pressable>
+        );
+      })}
+      {slices.length > initial ? (
+        <Pressable onPress={() => setAll((v) => !v)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start', paddingVertical: 4 }}>
+          <Txt variant="small" tone="primary">
+            {all ? 'Show fewer' : `Show all ${slices.length} categories`}
+          </Txt>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export interface BarDatum {
   key: string;
+  /** Axis label; keep it short (e.g. "Oct"). */
   label: string;
+  /** Shown above the chart when the bar is tapped, e.g. "Oct 2026". Defaults to the label. */
+  tooltip?: string;
   values: number[];
 }
 
@@ -139,15 +192,16 @@ export function Bars({ data, colors: seriesColors, height = 160, legend, highlig
   const series = data[0]?.values.length ?? 1;
   const barW = Math.min(18, (groupW * 0.7) / series);
   const chartH = height - 22;
-  // Keep axis labels readable: at most ~8 across the chart.
+  // Keep axis labels readable: at most ~8 across the chart, counted back from the newest bar so it is always labelled.
   const labelStep = Math.max(1, Math.ceil(data.length / 8));
+  const labelled = (i: number) => (data.length - 1 - i) % labelStep === 0;
 
   return (
     <View style={{ gap: 8 }}>
       {active !== null && data[active] ? (
         <Row gap={1.5} style={{ minHeight: 20 }}>
           <Txt variant="small" tone="muted">
-            {data[active].label}
+            {data[active].tooltip ?? data[active].label}
           </Txt>
           {data[active].values.map((v, i) => (
             <Row key={i} gap={0.5}>
@@ -188,7 +242,7 @@ export function Bars({ data, colors: seriesColors, height = 160, legend, highlig
       </Svg>
       <View style={{ width, height: 16, marginTop: -20 }}>
         {data.map((d, i) =>
-          i % labelStep === 0 || active === i ? (
+          labelled(i) || active === i ? (
             <Txt key={d.key} variant="caption" tone={active === i ? 'default' : 'faint'} style={{ position: 'absolute', left: i * groupW + groupW / 2 - 24, width: 48, textAlign: 'center' }} numberOfLines={1}>
               {d.label}
             </Txt>
@@ -241,7 +295,7 @@ export function LineChart({ points, labels, height = 150, color, format = (v: nu
         {min < 0 ? <Line x1={0} x2={width} y1={y(0)} y2={y(0)} stroke={colors.border} strokeDasharray="4 4" /> : null}
         <Path d={area} fill="url(#area)" />
         <Path d={d} stroke={stroke} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        <Circle cx={x(shown)} cy={y(points[shown])} r={5} fill={colors.surface} stroke={stroke} strokeWidth={2.5} />
+        <Circle cx={x(shown)} cy={y(points[shown])} r={5} fill={colors.elevated} stroke={stroke} strokeWidth={2.5} />
         {points.map((_, i) => (
           <Rect key={i} x={x(i) - width / points.length / 2} y={0} width={width / points.length} height={height} fill="transparent" onPress={() => setActive(i)} />
         ))}
