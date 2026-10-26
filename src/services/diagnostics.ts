@@ -27,8 +27,8 @@ function load(): string[] {
 
 export const useDiagnostics = create<{ lines: string[] }>(() => ({ lines: load() }));
 
-// The console methods as they were before capture, so logging never calls itself.
-const original = { log: console.log, warn: console.warn, error: console.error };
+// The console methods as they were when capture was installed, so logging never calls itself.
+const original = { warn: console.warn, error: console.error };
 
 const TAG: Record<Level, string> = { info: 'INFO ', warn: 'WARN ', error: 'ERROR' };
 
@@ -51,7 +51,7 @@ function write(level: Level, message: string) {
 
 /** A step worth tracing (also printed to logcat under ReactNativeJS). */
 export function logInfo(message: string) {
-  original.log(`[diag] ${message}`);
+  console.log(`[diag] ${message}`);
   write('info', message);
 }
 
@@ -79,6 +79,8 @@ let installed = false;
 export function installErrorCapture() {
   if (installed) return;
   installed = true;
+  original.warn = console.warn;
+  original.error = console.error;
 
   console.warn = (...args: unknown[]) => {
     write('warn', args.map(describe).join(' '));
