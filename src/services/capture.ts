@@ -237,6 +237,10 @@ export async function readScreenshot(uri: string): Promise<ScreenshotRead> {
     if (second?.amount && second.amountSure) {
       payment.amount = second.amount;
       payment.amountSure = true;
+    } else if (second?.amount && payment.amount && String(payment.amount).startsWith('7') && String(payment.amount).slice(1) === String(second.amount)) {
+      // Neither pass read the ₹, but the Devanagari one has the same digits without the leading 7
+      // ("7750" vs "750"): that 7 was the ₹. Still unsure, so the user confirms, but the box shows ₹750.
+      payment.amount = second.amount;
     }
   }
   return { kind: 'payment', uri, text, payment };

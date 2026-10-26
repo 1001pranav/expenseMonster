@@ -43,9 +43,11 @@ export function detectStatus(text: string): OcrStatus {
   return 'unknown';
 }
 
-/** ML Kit's Latin model often reads the ₹ glyph as one of these. */
-const MONEY_LINE = /^(?:₹|rs\.?|inr|[%zZ?<])\s*((?:\d{1,3}(?:,\d{2})*,\d{3}|\d{1,7})(?:\.\d{1,2})?)(?:\s*\/-)?$/i;
+/** ML Kit's Latin model often reads the ₹ glyph as one of these; "7 750" is a ₹ read as a 7 and kept apart. */
+const MONEY_LINE = /^(?:₹|rs\.?|inr|[%zZ?<]|7(?=\s))\s*((?:\d{1,3}(?:,\d{2})*,\d{3}|\d{1,7})(?:\.\d{1,2})?)(?:\s*\/-)?$/i;
 const BARE_AMOUNT = /^(?:\d{1,3}(?:,\d{2})*,\d{3}|\d{1,7})(?:\.\d{1,2})?$/;
+/** Indian grouping: "750", "12,500", "1,25,000"; never "712,500". */
+const INDIAN_GROUPED = /^(?:\d{1,3}|\d{1,2}(?:,\d{2})*,\d{3})(?:\.\d{1,2})?$/;
 /** A line that belongs to the payment itself (status-bar noise like "10:42", "85", "4G" comes before it). */
 const PAYMENT_WORDS = /\b(?:to|from|paid|received|sent|success(?:ful)?|completed|transaction|payment|credited|debited|pending|failed)\b/i;
 
@@ -59,7 +61,8 @@ function amountLine(line: string): Hero | null {
     return a ? { amount: a, exact: true, symbol: true } : null;
   }
   if (BARE_AMOUNT.test(l) && !/^(?:19|20)\d{2}$/.test(l)) {
-    const a = parseAmount(l);
+    // "₹12,500" read as "712,500": no app groups digits like that, so the leading 7 is the ₹.
+    const a = parseAmount(l.startsWith('7') && l.includes(',') && !INDIAN_GROUPED.test(l) && INDIAN_GROUPED.test(l.slice(1)) ? l.slice(1) : l);
     return a ? { amount: a, exact: false, symbol: false } : null;
   }
   return null;

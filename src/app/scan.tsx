@@ -31,6 +31,8 @@ const REVEAL_MS = 450;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const amountText = (paise: number | null) => (paise ? (paise % 100 ? (paise / 100).toFixed(2) : String(paise / 100)) : '');
+/** "7750" may be "₹750" with the ₹ read as a 7: the amount without that 7, if it is one. */
+const withoutLeading7 = (text: string) => (/^7[1-9]/.test(text) ? text.slice(1) : null);
 
 export default function Scan() {
   const { colors } = useTheme();
@@ -167,6 +169,7 @@ export default function Scan() {
   };
 
   const payment = read?.kind === 'payment' ? read.payment : null;
+  const without7 = payment ? withoutLeading7(amountText(payment.amount)) : null;
   const busy = phase === 'reading' || phase === 'saving';
 
   return (
@@ -230,6 +233,9 @@ export default function Scan() {
             </Txt>
           ) : null}
           <TextField label="Amount (₹)" value={amountInput} onChangeText={setAmountInput} keyboardType="decimal-pad" autoFocus={!payment.amount} placeholder="0.00" />
+          {without7 && amountInput === amountText(payment.amount) ? (
+            <Button title={`It's ₹${without7} (the ₹ was read as 7)`} variant="ghost" onPress={() => setAmountInput(without7)} />
+          ) : null}
           <Row gap={1}>
             <Button title="Continue" icon="checkmark" onPress={confirmAmount} style={{ flex: 1 }} disabled={!parseAmount(amountInput)} />
             <Button title="Cancel" variant="secondary" onPress={goBack} />
