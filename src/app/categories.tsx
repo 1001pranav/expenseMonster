@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import type { Category } from '@/domain/types';
-import { insert, remove, update } from '@/db/repo';
+import { insert, remove, restore, update } from '@/db/repo';
 import { MEMBER_COLORS } from '@/db/seed';
 import { useCategoryMap, useTable } from '@/data/hooks';
 import { Button, Card, IconCircle, ListRow, Section, Txt, type IconName } from '@/ui/components/core';
@@ -90,8 +90,10 @@ export default function Categories() {
             title="Delete category"
             variant="ghost"
             onPress={async () => {
-              await remove('categories', editing.id!);
+              const id = editing.id!;
+              await remove('categories', id);
               setEditing(null);
+              toast('Category deleted', { actionLabel: 'Undo', onAction: () => restore('categories', id) });
             }}
           />
         ) : null}

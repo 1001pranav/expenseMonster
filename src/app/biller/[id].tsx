@@ -12,6 +12,7 @@ import { Bars, LineChart } from '@/ui/components/charts';
 import { Button, Card, EmptyState, IconButton, IconCircle, ListRow, Money, Pill, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { openPay } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -70,7 +71,13 @@ export default function BillerDetail() {
       right={
         <>
           <IconButton name="create-outline" label="Edit" onPress={() => router.push({ pathname: '/biller/new', params: { id: biller.id } })} />
-          <IconButton name="trash-outline" label="Delete" onPress={onDelete} />
+          <MoreMenu
+            title={biller.name}
+            actions={[
+              { label: biller.active ? 'Pause reminders' : 'Resume reminders', icon: biller.active ? 'pause-outline' : 'play-outline', onPress: () => update('billers', biller.id, { active: biller.active ? 0 : 1 }) },
+              { label: 'Delete bill', icon: 'trash-outline', onPress: onDelete, destructive: true },
+            ]}
+          />
         </>
       }
       footer={primary}
@@ -188,7 +195,6 @@ export default function BillerDetail() {
         </Card>
       </Section>
 
-      <Button title={biller.active ? 'Pause reminders' : 'Resume reminders'} variant="ghost" onPress={() => update('billers', biller.id, { active: biller.active ? 0 : 1 })} />
     </Screen>
   );
 }

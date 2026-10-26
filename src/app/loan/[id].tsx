@@ -12,6 +12,7 @@ import { Button, Card, Divider, EmptyState, IconButton, Money, Pill, Row, Sectio
 import { toast } from '@/ui/components/feedback';
 import { AmountField, Segmented } from '@/ui/components/forms';
 import { TxnRow, openPay } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -68,7 +69,13 @@ export default function LoanDetail() {
       right={
         <>
           <IconButton name="create-outline" label="Edit loan" onPress={() => router.push({ pathname: '/loan/new', params: { id: loan.id } })} />
-          <IconButton name="trash-outline" label="Delete loan" onPress={onDelete} />
+          <MoreMenu
+            title={loan.name}
+            actions={[
+              { label: loan.closed ? 'Reopen loan' : 'Mark loan closed', icon: loan.closed ? 'refresh-outline' : 'checkmark-done-outline', onPress: () => update('loans', loan.id, { closed: loan.closed ? 0 : 1 }) },
+              { label: 'Delete loan', icon: 'trash-outline', onPress: onDelete, destructive: true },
+            ]}
+          />
         </>
       }
       footer={due ? <Button title={loan.direction === 'lent' ? 'Record repayment' : `Pay EMI ${formatINR(due.amount ?? loan.emi)}`} icon="checkmark" size="lg" onPress={() => openPay(due)} /> : undefined}
@@ -188,7 +195,6 @@ export default function LoanDetail() {
         </Section>
       ) : null}
 
-      <Button title={loan.closed ? 'Reopen loan' : 'Mark loan closed'} variant="ghost" onPress={() => update('loans', loan.id, { closed: loan.closed ? 0 : 1 })} />
     </Screen>
   );
 }

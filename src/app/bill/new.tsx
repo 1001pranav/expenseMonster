@@ -54,8 +54,8 @@ export default function BillEntry() {
       footer={<Button title="Save bill" icon="checkmark" size="lg" onPress={save} loading={saving} />}
     >
       <AmountField label="Bill amount" value={amount} onChange={setAmount} autoFocus={!existing} />
-      <DateField label="Due date" value={dueDate} onChange={setDueDate} quick={false} />
       <DateField label="Bill date" value={billDate} onChange={setBillDate} />
+      <DateField label="Due date" value={dueDate} onChange={setDueDate} quick={false} />
       {biller.usageUnit ? <TextField label={`Units used (${biller.usageUnit})`} value={usage} onChangeText={(v) => setUsage(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" hint="For usage trends" /> : null}
       <AmountField label="Late fee / penalty (if any)" value={lateFee} onChange={setLateFee} />
       {!existing ? <Button title="Scan the bill instead" icon="scan-outline" variant="secondary" onPress={() => router.replace('/scan')} /> : null}

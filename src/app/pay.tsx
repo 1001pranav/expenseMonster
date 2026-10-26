@@ -19,7 +19,7 @@ import { space, useTheme } from '@/ui/theme';
 
 export default function Pay() {
   const { colors } = useTheme();
-  const { due: dueKey, upi } = useLocalSearchParams<{ due: string; upi?: string }>();
+  const { due: dueKey } = useLocalSearchParams<{ due: string; upi?: string }>();
   const dues = useDues(400);
   const today = useToday();
   const accounts = useTable('accounts');
@@ -153,6 +153,7 @@ export default function Pay() {
       ) : null}
 
       <AmountField key={amountKey} label={due.incoming ? 'Amount received' : 'Amount paid'} value={amount} onChange={setAmount} />
+      {canUpi ? <TextField label="Payee UPI ID" value={upiId} onChangeText={setUpiId} placeholder="biller@okhdfc" autoCapitalize="none" icon="at" hint="Needed to open your UPI app" /> : null}
       <ChipSelect
         label="Paid with"
         value={method}
@@ -170,7 +171,6 @@ export default function Pay() {
       {method === 'card' && cards.length ? <ChipSelect label="Which card?" value={cardId} onChange={setCardId} options={cards.map((c) => ({ value: c.id, label: c.name }))} /> : null}
       {method !== 'card' && accounts.length ? <ChipSelect label="From account" value={accountId} onChange={setAccountId} allowNone options={accounts.map((a) => ({ value: a.id, label: a.name }))} /> : null}
       <DateField label="Paid on" value={date} onChange={setDate} />
-      {canUpi ? <TextField label="Payee UPI ID" value={upiId} onChangeText={setUpiId} placeholder="biller@okhdfc" autoCapitalize="none" icon="at" hint="Saved on the bill / loan" /> : null}
 
       <Sheet visible={confirming} onClose={() => setConfirming(false)} title="Did the payment go through?">
         <Txt tone="muted">UPI apps don't tell us the result. Check your UPI app or bank SMS.</Txt>
@@ -185,7 +185,6 @@ export default function Pay() {
         />
         <Button title="No, it failed" variant="secondary" onPress={() => setConfirming(false)} />
       </Sheet>
-      {upi ? <Txt variant="small" tone="faint">Opened from reminder</Txt> : null}
     </Screen>
   );
 }

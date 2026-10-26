@@ -7,6 +7,7 @@ import { useDues, useMembers, useTable, useToday } from '@/data/hooks';
 import { Button, Card, EmptyState, IconButton, Money, Pill, Row, Section, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { TxnRow, openPay } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
 
@@ -42,14 +43,21 @@ export default function PolicyDetail() {
       right={
         <>
           <IconButton name="create-outline" label="Edit" onPress={() => router.push({ pathname: '/policy/new', params: { id: policy.id } })} />
-          <IconButton
-            name="trash-outline"
-            label="Delete"
-            onPress={async () => {
-              await remove('policies', policy.id);
-              toast('Policy deleted', { actionLabel: 'Undo', onAction: () => restore('policies', policy.id) });
-              router.back();
-            }}
+          <MoreMenu
+            title={policy.name}
+            actions={[
+              { label: policy.active ? 'Policy ended or lapsed' : 'Mark active again', icon: policy.active ? 'stop-circle-outline' : 'refresh-outline', onPress: () => update('policies', policy.id, { active: policy.active ? 0 : 1 }) },
+              {
+                label: 'Delete policy',
+                icon: 'trash-outline',
+                destructive: true,
+                onPress: async () => {
+                  await remove('policies', policy.id);
+                  toast('Policy deleted', { actionLabel: 'Undo', onAction: () => restore('policies', policy.id) });
+                  router.back();
+                },
+              },
+            ]}
           />
         </>
       }
@@ -92,7 +100,6 @@ export default function PolicyDetail() {
           </Card>
         </Section>
       ) : null}
-      <Button title={policy.active ? 'Policy ended / lapsed' : 'Mark active again'} variant="ghost" onPress={() => update('policies', policy.id, { active: policy.active ? 0 : 1 })} />
     </Screen>
   );
 }

@@ -2,11 +2,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 import { memberBalances, parseIds } from '@/domain/settle';
-import { remove } from '@/db/repo';
+import { remove, restore } from '@/db/repo';
 import { useMembers, useSelfId, useTable } from '@/data/hooks';
 import { Avatar } from '@/ui/components/Avatar';
 import { Button, Card, EmptyState, IconButton, Money, Row, Section, Txt } from '@/ui/components/core';
+import { toast } from '@/ui/components/feedback';
 import { TxnRow } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
 
@@ -33,7 +35,23 @@ export default function MemberDetail() {
       right={
         <>
           <IconButton name="create-outline" label="Edit" onPress={() => router.push({ pathname: '/member/new', params: { id: m.id } })} />
-          {!isSelf ? <IconButton name="trash-outline" label="Remove" onPress={() => remove('members', m.id).then(() => router.back())} /> : null}
+          {!isSelf ? (
+            <MoreMenu
+              title={m.name}
+              actions={[
+                {
+                  label: `Remove ${m.name}`,
+                  icon: 'person-remove-outline',
+                  destructive: true,
+                  onPress: async () => {
+                    await remove('members', m.id);
+                    toast(`${m.name} removed`, { actionLabel: 'Undo', onAction: () => restore('members', m.id) });
+                    router.back();
+                  },
+                },
+              ]}
+            />
+          ) : null}
         </>
       }
       footer={

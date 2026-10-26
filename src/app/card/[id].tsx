@@ -12,6 +12,7 @@ import { CardFace } from '@/ui/components/CardFace';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { AmountField } from '@/ui/components/forms';
 import { TxnRow } from '@/ui/components/rows';
+import { MoreMenu } from '@/ui/components/MoreMenu';
 import { Screen } from '@/ui/components/Screen';
 import { useTheme } from '@/ui/theme';
 
@@ -67,7 +68,7 @@ export default function CardDetail() {
       right={
         <>
           <IconButton name="create-outline" label="Edit card" onPress={() => router.push({ pathname: '/card/new', params: { id: card.id } })} />
-          <IconButton name="trash-outline" label="Delete card" onPress={onDelete} />
+          <MoreMenu title={card.name} actions={[{ label: 'Delete card', icon: 'trash-outline', onPress: onDelete, destructive: true }]} />
         </>
       }
       footer={unpaid ? <Button title={`Pay bill · ${formatINR(unpaid.remaining)} by ${formatDay(unpaid.dueDate)}`} icon="checkmark" size="lg" variant={unpaid.status === 'overdue' ? 'danger' : 'primary'} onPress={() => router.push({ pathname: '/pay', params: { due: `card:${card.id}:${unpaid.statementDate}` } })} /> : undefined}
@@ -130,11 +131,18 @@ export default function CardDetail() {
           ))}
         </Card>
         <Txt variant="small" tone="faint" style={{ paddingHorizontal: 4 }}>
-          Long-press a statement to enter the exact amount from your bank (fees, interest, GST).
+          Tap a statement to see its purchases. If the bank's total differs (fees, interest, GST), open it and tap Change amount.
         </Txt>
       </Section>
 
-      <Section title={view.status === 'unbilled' ? 'In this cycle' : `Statement ${formatDay(view.statementDate)}`}>
+      <Section
+        title={view.status === 'unbilled' ? 'In this cycle' : `Statement ${formatDay(view.statementDate)}`}
+        action={view.status === 'unbilled' ? undefined : 'Change amount'}
+        onAction={() => {
+          setActual(view.total);
+          setEditing(view);
+        }}
+      >
         <Card padded={false} style={{ overflow: 'hidden' }}>
           {viewTxns.length ? viewTxns.map((t) => <TxnRow key={t.id} t={t} cat={cats.get(t.categoryId ?? '')} card={card} />) : <EmptyState icon="card-outline" title="No purchases" body="Mark UPI/SMS payments as credit-card to bring them here." />}
         </Card>

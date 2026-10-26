@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import type { Paise } from '@/domain/money';
 import type { Account, AccountType } from '@/domain/types';
-import { insert, remove, update } from '@/db/repo';
+import { insert, remove, restore, update } from '@/db/repo';
 import { useTable } from '@/data/hooks';
 import { Button, Card, EmptyState, ListRow, Txt, type IconName } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
@@ -68,8 +68,10 @@ export default function Accounts() {
               title="Delete account"
               variant="ghost"
               onPress={async () => {
-                await remove('accounts', editing.id!);
+                const id = editing.id!;
+                await remove('accounts', id);
                 setEditing(null);
+                toast('Account deleted', { actionLabel: 'Undo', onAction: () => restore('accounts', id) });
               }}
             />
           </View>
