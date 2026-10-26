@@ -168,7 +168,17 @@ export default function Insights() {
               Spending {changeText(spendChange)} last month{sameDays}.
             </Txt>
           ) : null}
-          <Bars data={series.map((s) => ({ key: s.month, label: shortMonth(s.month).slice(0, 1), values: [s.income, s.expense] }))} colors={[colors.income, colors.expense]} legend={['Income', 'Expense']} height={170} />
+          {/* Invested (net of sales) as a third bar once there is any: money set aside, neither income nor spending. */}
+          {series.some((s) => s.invested > 0) ? (
+            <Bars
+              data={series.map((s) => ({ key: s.month, label: shortMonth(s.month).slice(0, 1), values: [s.income, s.expense, Math.max(0, s.invested)] }))}
+              colors={[colors.income, colors.expense, colors.info]}
+              legend={['Income', 'Expense', 'Invested']}
+              height={170}
+            />
+          ) : (
+            <Bars data={series.map((s) => ({ key: s.month, label: shortMonth(s.month).slice(0, 1), values: [s.income, s.expense] }))} colors={[colors.income, colors.expense]} legend={['Income', 'Expense']} height={170} />
+          )}
         </Card>
       </Section>
 

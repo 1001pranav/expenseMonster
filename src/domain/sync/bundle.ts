@@ -1,6 +1,7 @@
 import { syncedNowISO } from '../clock';
 import { SYNC_TABLES, type BaseRow, type TableName } from '../types';
 import { fromBase64, toBase64 } from './crypto';
+import { isPlausibleTable } from './forward';
 
 export interface Bundle {
   v: 1;
@@ -48,7 +49,8 @@ export function validateBundle(value: unknown): Bundle {
   const b = value as Bundle;
   if (!b || b.v !== 1 || typeof b.householdId !== 'string' || typeof b.tables !== 'object') throw new Error('Unsupported file version');
   for (const key of Object.keys(b.tables)) {
-    if (!SYNC_TABLES.includes(key as TableName)) throw new Error(`Unknown table ${key}`);
+    // A table from a newer app version is kept for after the update (services/sync.ts).
+    if (!SYNC_TABLES.includes(key as TableName) && !isPlausibleTable(key)) throw new Error(`Unknown table ${key}`);
     const rows = b.tables[key as TableName]!;
     if (!Array.isArray(rows) || rows.some((r) => typeof r?.id !== 'string' || typeof r?.updatedAt !== 'string')) {
       throw new Error(`Malformed rows in ${key}`);

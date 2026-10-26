@@ -7,7 +7,7 @@ import { formatDay, isoToYMD } from '@/domain/dates';
 import { encodePair } from '@/domain/sync/bundle';
 import { fingerprint } from '@/domain/sync/crypto';
 import type { Peer } from '@/domain/types';
-import { listPeers, saveIdentity, saveSettings } from '@/db/repo';
+import { heldCount, listPeers, saveIdentity, saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { cloudConfigured, cloudSyncNow, loadCloudStatus, type CloudStatus } from '@/services/cloud';
 import { getHouseholdKey } from '@/services/secure';
@@ -33,8 +33,10 @@ export default function Sync() {
   const cloudOn = useStore((s) => s.settings.cloudSync);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [conflictCount, setConflictCount] = useState(0);
+  const [held, setHeld] = useState(0);
   const refresh = useCallback(() => {
     listPeers().then(setPeers);
+    heldCount().then(setHeld);
     loadConflicts().then((c) => setConflictCount(c.length));
     loadCloudStatus().then(setCloudStatus);
   }, []);
@@ -50,7 +52,7 @@ export default function Sync() {
         if (r.clockAheadMinutes > 5) {
           toast(`${r.from}'s phone clock is ${r.clockAheadMinutes} min ahead. Fix it in Android settings, or "newest edit" may pick the wrong version.`, { tone: 'error' });
         } else {
-          toast(`From ${r.from}: ${r.inserted} new, ${r.updated} updated${r.autoResolved ? `, ${r.autoResolved} conflicts settled` : ''}`, { tone: 'success' });
+          toast(`From ${r.from}: ${r.inserted} new, ${r.updated} updated${r.autoResolved ? `, ${r.autoResolved} conflicts settled` : ''}${r.held ? `, ${r.held} need the latest app` : ''}${r.setAside ? `, ${r.setAside} set aside for review` : ''}`, { tone: 'success' });
         }
         refresh();
         if (r.pendingConflicts) router.push('/sync/conflicts');
@@ -95,7 +97,7 @@ export default function Sync() {
     setBusy('cloud');
     try {
       const r = await cloudSyncNow();
-      toast(`Cloud: ${r.received} received, ${r.sent} sent${r.unreadable ? ` · ${r.unreadable} unreadable skipped` : ''}`, { tone: 'success' });
+      toast(`Cloud: ${r.received} received, ${r.sent} sent${r.held ? ` · ${r.held} need the latest app` : ''}${r.setAside ? ` · ${r.setAside} set aside for review` : ''}${r.unreadable ? ` · ${r.unreadable} unreadable skipped` : ''}`, { tone: 'success' });
       if (r.pendingConflicts) router.push('/sync/conflicts');
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });
@@ -130,6 +132,15 @@ export default function Sync() {
             : `1. Pair once in person: one phone shows a QR code, the other scans it.\n2. Tap "Send" to share an encrypted update file through WhatsApp, Nearby Share or Bluetooth.\n3. Open the file on the other phone. Only entries not marked private are shared.`}
         </Txt>
       </Card>
+
+      {held ? (
+        <Card style={{ borderWidth: 1.5, borderColor: colors.info, gap: 4 }}>
+          <Txt variant="bodyStrong">Update ExpenseMonster</Txt>
+          <Txt variant="small" tone="muted">
+            {held === 1 ? 'A family entry was' : `${held} family entries were`} made with a newer version of the app. {held === 1 ? "It's" : "They're"} kept safely on this phone and will appear after you update.
+          </Txt>
+        </Card>
+      ) : null}
 
       {conflictCount ? (
         <Card onPress={() => router.push('/sync/conflicts')} style={{ borderWidth: 1.5, borderColor: colors.warn, gap: 4 }}>
