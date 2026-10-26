@@ -343,3 +343,78 @@ I would **not** remove validation altogether. OCR is heuristic, and one wrong am
 - **Unsure captures** keep the current check, but **merge the scan screen and the approval form into one screen**: the screenshot thumbnail at the top, the parsed fields editable inline beneath (amount first, problem field highlighted), and one Approve button. Remove the separate amount-confirm phase and the minimum 2 s progress theatre (§2.5).
 - **Make it a setting**, "Save confident screenshots automatically", **on by default**. The Review inbox and its "nothing is booked until you approve" promise stay for SMS and for low-confidence reads, so the privacy and accuracy story still holds.
 - Auto-saved entries should carry a small "auto" marker in Activity for a week, so a wrong one is easy to spot and fix.
+
+---
+
+## 11. Second pass: sheets, clutter, the assistant model, and small features
+
+### 11.1 Bottom sheets can't be dragged closed and have no close button
+- **The + sheet** (`app/add.tsx`) and the shared **`Sheet`** (`ui/components/feedback.tsx`, used for budgets, PIN, accounts, categories, backup, card statements, Review's card picker, Pay confirmation…) both draw a **drag handle with no drag gesture**. A handle that doesn't drag is a false affordance: users swipe down, nothing happens, and they think the app froze.
+- **Neither has a close (✕) button.** The only ways out are tapping the backdrop or Android back. On `Sheet` (max height 88 %) the backdrop above a tall sheet is a thin strip. With gesture navigation, "back" is an edge swipe many users don't know.
+- **`Sheet` has no keyboard avoidance.** `Screen` wraps content in `KeyboardAvoidingView` precisely because edge-to-edge Android no longer resizes the window, but `Sheet` renders in a `Modal` without it. Sheets that autofocus an input (budget amount, PIN, backup password, account name) are likely to have the field and their Save button covered by the keyboard. Verify on a device.
+- **Fix:** one `BottomSheet` component, used everywhere including the + sheet:
+  - a pan-down-to-dismiss gesture with velocity and threshold, built on the `react-native-gesture-handler` + `reanimated` already installed (no new dependency);
+  - a ✕ button in the sheet header;
+  - keyboard avoidance;
+  - content that scrolls under a sticky action button.
+
+### 11.2 The cluttered screens, with counts
+| Screen | What's on it | Cut to |
+|---|---|---|
+| **Add loan** | ~15 inputs (direction, name, type, member, lender, amount, rate, interest method, tenure chips, tenure months, first EMI, EMI override, EMIs already paid, UPI ID, private) | **Amount, rate, tenure, first EMI date, lender.** Pre-fill the name from the lender and type. Everything else goes under "More details". "EMIs already paid" can be computed from the first EMI date; ask only to confirm. |
+| **Add bill** (biller) | type picker + ~12 inputs | **Name, amount or "varies", due day.** Provider, consumer no., pay-within, payment method, UPI, autopay and private go under "More". |
+| **Add insurance** | 12 inputs | **Insurer, premium, frequency, next due.** Sum assured, nominee, policy no. and covers are reference data, editable later. |
+| **Sync** | 8 sections | See §2.12. |
+| **Settings** | 7 sections, 15 controls, a 5-bullet privacy wall | See §1 hub. |
+| **Review card** | 5 actions + up to 6 pills per item | See §2.4. |
+| **Insights** | 3 controls + 7 charts | See §2.8. |
+| **Card form** | two `DayOfMonthField`s of 31 horizontal chips each | One compact day grid (7×5), or a wheel. Today an existing card with due day 25 opens with the selected chip scrolled off-screen. |
+
+**Rule for every create form:** ask only what the feature needs to *work* (to compute the amount and fire a reminder), and nothing that is reference data. Required fields come first; the rest goes in one "More details" disclosure, which `TxnForm` already does well.
+
+### 11.3 The assistant: Gemma 4 E2B only, 2.6 GB, untested on real output
+**The library already offers better options; the app hard-codes one.** `expo-ai-kit@0.18.2` (the installed version) ships a registry with smaller models, and it supports the phone's built-in model with no download at all. Tool calling in this library is a text prompt protocol (`parseToolCall`), so it works with any of these models; how *reliably* it works is what needs testing.
+
+| Option | Download | Min RAM (registry) | License | Notes |
+|---|---|---|---|---|
+| **Built-in OS model** (`prepareBuiltInModel`, Android ML Kit GenAI / AICore, Gemini Nano) | **0 (OS-managed)** | n/a | OS terms | Only on supported, mostly flagship, devices. The Prompt API is still alpha. Use it when `isAvailable()` is true. |
+| **Qwen3 0.6B** (`qwen3-0.6b`) | **475 MB** | 1 GB | Apache-2.0, not gated | Runs on nearly any phone. CPU only (the GPU path is broken in this runtime). 2k context. Weak at multi-step tool use. |
+| Qwen3 1.7B (`qwen3-1.7b`) | 2.06 GB | 2 GB | Apache-2.0 | Middle ground; not much smaller than E2B. |
+| Gemma 4 E2B (`gemma-e2b`, current) | 2.59 GB | 2 GB | Gemma | Today's only option. |
+| Gemma 3 1B int4 (via `registerModel`) | ~555 MB | — | Gemma, **gated on Hugging Face** | The app can't download it anonymously. You'd have to host the file yourself under the Gemma terms. |
+| Qwen3 4B / Gemma 4 E4B / Phi-4 Mini | 2.7–3.9 GB | 3–4 GB | — | Too heavy for this audience. |
+
+**Recommendation, in this order:**
+1. **Answer without any model first.** All 5 suggestion chips in `assistant.tsx` (financial health, where money went, what's due, food spend last month, loan balance) map 1:1 onto the existing read-only tools in `domain/assistant/tools.ts`, which already return formatted figures. A small deterministic intent router (keywords, category names, month words, "due", "loan") answers these instantly, on every phone, with zero download and zero hallucination risk. My estimate is that this covers most real questions. Make it the **default Ask experience** and show the tool's result card directly.
+2. **Use the OS built-in model where the device has one** (0 MB) for free-form questions, with the same tools and the same number check.
+3. **Offer Qwen3 0.6B (475 MB) as the default download** instead of 2.6 GB, with E2B as an "advanced, better answers" option. On a 0.6B model, **let the router pick the tool** and have the model only phrase the reply, so it isn't trusted with multi-step tool calls.
+4. **Actually test it.** `assistant.test.ts` tests the grounding logic with a fake `generate`; nothing measures real model output. Build an eval set of about 40 questions with expected figures (using the existing test fixtures). Run each candidate model on one mid-range phone (6 GB RAM, the realistic Indian target) and record: correct tool chosen, number check pass rate, fallback rate, first-token and total latency, peak RAM. **Pick the smallest model that passes ≥90 %.** Without this, choosing between the models is guesswork.
+5. Show the **download size and model choice** in Settings → Assistant. The single "Download 2.6 GB" button doesn't let the user decide.
+
+### 11.4 Small-feature issues found on the full read
+**Consistency**
+- **The privacy switch is inverted between forms.** Transaction, loan, bill, policy and income say **"Keep private"** (default off, so shared). Card and account say **"Share with family"**, and accounts **default to private**. The same concept appears with opposite polarity and opposite defaults. Pick one ("Shared with family", on by default, everywhere) and drive the default from the setting.
+- **Five delete patterns:**
+  - trash icon + Undo toast (card, loan, biller);
+  - header text "Delete" with no undo (bill, income);
+  - danger button with no confirm (SMS format);
+  - trash with no undo (member);
+  - ghost button in a sheet (account, category);
+  - plus one-tap "Forget" (rules).
+
+  Standardise on ⋯ menu → Delete → Undo toast.
+- **Validation errors arrive as toasts** ("Enter an amount", "Name the account") at the bottom of the screen, far from the field. `Field` already supports an inline `error` prop that no form uses. Use inline errors and scroll to the first one.
+- **Copy hard-codes navigation paths** that the IA change will break: "Household → Sync → Show my QR" (onboarding, sync scan) and "Dues → Cards" (TxnForm). Use links, not directions.
+- The onboarding name placeholder is **"Pranav"**. Use a neutral example.
+
+**Flows**
+- **The startup sync screen blocks the whole app for up to 8 s after every unlock** when cloud sync is on (`SyncGate`). For a local-first app this is the wrong trade-off. Show local data immediately with a slim "Updating from family…" bar, and let new entries animate in.
+- **The Review copy is wrong:** "Swipe right to approve, left to reject", but `SwipeRow` only *reveals* a button you must then tap ("no accidental full-swipe deletes"). Either support full-swipe approve (it's undoable, so it's safe) or change the copy.
+- **Conflicts:** "Use all theirs" is the filled primary button and "Keep all mine" is secondary. The emphasis sits on the bulk overwrite. Give both equal weight, or neither.
+- **Pay:** "Pay via UPI app" is the primary footer button, but the UPI ID it needs is the **last field on the screen**. When it's missing, the error toast points to a field below the fold. Show the UPI ID right under the amount when it's empty.
+- **Bill entry:** "Due date" comes before "Bill date". Reverse them, and default the due date to bill date + pay-within days.
+- **The notification "Mark paid" action opens the app** (`opensAppToForeground: true`). For a fixed-amount due it can record in the background and show a confirmation notification with Undo.
+- **Expense dates allow the future** (`DateField allowFuture` defaults to true). A future-dated expense silently skews this month. Allow it, but show "This is in the future" next to the date.
+- **The assistant entry appears twice on Insights** (header sparkles + "Ask" on the health section) and leads to "Not installed" for most users.
+
+**Touch targets** (Android minimum 48 dp): compact `Chip` 32 dp (day-of-month, filters, suggestions, review card picker), `Chip` 38 dp, `Segmented` 36 dp, the `DateField` button 38 dp, the `DueRow` "Pay" text link with only `hitSlop` 8. Raise them to 44–48 dp, or add `hitSlop`, before the large-text pass.
