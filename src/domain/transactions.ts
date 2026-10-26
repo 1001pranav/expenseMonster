@@ -149,3 +149,15 @@ export function comparableChange(current: Paise, previous: Paise): number | null
   if (!previous) return null;
   return (current - previous) / previous;
 }
+
+/**
+ * A capture clear enough to save without asking: the amount was read with its ₹ sign (or typed),
+ * the payee was found and already has a category, it isn't a possible duplicate, and the payment
+ * wasn't pending. Anything else waits in Review.
+ */
+export function isClearCapture(t: Pick<Transaction, 'status' | 'confidence' | 'payee' | 'categoryId' | 'flags' | 'amount'>): boolean {
+  if (t.status !== 'pending' || !t.amount || !t.payee?.trim() || !t.categoryId) return false;
+  if ((t.confidence ?? 0) < 0.8) return false;
+  const flags = (t.flags ?? '').split(',');
+  return !flags.some((f) => f.startsWith('duplicate') || f === 'amount-unsure' || f === 'payment-pending' || f.startsWith('card-hint:'));
+}

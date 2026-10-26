@@ -2,7 +2,7 @@ import { budgetUsage } from '../budget';
 import { findDuplicate } from '../dedupe';
 import { computeDues, computeReminders } from '../dues';
 import { memberBalances, simplifyDebts } from '../settle';
-import { monthTotals, ruleKey, suggestCategory } from '../transactions';
+import { isClearCapture, monthTotals, ruleKey, suggestCategory } from '../transactions';
 import { at, base, bill, biller, card, txn } from './fixtures';
 
 describe('dedupe', () => {
@@ -106,5 +106,20 @@ describe('dues and reminders', () => {
     expect(dues).toHaveLength(1);
     expect(dues[0]).toMatchObject({ amount: 3_000_00, date: '2026-08-05', state: 'overdue' });
     expect(dues[0].subtitle).toContain('2 statements unpaid');
+  });
+});
+
+describe('isClearCapture', () => {
+  const clear = { status: 'pending' as const, confidence: 0.9, payee: 'Swiggy', categoryId: 'cat_food', flags: null, amount: 250_00 };
+  it('saves only captures read clearly', () => {
+    expect(isClearCapture(clear)).toBe(true);
+    expect(isClearCapture({ ...clear, confidence: 0.6 })).toBe(false);
+    expect(isClearCapture({ ...clear, categoryId: null })).toBe(false);
+    expect(isClearCapture({ ...clear, payee: null })).toBe(false);
+    expect(isClearCapture({ ...clear, flags: 'amount-unsure' })).toBe(false);
+    expect(isClearCapture({ ...clear, flags: 'duplicate:abc' })).toBe(false);
+    expect(isClearCapture({ ...clear, flags: 'payment-pending' })).toBe(false);
+    expect(isClearCapture({ ...clear, flags: 'card-hint:1234' })).toBe(false);
+    expect(isClearCapture({ ...clear, status: 'confirmed' })).toBe(false);
   });
 });

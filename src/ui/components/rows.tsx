@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
-import { formatDay, isoToYMD, relativeDay, type YMD } from '@/domain/dates';
+import { diffDays, formatDay, isoToYMD, relativeDay, type YMD } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
+import { useToday } from '@/data/hooks';
 import { fonts, radius, space, useTheme, type GradientName } from '../theme';
 import { GradientTile } from './Aurora';
 import { Card, IconCircle, ListRow, Money, Pill, Row, Txt, type IconName } from './core';
@@ -19,6 +20,7 @@ export function txnTitle(t: Transaction, cat?: Category) {
 
 export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Category; card?: CreditCard; onPress?: () => void }) {
   const { colors } = useTheme();
+  const today = useToday();
   const sign = t.type === 'expense' ? -1 : t.type === 'income' ? 1 : 0;
   const icon: IconName = t.type === 'transfer' ? 'swap-horizontal' : t.type === 'settlement' ? 'people' : ((cat?.icon as IconName) ?? (t.type === 'income' ? 'arrow-down' : 'arrow-up'));
   const color = t.type === 'transfer' || t.type === 'settlement' ? colors.info : (cat?.color ?? colors.textMuted);
@@ -37,6 +39,7 @@ export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Catego
           </Txt>
           {t.status === 'pending' ? <Pill label="Review" tone="warn" /> : null}
           {flags.includes('refund') ? <Pill label="Refund" tone="info" /> : null}
+          {flags.includes('auto-saved') && diffDays(today, isoToYMD(t.updatedAt)) < 7 ? <Pill label="Auto" tone="muted" /> : null}
           {t.scope === 'personal' ? <Ionicons name="lock-closed" size={11} color={colors.textFaint} /> : null}
         </Row>
       }

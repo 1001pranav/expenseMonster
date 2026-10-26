@@ -4,7 +4,7 @@ import { findDuplicate } from '@/domain/dedupe';
 import type { DueItem } from '@/domain/dues';
 import type { Paise } from '@/domain/money';
 import { advance } from '@/domain/recurrence';
-import { ruleKey } from '@/domain/transactions';
+import { isClearCapture, ruleKey } from '@/domain/transactions';
 import type { Bill, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { findById, insert, insertMany, remove, update, type NewRow } from '@/db/repo';
 import { CATEGORY_FOR } from '@/db/seed';
@@ -68,6 +68,17 @@ export async function approveCapture(id: string, patch: Partial<Transaction> = {
     await update('transactions', id, { attachment: null });
   }
   return row;
+}
+
+/**
+ * Approve a fresh capture on its own when it was read clearly and the setting allows it.
+ * Returns the saved row, or null when it should go to Review instead. Marked "auto-saved" so the
+ * Spending list can point it out for a few days.
+ */
+export async function autoSaveCapture(id: string): Promise<Transaction | null> {
+  const t = findById('transactions', id);
+  if (!t || !getState().settings.autoSaveCaptures || !isClearCapture(t)) return null;
+  return approveCapture(id, { flags: [t.flags, 'auto-saved'].filter(Boolean).join(',') });
 }
 
 /** Rejected captures are kept (as tombstone-like rows) so the same SMS is never offered again. */
