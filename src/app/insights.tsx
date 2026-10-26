@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { budgetUsage, spendByCategory } from '@/domain/budget';
 import { buildCardLedger } from '@/domain/creditCard';
 import { addMonths, daysInMonth, formatMonth, fromParts, isoToYMD, monthKey, parts, shortMonth } from '@/domain/dates';
@@ -10,8 +10,8 @@ import type { Paise } from '@/domain/money';
 import { financialHealth, type HealthStatus } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
-import { Bars, Donut, HeatCalendar, LineChart, type Slice } from '@/ui/components/charts';
-import { Card, Chip, IconButton, ListRow, Pill, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
+import { Bars, HeatCalendar, LineChart, RankedBars, type Slice } from '@/ui/components/charts';
+import { Card, IconButton, ListRow, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
@@ -49,14 +49,29 @@ export default function Insights() {
       .map(([id, value]) => ({ key: id, label: cats.get(id)?.name ?? 'Uncategorised', value, color: cats.get(id)?.color ?? fallbackColor }));
   }, [txns, month, months, cats, fallbackColor]);
 
-  const series = useMemo(() => monthlySeries(txns, month, 12), [txns, month]);
+  // Month on month always ends at the current month, so tapping a row doesn't shift the list.
+  const currentMonth = monthKey(today);
+  const todayDay = Number(today.slice(8));
+  const [allMonths, setAllMonths] = useState(false);
+  const mom = useMemo(() => {
+    const s = monthlySeries(txns, currentMonth, 12);
+    // Skip the empty months before the first entry instead of drawing blank bars.
+    const first = s.findIndex((x) => x.income || x.expense);
+    if (first < 0) return [];
+    return s
+      .map((x, i) => {
+        const prev = s[i - 1];
+        // The month in progress is compared with the same days of the month before.
+        const prevSpend = !prev ? 0 : x.month === currentMonth ? monthTotals(txns, prev.month, todayDay).expense : prev.expense;
+        return { ...x, change: comparableChange(x.expense, prevSpend) };
+      })
+      .slice(first);
+  }, [txns, currentMonth, todayDay]);
+  const momRows = [...mom].reverse();
   // A month in progress is compared with the same days of the previous month.
-  const inProgress = month === monthKey(today);
-  const uptoDay = inProgress ? Number(today.slice(8)) : 31;
+  const inProgress = month === currentMonth;
+  const uptoDay = inProgress ? todayDay : 31;
   const prevMonth = monthKey(addMonths(`${month}-01`, -1));
-  const thisMonth = useMemo(() => monthTotals(txns, month, uptoDay), [txns, month, uptoDay]);
-  const lastMonth = useMemo(() => monthTotals(txns, prevMonth, uptoDay), [txns, prevMonth, uptoDay]);
-  const spendChange = comparableChange(thisMonth.expense, lastMonth.expense);
   const sameDays = inProgress ? ` (${uptoDay === 1 ? '' : '1–'}${uptoDay} ${shortMonth(prevMonth)})` : '';
   const changeText = (ch: number) => (Math.abs(ch) < 0.005 ? 'same as' : `${ch > 0 ? 'up' : 'down'} ${Math.abs(Math.round(ch * 100))}% vs`);
 
@@ -102,7 +117,7 @@ export default function Insights() {
     return { points, labels };
   }, [loans, allTxns, today]);
 
-  const savings = series.map((s) => s.net);
+  const savings = mom.map((s) => s.net);
   const topCat = slices[0];
   const prevCatSpend = topCat && range === 'month' ? (spendByCategory(txns, prevMonth, uptoDay).get(topCat.key) ?? 0) : 0;
   const takeaway = (() => {
@@ -132,6 +147,77 @@ export default function Insights() {
         </Card>
       </Section>
 
+      {mom.length ? (
+        <Section title="Month on month">
+          <Card style={{ gap: space(1.5) }}>
+            <Bars
+              data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense] }))}
+              colors={[colors.expense]}
+              height={150}
+              highlightLast
+            />
+            <View>
+              {(allMonths ? momRows : momRows.slice(0, 6)).map((r, i) => {
+                const selected = range === 'month' && month === r.month;
+                const flat = r.change !== null && Math.abs(r.change) < 0.005;
+                return (
+                  <Pressable
+                    key={r.month}
+                    onPress={() => {
+                      setRange('month');
+                      setMonth(r.month);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityHint="Shows this month's categories below"
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: space(1),
+                      paddingVertical: space(1.25),
+                      paddingHorizontal: space(1),
+                      marginHorizontal: -space(1),
+                      borderRadius: 12,
+                      borderTopWidth: i ? StyleSheet.hairlineWidth : 0,
+                      borderTopColor: colors.border,
+                      backgroundColor: selected ? colors.primarySoft : pressed ? colors.surfaceAlt : 'transparent',
+                    })}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Txt variant="bodyStrong">
+                        {formatMonth(r.month)}
+                        {r.month === currentMonth ? ' · so far' : ''}
+                      </Txt>
+                      <Txt variant="small" tone="muted" numberOfLines={1}>
+                        {r.income ? `In ${money(r.income, { compact: true })} · ${r.net < 0 ? 'Overspent' : 'Saved'} ${money(Math.abs(r.net), { compact: true })}` : 'No income recorded'}
+                      </Txt>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                      <Money value={r.expense} variant="bodyStrong" decimals="never" />
+                      {r.change !== null ? (
+                        <Txt variant="small" tone={flat ? 'muted' : r.change > 0 ? 'expense' : 'income'}>
+                          {flat ? 'Same as before' : `${r.change > 0 ? '↑' : '↓'} ${Math.min(999, Math.abs(Math.round(r.change * 100)))}%`}
+                        </Txt>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {momRows.length > 6 ? (
+              <Pressable onPress={() => setAllMonths((v) => !v)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start' }}>
+                <Txt variant="small" tone="primary">
+                  {allMonths ? 'Show fewer' : `Show all ${momRows.length} months`}
+                </Txt>
+              </Pressable>
+            ) : null}
+            <Txt variant="small" tone="muted">
+              Change is against the month before; the current month is compared with the same days of last month.
+            </Txt>
+          </Card>
+        </Section>
+      ) : null}
+
       <Segmented
         value={range}
         onChange={setRange}
@@ -152,29 +238,13 @@ export default function Insights() {
           <Txt variant="small" tone="muted">
             {takeaway}
           </Txt>
-          {slices.length ? <Donut slices={slices.slice(0, 6)} onSelect={(k) => k !== 'others' && router.push({ pathname: '/activity', params: { category: k } })} /> : null}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {slices.slice(6).map((s) => (
-              <Chip key={s.key} compact label={`${s.label} ${money(s.value, { compact: true })}`} onPress={() => router.push({ pathname: '/activity', params: { category: s.key } })} />
-            ))}
-          </View>
-        </Card>
-      </Section>
-
-      <Section title="Income vs expense · 12 months">
-        <Card style={{ gap: space(1) }}>
-          {spendChange !== null ? (
-            <Txt variant="small" tone="muted">
-              Spending {changeText(spendChange)} last month{sameDays}.
-            </Txt>
-          ) : null}
-          <Bars data={series.map((s) => ({ key: s.month, label: shortMonth(s.month).slice(0, 1), values: [s.income, s.expense] }))} colors={[colors.income, colors.expense]} legend={['Income', 'Expense']} height={170} />
+          {slices.length ? <RankedBars slices={slices} onSelect={(k) => router.push({ pathname: '/activity', params: { category: k } })} /> : null}
         </Card>
       </Section>
 
       <Section title="Savings trend">
         <Card>
-          <LineChart points={savings} labels={series.map((s) => formatMonth(s.month))} color={colors.income} />
+          <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.income} />
         </Card>
       </Section>
 
