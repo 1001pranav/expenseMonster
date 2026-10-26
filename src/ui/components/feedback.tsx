@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
-import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { FadeInDown, FadeOutDown, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 import { radius, space, useTheme } from '../theme';
@@ -49,7 +51,7 @@ export function ToastHost() {
   }, [id, message, onAction, hide]);
   if (!message) return null;
   const icon = tone === 'success' ? 'checkmark-circle' : tone === 'error' ? 'alert-circle' : 'information-circle';
-  const iconColor = tone === 'success' ? colors.income : tone === 'error' ? colors.expense : colors.primary;
+  const iconColor = tone === 'success' ? colors.good : tone === 'error' ? colors.expense : colors.primary;
   return (
     <Animated.View
       key={id}
@@ -82,25 +84,54 @@ export function ToastHost() {
   );
 }
 
+/**
+ * Bottom sheet: drag it down, tap ✕ or tap the backdrop to close. Lifts above the keyboard
+ * (edge-to-edge Android no longer resizes the window for it).
+ */
 export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const drag = useSharedValue(0);
+  useEffect(() => {
+    if (visible) drag.set(0);
+  }, [visible, drag]);
+  const pan = Gesture.Pan()
+    .activeOffsetY(8)
+    .onUpdate((e) => {
+      drag.set(Math.max(0, e.translationY));
+    })
+    .onEnd((e) => {
+      if (e.translationY > 120 || e.velocityY > 900) scheduleOnRN(onClose);
+      else drag.set(withTiming(0, { duration: 160 }));
+    });
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: drag.get() }] }));
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={onClose} accessibilityLabel="Close" />
-      <View style={{ backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingBottom: insets.bottom + space(2), maxHeight: '88%' }}>
-        <View style={{ alignItems: 'center', paddingTop: 10 }}>
-          <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
-        </View>
-        {title ? (
-          <Txt variant="h2" style={{ paddingHorizontal: space(2.5), paddingTop: space(1.5), paddingBottom: space(1) }}>
-            {title}
-          </Txt>
-        ) : null}
-        <ScrollView contentContainerStyle={{ paddingHorizontal: space(2.5), paddingBottom: space(1), gap: space(2) }} keyboardShouldPersistTaps="handled">
-          {children}
-        </ScrollView>
-      </View>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: colors.overlay }} onPress={onClose} accessibilityLabel="Close" />
+          <Animated.View style={[{ backgroundColor: colors.bg, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingBottom: insets.bottom + space(2), maxHeight: '88%' }, sheetStyle]}>
+            <GestureDetector gesture={pan}>
+              <View>
+                <View style={{ alignItems: 'center', paddingTop: 10 }}>
+                  <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border }} />
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: space(2.5), paddingRight: space(1.5), paddingTop: space(1), paddingBottom: space(1) }}>
+                  <Txt variant="h2" style={{ flex: 1 }}>
+                    {title ?? ''}
+                  </Txt>
+                  <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" hitSlop={4} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="close" size={20} color={colors.text} />
+                  </Pressable>
+                </View>
+              </View>
+            </GestureDetector>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: space(2.5), paddingBottom: space(1), gap: space(2) }} keyboardShouldPersistTaps="handled">
+              {children}
+            </ScrollView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

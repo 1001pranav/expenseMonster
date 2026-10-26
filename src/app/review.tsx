@@ -63,7 +63,7 @@ export default function Review() {
               const dup = flags.some((f) => f.startsWith('duplicate'));
               return (
                 <Card key={t.id} padded={false} style={{ overflow: 'hidden' }}>
-                  <SwipeRow left={[{ label: 'Approve', icon: 'checkmark', color: colors.income, onPress: () => approve(t) }]} right={[{ label: 'Reject', icon: 'close', color: colors.expense, onPress: () => reject(t) }]}>
+                  <SwipeRow left={[{ label: 'Approve', icon: 'checkmark', color: colors.good, onPress: () => approve(t) }]} right={[{ label: 'Reject', icon: 'close', color: colors.expense, onPress: () => reject(t) }]}>
                     <View style={{ padding: space(2), gap: space(1.25) }}>
                       <Row gap={1.5}>
                         <IconCircle name={t.type === 'income' ? 'arrow-down' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? 'arrow-up')} color={t.type === 'income' ? colors.income : (cat?.color ?? colors.expense)} />

@@ -130,7 +130,7 @@ export default function BillerDetail() {
                 {current.state === 'paid' ? 'Paid' : `Due ${formatDay(current.bill.dueDate)} · ${relativeDay(current.bill.dueDate, today)}`}
               </Txt>
             </View>
-            <Pill label={STATE_LABEL[current.state]} tone={current.state === 'overdue' ? 'expense' : current.state === 'paid' ? 'income' : 'warn'} />
+            <Pill label={STATE_LABEL[current.state]} tone={current.state === 'overdue' ? 'expense' : current.state === 'paid' ? 'good' : 'warn'} />
           </Row>
         ) : (
           <Txt tone="muted">No bills recorded yet.</Txt>

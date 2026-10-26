@@ -130,7 +130,7 @@ export default function Insights() {
   })();
 
   return (
-    <Screen title="Insights" back right={<IconButton name="sparkles" label="Ask the assistant" onPress={() => router.push('/assistant')} />}>
+    <Screen title="Insights" large tabBar right={<IconButton name="sparkles" label="Ask the assistant" onPress={() => router.push('/assistant')} />}>
       <Section title="Financial health" action="Ask" onAction={() => router.push('/assistant')}>
         <Card style={{ gap: space(1.5) }}>
           {health.map((m) => (
@@ -244,7 +244,7 @@ export default function Insights() {
 
       <Section title="Savings trend">
         <Card>
-          <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.income} />
+          <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.good} />
         </Card>
       </Section>
 
@@ -265,7 +265,7 @@ export default function Insights() {
                     {money(b.spent, { compact: true })} / {money(b.limit, { compact: true })}
                   </Txt>
                 </Row>
-                <ProgressBar value={b.ratio} color={b.level === 'over' ? colors.expense : b.level === 'warn' ? colors.warn : colors.income} />
+                <ProgressBar value={b.ratio} color={b.level === 'over' ? colors.expense : b.level === 'warn' ? colors.warn : colors.good} />
               </View>
             ))}
           </Card>

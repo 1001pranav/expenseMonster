@@ -122,7 +122,7 @@ export default function LoanDetail() {
               <View style={{ gap: 6 }}>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Txt tone="muted">Interest saved</Txt>
-                  <Money value={sim.interestSaved} tone="income" variant="h3" />
+                  <Money value={sim.interestSaved} tone="good" variant="h3" />
                 </Row>
                 {mode === 'reduce_tenure' ? (
                   <Row style={{ justifyContent: 'space-between' }}>

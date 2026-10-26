@@ -93,7 +93,7 @@ export default function Assistant() {
         </View>
         {!mine ? (
           <Row gap={0.75} wrap>
-            {item.verified ? <Pill label="Figures checked" tone="income" /> : item.toolsUsed?.length ? <Pill label="Shown from your data" tone="warn" /> : null}
+            {item.verified ? <Pill label="Figures checked" tone="good" /> : item.toolsUsed?.length ? <Pill label="Shown from your data" tone="warn" /> : null}
             {links.map((l) => (
               <Chip key={l.href} compact label={l.label} icon="open-outline" onPress={() => router.push(l.href as never)} />
             ))}

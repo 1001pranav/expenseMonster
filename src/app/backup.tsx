@@ -1,14 +1,17 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { addMonths, monthEnd, monthStart, todayYMD } from '@/domain/dates';
+import { useStore } from '@/db/store';
 import { createBackup, exportCsv, restoreBackup } from '@/services/sync';
-import { Button, Card, Chip, Row, Section, Txt } from '@/ui/components/core';
+import { Button, Card, Chip, ListRow, Row, Section, Txt } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space } from '@/ui/theme';
 
 export default function Backup() {
+  const vaultOn = useStore((s) => s.settings.vaultSync);
   const [mode, setMode] = useState<'backup' | 'restore' | null>(null);
   const [pass, setPass] = useState('');
   const [pass2, setPass2] = useState('');
@@ -45,8 +48,13 @@ export default function Backup() {
   };
 
   return (
-    <Screen title="Backup & export" back>
-      <Section title="Encrypted backup">
+    <Screen title="Backup" back>
+      <Section title="Cloud backup">
+        <Card padded={false} style={{ overflow: 'hidden' }}>
+          <ListRow icon="cloud-upload-outline" title={vaultOn ? 'Cloud backup is on' : 'Back up to the cloud'} subtitle={vaultOn ? 'Encrypted with your password' : 'Everything, encrypted with a password only you know'} chevron onPress={() => router.push('/settings/cloud-backup')} />
+        </Card>
+      </Section>
+      <Section title="Backup file">
         <Card style={{ gap: space(1.5) }}>
           <Txt tone="muted">One file with everything on this phone, including private entries, locked with your passphrase. Save it to Google Drive or a computer. Without the passphrase the file can't be opened, by us or anyone else.</Txt>
           <Row gap={1}>

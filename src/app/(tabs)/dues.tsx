@@ -136,7 +136,7 @@ function Loans() {
           <Money value={p.nextDue.emi} variant="small" />
         </Row>
       ) : (
-        <Pill label="Fully repaid" tone="income" />
+        <Pill label="Fully repaid" tone="good" />
       )}
     </Card>
   );

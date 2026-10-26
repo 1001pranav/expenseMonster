@@ -5,9 +5,9 @@ import { formatDay, isoToYMD, relativeDay, type YMD } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
-import { fonts, gradients, radius, space, useTheme, type GradientName } from '../theme';
-import { GradientFill, GradientTile } from './Aurora';
-import { Card, ListRow, Money, Pill, Row, Txt, type IconName } from './core';
+import { fonts, radius, space, useTheme, type GradientName } from '../theme';
+import { GradientTile } from './Aurora';
+import { Card, IconCircle, ListRow, Money, Pill, Row, Txt, type IconName } from './core';
 
 const METHOD_LABEL: Record<Transaction['method'], string> = { upi: 'UPI', bank: 'Bank', cash: 'Cash', card: 'Card', wallet: 'Wallet' };
 
@@ -40,7 +40,8 @@ export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Catego
           {t.scope === 'personal' ? <Ionicons name="lock-closed" size={11} color={colors.textFaint} /> : null}
         </Row>
       }
-      right={<Money value={sign === 0 ? t.amount : sign * t.amount} tone={sign > 0 ? 'income' : sign === 0 ? 'muted' : 'default'} signed={sign > 0} />}
+      // Spending is the default, so it carries no minus sign; money in is marked with + and blue.
+      right={<Money value={t.amount} tone={sign > 0 ? 'income' : sign === 0 ? 'muted' : 'default'} signed={sign > 0} />}
     />
   );
 }
@@ -92,7 +93,6 @@ export function DueCard({ d, today, onPay }: { d: DueItem; today: YMD; onPay: ()
           opacity: pressed ? 0.8 : 1,
         })}
       >
-        {urgent ? <GradientFill from={gradients.brand[0]} to={gradients.brand[1]} /> : null}
         <Txt variant="small" style={{ color: urgent ? '#FFFFFF' : colors.primary, fontFamily: fonts.semibold }}>
           {d.kind === 'enter_bill' ? 'Enter bill' : d.incoming ? 'Mark received' : 'Pay now'}
         </Txt>
@@ -103,20 +103,34 @@ export function DueCard({ d, today, onPay }: { d: DueItem; today: YMD; onPay: ()
 
 export function DueRow({ d, today, onPay }: { d: DueItem; today: YMD; onPay: () => void }) {
   const { colors } = useTheme();
-  const accent = d.state === 'overdue' ? colors.expense : d.state === 'due' ? colors.warn : colors.primary;
+  const late = d.state === 'overdue';
+  const when = late ? `Was due ${formatDay(d.date)}` : `${relativeDay(d.date, today)}, ${formatDay(d.date)}`;
+  const action = d.kind === 'enter_bill' ? 'Enter' : d.incoming ? 'Received' : 'Pay';
   return (
     <ListRow
       onPress={() => router.push(d.href as never)}
-      icon={d.icon as IconName}
-      iconColor={accent}
+      leading={<IconCircle name={d.icon as IconName} state={late ? 'expense' : undefined} />}
       title={d.title}
-      subtitle={`${d.state === 'overdue' ? `Overdue · ${formatDay(d.date)}` : `${relativeDay(d.date, today)} · ${formatDay(d.date)}`} · ${d.subtitle}`}
+      subtitle={
+        <Txt variant="small" tone="muted" numberOfLines={1}>
+          <Txt variant="small" tone={late ? 'expense' : d.state === 'due' ? 'warn' : 'muted'} style={late || d.state === 'due' ? { fontFamily: fonts.bold } : undefined}>
+            {when}
+          </Txt>
+          {d.subtitle ? `, ${d.subtitle}` : ''}
+        </Txt>
+      }
       right={
-        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+        <View style={{ alignItems: 'flex-end', gap: 6 }}>
           {d.amount ? <Money value={d.amount} tone={d.incoming ? 'income' : 'default'} /> : null}
-          <Pressable onPress={onPay} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Pay ${d.title}`}>
-            <Txt variant="small" tone="primary">
-              {d.kind === 'enter_bill' ? 'Enter' : d.incoming ? 'Received' : 'Pay'}
+          <Pressable
+            onPress={onPay}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`${action} ${d.title}`}
+            style={({ pressed }) => ({ height: 34, paddingHorizontal: 14, borderRadius: 12, justifyContent: 'center', backgroundColor: late ? colors.primary : 'transparent', borderWidth: late ? 0 : 1.5, borderColor: colors.primary, opacity: pressed ? 0.7 : 1 })}
+          >
+            <Txt variant="small" style={{ color: late ? colors.primaryText : colors.primary, fontFamily: fonts.bold }}>
+              {action}
             </Txt>
           </Pressable>
         </View>

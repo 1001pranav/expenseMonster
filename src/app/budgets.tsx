@@ -60,7 +60,7 @@ export default function Budgets() {
             <Money value={spent} variant="h1" decimals="never" />
             <Txt tone="muted">of {money(total, { decimals: 'never' })}</Txt>
           </Row>
-          <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.income} />
+          <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.good} />
           <Txt variant="small" tone="muted">
             {spent < total ? `${money(total - spent, { decimals: 'never' })} left · about ${money(Math.floor((total - spent) / daysLeft), { decimals: 'never' })} a day` : `Over by ${money(spent - total, { decimals: 'never' })} this month`}
           </Txt>
@@ -84,7 +84,7 @@ export default function Budgets() {
               subtitle={
                 u ? (
                   <View style={{ gap: 4, marginTop: 4 }}>
-                    <ProgressBar value={u.ratio} color={u.level === 'over' ? colors.expense : u.level === 'warn' ? colors.warn : colors.income} height={6} />
+                    <ProgressBar value={u.ratio} color={u.level === 'over' ? colors.expense : u.level === 'warn' ? colors.warn : colors.good} height={6} />
                     <Txt variant="small" tone="muted">
                       {money(u.spent, { compact: true })} of {money(u.limit, { compact: true })}
                     </Txt>

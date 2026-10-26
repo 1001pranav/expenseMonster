@@ -80,7 +80,7 @@ export default function Activity() {
     toast('Transaction deleted', { actionLabel: 'Undo', onAction: () => restore('transactions', id) });
   };
 
-  const title = params.category ? (cats.get(params.category)?.name ?? 'Activity') : params.card ? (cards.find((c) => c.id === params.card)?.name ?? 'Activity') : 'Activity';
+  const title = params.category ? (cats.get(params.category)?.name ?? 'Spending') : params.card ? (cards.find((c) => c.id === params.card)?.name ?? 'Spending') : 'Spending';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>

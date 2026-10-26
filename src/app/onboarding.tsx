@@ -128,7 +128,7 @@ export default function Onboarding() {
 
       {step === 2 ? (
         <>
-          <Hero icon="people" gradient="ocean" title="Joining your family?" body="If someone at home already uses ExpenseMonster, scan the QR code on their phone (Household → Sync → Show my QR)." />
+          <Hero icon="people" gradient="ocean" title="Joining your family?" body="If someone at home already uses ExpenseMonster, scan the QR code on their phone: they tap the initial at the top of Home, then Family phones, then Show QR." />
           <Card padded={false} style={{ overflow: 'hidden' }}>
             <ListRow icon="scan" iconColor={colors.primary} title="Scan family QR code" subtitle="Share bills, loans and expenses" chevron onPress={() => router.push('/sync/scan')} />
           </Card>

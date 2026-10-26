@@ -84,11 +84,11 @@ export default function Tax() {
                     {meta.body}
                   </Txt>
                 </View>
-                {s.limit !== null && s.headroom === 0 ? <Pill label="Maxed" tone="income" /> : null}
+                {s.limit !== null && s.headroom === 0 ? <Pill label="Maxed" tone="good" /> : null}
               </Row>
               {s.limit !== null ? (
                 <View style={{ gap: 6 }}>
-                  <ProgressBar value={raw / s.limit} color={colors.income} height={6} />
+                  <ProgressBar value={raw / s.limit} color={colors.good} height={6} />
                   <Row style={{ justifyContent: 'space-between' }}>
                     <Txt variant="small" tone="muted">
                       {money(s.claimed, { compact: true })} of {money(s.limit, { compact: true })}

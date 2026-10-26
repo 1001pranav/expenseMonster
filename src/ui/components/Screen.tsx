@@ -75,7 +75,7 @@ export function Screen({
     // Android too: edge-to-edge is mandatory (Android 16; Expo no longer lets it be turned off), so
     // the window no longer shrinks for the keyboard and without this it covers inputs and the footer.
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }} behavior="padding">
-      {title ? <Header title={title} subtitle={subtitle} back={back} right={right} large={large} /> : null}
+      {title || back ? <Header title={title ?? ''} subtitle={subtitle} back={back} right={right} large={large} /> : null}
       {header}
       {scroll ? (
         <ScrollView

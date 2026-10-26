@@ -178,7 +178,7 @@ export default function Scan() {
                   <Ionicons
                     name={s.state === 'found' ? 'checkmark-circle' : s.state === 'missing' ? 'alert-circle' : 'ellipse-outline'}
                     size={20}
-                    color={s.state === 'found' ? colors.income : s.state === 'missing' ? colors.warn : colors.textFaint}
+                    color={s.state === 'found' ? colors.good : s.state === 'missing' ? colors.warn : colors.textFaint}
                   />
                 )}
               </View>

@@ -15,7 +15,7 @@ import { TxnRow } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
 import { useTheme } from '@/ui/theme';
 
-const statusTone = (s: CycleSummary['status']) => (s === 'overdue' ? 'expense' : s === 'due' || s === 'partly_paid' ? 'warn' : s === 'paid' || s === 'nil' ? 'income' : 'muted');
+const statusTone = (s: CycleSummary['status']) => (s === 'overdue' ? 'expense' : s === 'due' || s === 'partly_paid' ? 'warn' : s === 'paid' || s === 'nil' ? 'good' : 'muted');
 
 export default function CardDetail() {
   const { colors } = useTheme();
