@@ -3,8 +3,11 @@
  * supabase/migrations/20261010000000_emx_records.sql (shared seq, compare-and-swap on the base seq,
  * write token). Each phone gets its own copy of the services and its own in-memory "database".
  */
-import { buildBundle } from '@/domain/sync/bundle';
+import { buildBundle, validateBundle } from '@/domain/sync/bundle';
 import { keyFromPassphrase, newKey, seal } from '@/domain/sync/crypto';
+import { expandExtra, foldUnknown, replacesHeld } from '@/domain/sync/forward';
+import { newDeviceKeys, openGrant, type DeviceKeys } from '@/domain/sync/grant';
+import { householdSpace, recordKey, sealRecord } from '@/domain/sync/records';
 import { formatRecoveryCode, newSalt, newVaultId, newWriteToken, saltBytes } from '@/domain/sync/vault';
 import type { ConflictPolicy } from '@/domain/sync/merge';
 import type { BaseRow, TableName } from '@/domain/types';
@@ -114,7 +117,21 @@ globalThis.fetch = (async (url: string, init: { body: string }) => {
 // The phone's own store instance, filled in after it loads.
 type StoreRef = { get?: () => ReturnType<typeof import('@/db/store').getState> };
 
-function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string, { seq: number; updatedAt: string }>; meta: Map<string, string> }, device: string, store: StoreRef) {
+// What this app version stores for a transaction; anything else goes to `extra`, as in db/repo.ts.
+const TXN_COLUMNS = [...Object.keys(txn({})), 'extra'];
+const fold = (t: string, r: Row): Row => (t === 'transactions' ? foldUnknown(r, TXN_COLUMNS) : r);
+const expand = (r: Row): Row => expandExtra({ ...r });
+
+type FakeDb = {
+  tables: Map<string, Map<string, Row>>;
+  marks: Map<string, { seq: number; updatedAt: string }>;
+  meta: Map<string, string>;
+  held: Map<string, Row>;
+  aside: Map<string, { tbl: string; row: Row; reason: string; receivedAt: string }>;
+  history: Map<string, Row[]>;
+};
+
+function fakeRepo(db: FakeDb, device: string, store: StoreRef) {
   const table = (t: string) => db.tables.get(t) ?? db.tables.set(t, new Map()).get(t)!;
   const markKey = (space: string, t: string, id: string) => `${space}|${t}|${id}`;
   return {
@@ -124,24 +141,66 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
         .filter((r) => db.marks.get(markKey(space, t, r.id))?.updatedAt !== r.updatedAt)
         .sort((x, y) => (x.id < y.id ? -1 : 1))
         .slice(0, limit)
-        .map((r) => ({ row: { ...r }, base: db.marks.get(markKey(space, t, r.id))?.seq ?? 0 })),
+        .map((r) => ({ row: expand(r), base: db.marks.get(markKey(space, t, r.id))?.seq ?? 0 })),
     getSyncMarks: async (space: string, t: string, ids: string[]) =>
       new Map(ids.filter((id) => db.marks.has(markKey(space, t, id))).map((id) => [id, db.marks.get(markKey(space, t, id))!])),
     setSyncMarks: async (space: string, marks: { table: string; id: string; seq: number; updatedAt: string }[]) => {
       for (const m of marks) db.marks.set(markKey(space, m.table, m.id), { seq: m.seq, updatedAt: m.updatedAt });
     },
-    rowsByIds: async (t: string, ids: string[]) => new Map(ids.filter((id) => table(t).has(id)).map((id) => [id, { ...table(t).get(id)! }])),
-    applyRemote: async (t: string, rows: Row[]) => rows.forEach((r) => table(t).set(r.id, { ...r })),
+    rowsByIds: async (t: string, ids: string[]) => new Map(ids.filter((id) => table(t).has(id)).map((id) => [id, expand(table(t).get(id)!)])),
+    applyRemote: async (t: string, rows: Row[]) =>
+      rows.forEach((r) => {
+        const replaced = table(t).get(r.id);
+        if (replaced && replaced.updatedAt !== r.updatedAt) db.history.set(`${t}:${r.id}`, [expand(replaced), ...(db.history.get(`${t}:${r.id}`) ?? [])]);
+        table(t).set(r.id, fold(t, { ...r }));
+        store.get!().putRow(t as TableName, table(t).get(r.id) as never);
+      }),
+    historyOf: async (t: string, id: string) => db.history.get(`${t}:${id}`) ?? [],
+    setLocalVersion: async (t: string, row: Row) => {
+      table(t).set(row.id, fold(t, { ...row }));
+      for (const [k, m] of db.marks) if (k.endsWith(`|${t}|${row.id}`)) m.updatedAt = row.updatedAt;
+    },
+    dropLocal: async (t: string, id: string) => void table(t).delete(id),
+    rowsSavedBy: async (t: string, by: { deviceId?: string | null; since?: string | null; until?: string | null; id?: string | null }) =>
+      by.id || by.deviceId || by.since || by.until
+        ? [...table(t).values()]
+            .filter((r) => (!by.id || r.id === by.id) && (!by.deviceId || r.deviceId === by.deviceId) && (!by.since || r.updatedAt >= by.since) && (!by.until || r.updatedAt < by.until))
+            .map(expand)
+        : [],
+    setAside: async (records: { tbl: string; row: Row; reason: string }[], ordered: boolean) => {
+      for (const r of records) {
+        const k = `${r.tbl}:${r.row.id}`;
+        if (replacesHeld(db.aside.get(k)?.row, r.row, ordered)) db.aside.set(k, { ...r, receivedAt: nextTime() });
+      }
+    },
+    asideRecords: async () => [...db.aside.values()],
+    releaseAside: async (t: string, id: string) => void db.aside.delete(`${t}:${id}`),
+    insert: async (t: string, data: Partial<Row>) => {
+      const at = nextTime();
+      const row = { scope: 'household', ...data, id: data.id ?? `${t}-${at}`, createdAt: at, updatedAt: at, deletedAt: null, deviceId: device } as Row;
+      table(t).set(row.id, row);
+      store.get!().putRow(t as TableName, row as never);
+      return row;
+    },
+    remove: async (t: string, id: string) => {
+      const row = { ...table(t).get(id)!, deletedAt: nextTime(), updatedAt: nextTime(), deviceId: device };
+      table(t).set(id, row);
+    },
+    forgetPeers: async () => {},
+    holdRecords: async (records: { tbl: string; row: Row }[], ordered: boolean) => {
+      for (const r of records) if (replacesHeld(db.held.get(`${r.tbl}:${r.row.id}`), r.row, ordered)) db.held.set(`${r.tbl}:${r.row.id}`, r.row);
+    },
     update: async (t: string, id: string, patch: Partial<Row>) => {
       const row = { ...table(t).get(id)!, ...patch, updatedAt: nextTime(), deviceId: device };
       table(t).set(id, row);
+      store.get!().putRow(t as TableName, row as never);
       return row;
     },
     getMeta: async (k: string) => db.meta.get(k) ?? null,
     setMeta: async (k: string, v: string | null) => void (v === null ? db.meta.delete(k) : db.meta.set(k, v)),
     listPeers: async () => [],
-    allRows: async (t: string) => [...table(t).values()],
-    loadTables: async () => EMPTY_TABLES,
+    allRows: async (t: string) => [...table(t).values()].map(expand),
+    loadTables: async () => Object.fromEntries(Object.keys(EMPTY_TABLES).map((t) => [t, [...table(t).values()].filter((r) => !r.deletedAt)])),
     saveIdentity: async (patch: object) => store.get!().setIdentity(patch),
     saveSettings: async (patch: object) => store.get!().setSettings(patch),
     upsertPeer: async () => {},
@@ -150,14 +209,21 @@ function fakeRepo(db: { tables: Map<string, Map<string, Row>>; marks: Map<string
 }
 
 function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
-  const db = { tables: new Map<string, Map<string, Row>>(), marks: new Map(), meta: new Map<string, string>() };
+  const db: FakeDb = { tables: new Map(), marks: new Map(), meta: new Map(), held: new Map(), aside: new Map(), history: new Map() };
   const store: StoreRef = {};
   const repo = fakeRepo(db, device, store);
   // Keystore stand-in: household key plus the backup's secrets.
-  const secrets: { household: Uint8Array; vault: { key: Uint8Array; token: string; dataKey: Uint8Array } | null } = { household: key, vault: null };
+  const secrets: { household: Uint8Array; next: Uint8Array | null; device: DeviceKeys; vault: { key: Uint8Array; token: string; dataKey: Uint8Array } | null } = {
+    household: key,
+    next: null,
+    device: newDeviceKeys(),
+    vault: null,
+  };
   let cloud!: typeof import('../cloud');
   let sync!: typeof import('../sync');
   let vault!: typeof import('../vault');
+  let holds!: typeof import('../holds');
+  let rotation!: typeof import('../rotation');
   jest.isolateModules(() => {
     jest.doMock('expo-sharing', () => ({}));
     jest.doMock('expo-file-system', () => ({ File: class {}, Paths: {} }));
@@ -167,6 +233,9 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     jest.doMock('../secure', () => ({
       getHouseholdKey: async () => secrets.household,
       setHouseholdKey: async (k: Uint8Array) => void (secrets.household = k),
+      getNextHouseholdKey: async () => secrets.next,
+      setNextHouseholdKey: async (k: Uint8Array | null) => void (secrets.next = k),
+      getDeviceKeys: async () => secrets.device,
       getVaultSecrets: async () => secrets.vault,
       setVaultSecrets: async (k: Uint8Array, token: string, dataKey: Uint8Array) => void (secrets.vault = { key: k, token, dataKey }),
       clearVaultSecrets: async () => void (secrets.vault = null),
@@ -176,6 +245,8 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     cloud = require('../cloud');
     sync = require('../sync');
     vault = require('../vault');
+    holds = require('../holds');
+    rotation = require('../rotation');
     const { getState } = require('@/db/store');
     store.get = getState;
     /* eslint-enable @typescript-eslint/no-require-imports */
@@ -199,6 +270,14 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     rows: () => [...txns().values()],
     conflicts: () => sync.loadConflicts(),
     resolve: (keys: string[], choice: 'mine' | 'theirs') => sync.resolveConflicts(keys, choice),
+    merge: (bundle: Parameters<typeof sync.mergeBundle>[0]) => sync.mergeBundle(bundle, 'newest'),
+    held: db.held,
+    holds,
+    rotation,
+    state: () => store.get!(),
+    aside: () => [...db.aside.values()],
+    /** A row written straight to this phone's database, as a modified app could. */
+    raw: (t: string, data: Partial<Row>) => repo.insert(t, data),
   };
 }
 
@@ -333,6 +412,242 @@ describe('per-record cloud sync between two phones', () => {
     // A different key means a different space: nothing crosses over.
     expect(server.spaces.size).toBe(2);
     expect((await a.sync()).received).toBe(0);
+  });
+});
+
+describe('data from a newer app version', () => {
+  let key: Uint8Array;
+  beforeEach(() => {
+    server.reset();
+    key = newKey();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  /** What a phone on a newer version uploads: the same sealed records, of tables and fields this version lacks. */
+  function uploadFromNewerApp(table: string, row: Row) {
+    const space = householdSpace(key, 'house');
+    if (!server.spaces.has(space.id)) server.spaces.set(space.id, { token: space.token, head: 0 });
+    const s = server.spaces.get(space.id)!;
+    const recs = server.records.get(space.id) ?? server.records.set(space.id, new Map()).get(space.id)!;
+    recs.set(recordKey(space, table as TableName, row.id), { seq: ++s.head, payload: sealRecord(space, table as TableName, row) });
+  }
+
+  it('keeps records of unknown tables and unknown fields, and sends the fields back after an edit here', async () => {
+    const old = makePhone('OLD', key, 'ask');
+    const holding = { ...txn({ deviceId: 'NEW' }), name: '22K gold', grams: 10500 } as unknown as Row;
+    uploadFromNewerApp('goals', holding);
+    const bought = { ...txn({ type: 'transfer', amount: 70_000_00, deviceId: 'NEW', updatedAt: nextTime() }), linkType: 'investment', holdingId: holding.id } as unknown as Row;
+    uploadFromNewerApp('transactions', bought);
+
+    const first = await old.sync();
+    expect(first).toMatchObject({ received: 1, held: 1, unreadable: 0 });
+    expect(old.held.get(`goals:${holding.id}`)).toMatchObject({ name: '22K gold', grams: 10500 });
+    expect(JSON.parse(old.get(bought.id)!.extra as string)).toEqual({ holdingId: holding.id });
+
+    // Edited on the old phone: the field it doesn't know goes back up with the edit.
+    await old.edit(bought.id, { note: 'Akshaya Tritiya' });
+    expect((await old.sync()).sent).toBe(1);
+    const space = householdSpace(key, 'house');
+    const { openRecord } = jest.requireActual('@/domain/sync/records') as typeof import('@/domain/sync/records');
+    const rk = recordKey(space, 'transactions', bought.id);
+    const sent = openRecord(space, rk, records().get(rk)!.payload).r as unknown as Row;
+    expect(sent).toMatchObject({ note: 'Akshaya Tritiya', holdingId: holding.id, linkType: 'investment' });
+    expect(sent.extra).toBeUndefined();
+
+    // Held records are not downloaded again, and nothing about them is uploaded from here.
+    expect(await old.check()).toBeNull();
+    expect(records().size).toBe(2);
+  });
+
+  it('keeps unknown tables from a file instead of rejecting it, newest edit winning', async () => {
+    const old = makePhone('OLD', key, 'ask');
+    const v1 = { ...txn({ deviceId: 'NEW', updatedAt: '2026-05-01T00:00:00.000Z' }), name: 'INFY' } as unknown as Row;
+    const v2 = { ...v1, name: 'Infosys', updatedAt: '2026-05-02T00:00:00.000Z' };
+    const file = (rows: Row[]) => validateBundle({ ...buildBundle({}, { householdId: 'house', deviceId: 'NEW', deviceName: 'New', since: null }), tables: { goals: rows } });
+    expect((await old.merge(file([v2]))).held).toBe(1);
+    await old.merge(file([v1]));
+    expect(old.held.get(`goals:${v1.id}`)?.name).toBe('Infosys');
+    expect(() => validateBundle({ ...file([v1]), tables: { 'x"; drop': [v1] } })).toThrow('Unknown table');
+  });
+});
+
+describe('household head reviews edits from other phones', () => {
+  let key: Uint8Array;
+  beforeEach(() => {
+    server.reset();
+    key = newKey();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  /** Head A, phone B whose data goes bad, bystander C; all synced, A head. */
+  async function household() {
+    const [a, b, c] = [makePhone('A', key, 'newest'), makePhone('B', key, 'newest'), makePhone('C', key, 'newest')];
+    const t1 = a.add({ amount: 100 });
+    await a.holds.claimHead();
+    await a.sync();
+    await b.sync();
+    await c.sync();
+    return { a, b, c, t1 };
+  }
+
+  it('holds a phone: its edits wait, edits already applied are undone, and merging applies them everywhere', async () => {
+    const { a, b, c, t1 } = await household();
+    // B's bad edit reaches C before anyone notices.
+    await b.edit(t1.id, { amount: 555 });
+    await b.sync();
+    await c.sync();
+    expect(c.get(t1.id)?.amount).toBe(555);
+
+    await a.sync();
+    await a.holds.holdEdits({ deviceId: 'B', day: null });
+    expect(a.get(t1.id)?.amount).toBe(100); // undone on the head's phone at once
+    await a.sync();
+    // C follows the head's rule: the edit is set aside and the version it replaced is back.
+    await c.sync();
+    expect(c.get(t1.id)?.amount).toBe(100);
+    expect(c.aside().map((x) => x.row.id)).toEqual([t1.id]);
+
+    // New edits from B wait too; nothing about this was uploaded by A or C.
+    const t2 = b.add({ amount: 42 });
+    await b.sync();
+    const before = records().size;
+    await c.sync();
+    expect(c.get(t2.id)).toBeUndefined();
+    expect(c.aside()).toHaveLength(2);
+    expect(records().size).toBe(before);
+    // B itself keeps its entries and is told they are on hold.
+    expect((await b.holds.ownHeld()).map((o) => o.decision)).toEqual(['hold', 'hold']);
+
+    // The head merges: every phone applies them.
+    const rule = (await a.holds.loadScreenContext()).holds[0];
+    await a.holds.decideRule(rule.id, 'merge');
+    await a.sync();
+    await c.sync();
+    expect(a.get(t1.id)?.amount).toBe(555);
+    expect(c.get(t1.id)?.amount).toBe(555);
+    expect(c.get(t2.id)?.amount).toBe(42);
+    expect(c.aside()).toHaveLength(0);
+  });
+
+  it('discards one entry: never applied, and its sender can delete it', async () => {
+    const { a, b, c } = await household();
+    await a.holds.holdEdits({ deviceId: 'B', day: null });
+    await a.sync();
+    await c.sync();
+    const bad = b.add({ amount: 1 });
+    const good = b.add({ amount: 2 });
+    await b.sync();
+    await a.sync();
+    await a.holds.decideEntry('transactions', good.id, 'merge');
+    await a.holds.decideEntry('transactions', bad.id, 'discard');
+    await a.sync();
+    await c.sync();
+    expect(c.get(good.id)?.amount).toBe(2);
+    expect(c.get(bad.id)).toBeUndefined();
+    expect(c.aside().map((x) => x.row.id)).toEqual([bad.id]);
+
+    await b.sync();
+    expect((await b.holds.ownHeld()).filter((o) => o.decision === 'discard').map((o) => o.row.id)).toEqual([bad.id]);
+    expect(await b.holds.deleteOwnDiscarded()).toBe(1);
+    expect(b.get(bad.id)?.deletedAt).toBeTruthy();
+  });
+
+  it('sets malformed entries aside on every phone instead of storing them', async () => {
+    const { a, c } = await household();
+    const broken = { ...txn({ deviceId: 'B', updatedAt: nextTime() }), amount: 'lots' } as unknown as Row;
+    const space = householdSpace(key, 'house');
+    const s = server.spaces.get(space.id)!;
+    records().set(recordKey(space, 'transactions', broken.id), { seq: ++s.head, payload: sealRecord(space, 'transactions', broken) });
+    expect((await c.sync()).setAside).toBe(1);
+    expect(c.get(broken.id)).toBeUndefined();
+    expect(c.aside()[0]).toMatchObject({ reason: 'invalid' });
+    // Only discarding is offered for it; merging can't make it readable.
+    await a.sync();
+    await a.holds.decideEntry('transactions', broken.id, 'merge');
+    expect(a.get(broken.id)).toBeUndefined();
+  });
+
+  it('ignores rules not made by the head, and hands the role over', async () => {
+    const { a, b, c, t1 } = await household();
+    await expect(c.holds.holdEdits({ deviceId: 'B', day: null })).rejects.toThrow('Only the household head');
+    // A modified app on C writes a rule anyway: the others ignore it.
+    await c.raw('sync_holds', { holdDevice: 'B', since: null, until: null, tbl: null, recordId: null, decision: 'hold', note: null });
+    await c.sync();
+    await b.edit(t1.id, { amount: 777 });
+    await b.sync();
+    await a.sync();
+    expect(a.get(t1.id)?.amount).toBe(777);
+
+    await a.holds.handOverHead('C');
+    await a.sync();
+    await c.sync();
+    expect(c.holds.isHead()).toBe(true);
+    await expect(a.holds.holdEdits({ deviceId: 'B', day: null })).rejects.toThrow('Only the household head');
+  });
+});
+
+describe('the head removes a phone', () => {
+  let key: Uint8Array;
+  beforeEach(() => {
+    server.reset();
+    key = newKey();
+  });
+  afterEach(() => jest.clearAllTimers());
+
+  it('hands a new key to the remaining phones only: the removed one reads nothing new', async () => {
+    const [a, b, c] = [makePhone('A', key, 'newest'), makePhone('B', key, 'newest'), makePhone('C', key, 'newest')];
+    for (const p of [a, b, c]) await p.holds.publishDevice();
+    await a.holds.claimHead();
+    for (const p of [a, b, c, a]) await p.sync();
+    const old = a.add({ amount: 1 });
+    await a.sync();
+
+    expect(a.rotation.keyRecipients('C')).toEqual([{ id: 'B', name: 'B', hasKey: true }]);
+    expect(await a.rotation.removePhone('C')).toEqual({ needQr: [], finished: true });
+    const newKeyOfA = a.secrets.household;
+    expect(newKeyOfA).not.toEqual(key);
+    expect(server.spaces.size).toBe(2); // the new key's space, with everything uploaded again
+    expect(await a.rotation.keyStatus()).toBe('current');
+
+    // B finds its grant on its next sync and follows.
+    await b.sync();
+    expect(await b.rotation.followKeyChange()).toBe('switched');
+    expect(b.secrets.household).toEqual(newKeyOfA);
+    expect(b.get(old.id)?.amount).toBe(1);
+
+    // New entries reach B, not C.
+    const fresh = a.add({ amount: 999 });
+    await a.sync();
+    await b.sync();
+    expect(b.get(fresh.id)?.amount).toBe(999);
+    await c.sync();
+    expect(await c.rotation.followKeyChange()).toBe('removed');
+    expect(c.get(fresh.id)).toBeUndefined();
+    expect(c.state().settings.cloudSync).toBe(false);
+    expect(c.get(old.id)?.amount).toBe(1); // what it had stays on it
+    // C received B's grant (it can read the old key's records) but can't open it.
+    const grant = c.state().tables.key_grants.find((g) => g.recipient === 'B')!;
+    expect(() => openGrant(grant.sealed, c.secrets.device, { householdId: 'house', recipient: 'B', keyId: grant.keyId })).toThrow();
+    expect(c.state().tables.key_grants.some((g) => g.recipient === 'C')).toBe(false);
+  });
+
+  it('finishes later when offline, and only the head can remove', async () => {
+    const [a, b] = [makePhone('A', key, 'newest'), makePhone('B', key, 'newest')];
+    for (const p of [a, b]) await p.holds.publishDevice();
+    await a.holds.claimHead();
+    for (const p of [a, b, a]) await p.sync();
+    await expect(b.rotation.removePhone('A')).rejects.toThrow('Only the household head');
+    await expect(a.rotation.removePhone('A')).rejects.toThrow("can't remove its own phone");
+
+    server.offline = true;
+    expect(await a.rotation.removePhone('X')).toMatchObject({ finished: false });
+    expect(a.secrets.household).toEqual(key); // still on the old key: nobody could get the new one yet
+    expect(await a.rotation.keyStatus()).toBe('waiting');
+    server.offline = false;
+    expect(await a.rotation.followKeyChange()).toBe('switched');
+    await b.sync();
+    expect(await b.rotation.followKeyChange()).toBe('switched');
+    expect(b.secrets.household).toEqual(a.secrets.household);
   });
 });
 

@@ -22,6 +22,7 @@ const ENTRIES: Entry[] = [
   { label: 'An EMI on a card', hint: 'Something you bought on no-cost or interest EMI', icon: 'albums-outline', href: '/card-emi/new' },
   { label: 'Insurance', hint: 'Reminders 30, 7 and 1 day before renewal', icon: 'shield-checkmark-outline', href: '/policy/new' },
   { label: 'Regular income', hint: 'Salary, or rent you receive', icon: 'arrow-up', href: '/income/new', income: true },
+  { label: 'An investment', hint: 'Buy or sell gold, shares, funds, bonds, deposits', icon: 'trending-up-outline', href: '/investments/new' },
 ];
 
 /** "Set up a reminder": things you add once. Drag down, tap ✕ or the backdrop to close. */

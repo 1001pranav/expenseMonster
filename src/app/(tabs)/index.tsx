@@ -124,7 +124,8 @@ export default function Home() {
         <Row gap={2.75} style={{ marginTop: space(0.5) }}>
           <Stat label="Money in" value={totals.income} tone="income" />
           {totals.income ? <Stat label={totals.net < 0 ? 'Overspent' : 'Kept'} value={Math.abs(totals.net)} tone={totals.net < 0 ? 'expense' : 'default'} /> : null}
-          {cardBills ? <Stat label="Card bills" value={cardBills} /> : null}
+          {/* Three figures fit a narrow phone: in a month with investments, what went in replaces card bills. */}
+          {totals.invested ? <Stat label={totals.invested < 0 ? 'Taken out' : 'Invested'} value={Math.abs(totals.invested)} /> : cardBills ? <Stat label="Card bills" value={cardBills} /> : null}
         </Row>
       </View>
 

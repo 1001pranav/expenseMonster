@@ -2,46 +2,16 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { changedFields } from '@/domain/sync/merge';
-import { formatINR } from '@/domain/money';
 import type { BaseRow } from '@/domain/types';
 import { loadConflicts, resolveConflicts, type PendingConflict } from '@/services/sync';
 import { Button, Card, EmptyState, Pill, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
+import { TABLE_LABEL, show, titleOf } from '@/ui/syncLabels';
 import { space, useTheme } from '@/ui/theme';
 
-const TABLE_LABEL: Record<string, string> = {
-  transactions: 'Transaction',
-  loans: 'Loan',
-  cards: 'Credit card',
-  billers: 'Bill',
-  bills: 'Bill amount',
-  policies: 'Insurance',
-  incomes: 'Income',
-  members: 'Member',
-  accounts: 'Account',
-  categories: 'Category',
-  budgets: 'Budget',
-  rules: 'Auto-category rule',
-  sms_formats: 'SMS format',
-  card_overrides: 'Card statement',
-};
-const MONEY = /amount|principal|emi|premium|limit|total|minDue|fixedAmount|sumAssured|lateFee|openingBalance/i;
 const key = (c: PendingConflict) => `${c.table}:${c.local.id}`;
 const rec = (r: BaseRow) => r as unknown as Record<string, unknown>;
-
-function show(field: string, v: unknown): string {
-  if (v === null || v === undefined || v === '') return '—';
-  if (field === 'deletedAt') return 'Deleted';
-  if (typeof v === 'number' && MONEY.test(field)) return formatINR(v);
-  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v).toLocaleString();
-  return String(v);
-}
-
-const titleOf = (r: BaseRow) => {
-  const x = rec(r);
-  return String(x.payee ?? x.name ?? x.pattern ?? x.insurer ?? (typeof x.amount === 'number' ? formatINR(x.amount) : '') ?? '');
-};
 
 export default function Conflicts() {
   const { colors } = useTheme();

@@ -3,8 +3,7 @@ import { useMemo, useState } from 'react';
 import { SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDays, addMonths, formatDay, formatMonth, isoToYMD, monthKey, relativeDay } from '@/domain/dates';
-import { restore } from '@/db/repo';
-import { deleteTransaction } from '@/data/actions';
+import { deleteTransaction, restoreTransaction } from '@/data/actions';
 import { useCategoryMap, useTable, useToday } from '@/data/hooks';
 import { Button, Chip, EmptyState, IconButton, Money, Row, Txt, useMoneyText } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
@@ -89,7 +88,7 @@ export default function Spending() {
 
   const onDelete = async (id: string) => {
     await deleteTransaction(id);
-    toast('Entry deleted', { actionLabel: 'Undo', onAction: () => restore('transactions', id) });
+    toast('Entry deleted', { actionLabel: 'Undo', onAction: () => restoreTransaction(id) });
   };
   const clearParam = () => router.setParams({ category: undefined, card: undefined });
 

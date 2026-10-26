@@ -1,3 +1,4 @@
+import { isFamilyTransfer } from './settle';
 import type { Transaction } from './types';
 
 export type DuplicateMatch = { kind: 'exact' | 'likely'; existing: Transaction; reason: string };
@@ -12,7 +13,7 @@ const normRef = (ref: string | null) => (ref ? ref.replace(/\D/g, '') || ref.toL
  * - likely: same amount and direction within ±10 minutes (and same account/card when both are known)
  */
 export function findDuplicate(
-  candidate: Pick<Transaction, 'amount' | 'occurredAt' | 'type' | 'sourceRef' | 'sourceHash' | 'accountId' | 'cardId'>,
+  candidate: Pick<Transaction, 'amount' | 'occurredAt' | 'type' | 'sourceRef' | 'sourceHash' | 'accountId' | 'cardId' | 'toMemberId'>,
   existing: Transaction[],
 ): DuplicateMatch | null {
   const pool = existing.filter((t) => !t.deletedAt);
@@ -30,7 +31,9 @@ export function findDuplicate(
 
   const at = new Date(candidate.occurredAt).getTime();
   const likely = pool.find((t) => {
-    if (t.status === 'rejected' || t.amount !== candidate.amount || t.type !== candidate.type) return false;
+    // A settlement paid from the app and the bank SMS for it (a family transfer) are one payment.
+    const sameKind = t.type === candidate.type || (isFamilyTransfer(t) && isFamilyTransfer(candidate));
+    if (t.status === 'rejected' || t.amount !== candidate.amount || !sameKind) return false;
     if (Math.abs(new Date(t.occurredAt).getTime() - at) > WINDOW_MS) return false;
     if (candidate.accountId && t.accountId && candidate.accountId !== t.accountId) return false;
     if (candidate.cardId && t.cardId && candidate.cardId !== t.cardId) return false;

@@ -164,12 +164,23 @@ export default function Insights() {
           {mom.length ? (
             <Section title="Month on month">
               <Card style={{ gap: space(1.5) }}>
-                <Bars
-                  data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense] }))}
-                  colors={[colors.expense]}
-                  height={150}
-                  highlightLast
-                />
+                {/* Invested (net of sales) as a second bar once there is any: money set aside, not spent. */}
+                {mom.some((s) => s.invested > 0) ? (
+                  <Bars
+                    data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense, Math.max(0, s.invested)] }))}
+                    colors={[colors.expense, colors.info]}
+                    legend={['Spent', 'Invested']}
+                    height={150}
+                    highlightLast
+                  />
+                ) : (
+                  <Bars
+                    data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense] }))}
+                    colors={[colors.expense]}
+                    height={150}
+                    highlightLast
+                  />
+                )}
                 <View>
                   {(allMonths ? momRows : momRows.slice(0, 6)).map((r, i) => {
                     const selected = range === 'month' && month === r.month;

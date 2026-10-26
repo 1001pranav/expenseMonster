@@ -1,103 +1,218 @@
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { Image, Pressable, View } from 'react-native';
-import { billerMeta, viewBill } from '@/domain/bills';
-import { formatDay, isoToYMD, toISO, type YMD } from '@/domain/dates';
-import { formatINR, type Paise } from '@/domain/money';
-import { parseIds } from '@/domain/settle';
-import { applyRules, isLearned, ruleTargets } from '@/domain/rules';
-import { categoryHistory, flagsOf, suggestCategory } from '@/domain/transactions';
-import type { PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
-import { restore } from '@/db/repo';
-import { useStore } from '@/db/store';
-import { approveCapture, deleteTransaction, learnRule, rejectCapture, saveTransaction } from '@/data/actions';
-import { useMembers, useSelfId, useSortedCategories, useTable, useToday } from '@/data/hooks';
-import { Button, Card, Chip, Pill, Row, Txt, type IconName } from '../components/core';
-import { Keypad, toast } from '../components/feedback';
-import { ChipSelect, DateField, Field, Segmented, SwitchRow, TextField } from '../components/forms';
-import { Screen, goBack } from '../components/Screen';
-import { Tile, TileGrid, TileRow } from '../components/tiles';
-import { fonts, radius, space, useTheme } from '../theme';
+import { router } from "expo-router";
+import { useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { Image, Pressable, TextInput, View } from "react-native";
+import {
+  applyAmountKey,
+  groupAmount,
+  isValidAmountText,
+  toGroupedIndex,
+  toRawIndex,
+  type Selection,
+} from "@/domain/amountInput";
+import { billerMeta, viewBill } from "@/domain/bills";
+import { formatDay, isoToYMD, toISO, type YMD } from "@/domain/dates";
+import { formatINR, type Paise } from "@/domain/money";
+import { LEGACY_INVEST_CATEGORY } from "@/domain/investments";
+import { memberBalances, parseIds } from "@/domain/settle";
+import { applyRules, isLearned, ruleTargets } from "@/domain/rules";
+import {
+  categoryHistory,
+  flagsOf,
+  suggestCategory,
+} from "@/domain/transactions";
+import type { PayMethod, Scope, Transaction, TxnType } from "@/domain/types";
+import { useStore } from "@/db/store";
+import {
+  approveCapture,
+  deleteTransaction,
+  learnRule,
+  rejectCapture,
+  restoreTransaction,
+  saveTransaction,
+} from "@/data/actions";
+import {
+  useMembers,
+  useSelfId,
+  useSortedCategories,
+  useTable,
+  useToday,
+} from "@/data/hooks";
+import {
+  Button,
+  Card,
+  Chip,
+  Pill,
+  Row,
+  Txt,
+  type IconName,
+} from "../components/core";
+import { Keypad, toast } from "../components/feedback";
+import {
+  ChipSelect,
+  DateField,
+  Field,
+  Segmented,
+  SwitchRow,
+  TextField,
+} from "../components/forms";
+import { Screen, goBack } from "../components/Screen";
+import { Tile, TileGrid, TileRow } from "../components/tiles";
+import { fonts, radius, space, useTheme } from "../theme";
 
 function amountText(paise: Paise | null) {
-  if (!paise) return '';
+  if (!paise) return "";
   const r = Math.floor(paise / 100);
   const p = paise % 100;
-  return p ? `${r}.${String(p).padStart(2, '0').replace(/0$/, '')}` : String(r);
+  return p ? `${r}.${String(p).padStart(2, "0").replace(/0$/, "")}` : String(r);
 }
 
-export function TxnForm({ existing, initialType = 'expense', ocrText }: { existing?: Transaction; initialType?: TxnType; /** What OCR read, right after a scan. */ ocrText?: string }) {
+export function TxnForm({
+  existing,
+  initialType = "expense",
+  ocrText,
+}: {
+  existing?: Transaction;
+  initialType?: TxnType;
+  /** What OCR read, right after a scan. */ ocrText?: string;
+}) {
   const { colors } = useTheme();
   const today = useToday();
-  const accounts = useTable('accounts');
-  const cards = useTable('cards');
-  const billers = useTable('billers');
-  const bills = useTable('bills');
-  const txns = useTable('transactions');
-  const rules = useTable('rules');
-  const loans = useTable('loans');
+  const accounts = useTable("accounts");
+  const cards = useTable("cards");
+  const billers = useTable("billers");
+  const bills = useTable("bills");
+  const txns = useTable("transactions");
+  const rules = useTable("rules");
+  const loans = useTable("loans");
   const members = useMembers();
   const selfId = useSelfId();
   const defaultScope = useStore((s) => s.settings.defaultTxnScope);
-  const pending = existing?.status === 'pending';
+  const pending = existing?.status === "pending";
   const flags = existing ? flagsOf(existing) : [];
 
-  const [type, setType] = useState<TxnType>(existing?.type ?? initialType);
-  const [amountStr, setAmountStr] = useState(amountText(existing?.amount ?? null));
+  // A settlement is edited as a family transfer that counts towards who owes whom.
+  const [type, setType] = useState<TxnType>(
+    existing?.type === "settlement"
+      ? "transfer"
+      : (existing?.type ?? initialType),
+  );
+  const [amountStr, setAmountStr] = useState(
+    amountText(existing?.amount ?? null),
+  );
+  /** Cursor in the typed amount (raw characters, no commas): keypad keys go there, not only at the end. */
+  const [amountSel, setAmountSel] = useState<Selection>(() => ({
+    start: amountStr.length,
+    end: amountStr.length,
+  }));
+  /** When the keypad last changed the amount (see onSelectionChange). */
+  const keyedAt = useRef(0);
+  const setAmount = (raw: string, cursor = raw.length) => {
+    keyedAt.current = Date.now();
+    setAmountStr(raw);
+    setAmountSel({ start: cursor, end: cursor });
+  };
   const [keypad, setKeypad] = useState(!existing);
-  const [categoryId, setCategoryId] = useState<string | null>(existing?.categoryId ?? null);
-  const [method, setMethod] = useState<PayMethod>(existing?.method ?? 'upi');
-  const [cardId, setCardId] = useState<string | null>(existing?.cardId ?? (cards.length === 1 ? cards[0].id : null));
-  const [accountId, setAccountId] = useState<string | null>(existing?.accountId ?? (accounts.length === 1 ? accounts[0].id : null));
-  const [date, setDate] = useState<YMD>(existing ? isoToYMD(existing.occurredAt) : today);
-  const [payee, setPayee] = useState(existing?.payee ?? '');
-  const [note, setNote] = useState(existing?.note ?? '');
+  const [categoryId, setCategoryId] = useState<string | null>(
+    existing?.categoryId ?? null,
+  );
+  const [method, setMethod] = useState<PayMethod>(existing?.method ?? "upi");
+  const [cardId, setCardId] = useState<string | null>(
+    existing?.cardId ?? (cards.length === 1 ? cards[0].id : null),
+  );
+  const [accountId, setAccountId] = useState<string | null>(
+    existing?.accountId ?? (accounts.length === 1 ? accounts[0].id : null),
+  );
+  const [date, setDate] = useState<YMD>(
+    existing ? isoToYMD(existing.occurredAt) : today,
+  );
+  const [payee, setPayee] = useState(existing?.payee ?? "");
+  const [note, setNote] = useState(existing?.note ?? "");
   const [scope, setScope] = useState<Scope>(existing?.scope ?? defaultScope);
-  const [payer, setPayer] = useState<string | null>(existing?.memberId ?? (selfId || null));
-  const [splitWith, setSplitWith] = useState<string[]>(parseIds(existing?.splitWith ?? null));
-  const [link, setLink] = useState<{ type: Transaction['linkType']; id: string | null }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });
+  const [payer, setPayer] = useState<string | null>(
+    existing?.memberId ?? (selfId || null),
+  );
+  /** Family transfer: money sent from `payer` to this member. */
+  const [family, setFamily] = useState(Boolean(existing?.toMemberId));
+  const [toMember, setToMember] = useState<string | null>(
+    existing?.toMemberId ?? null,
+  );
+  /** Settles a debt or lends money, so it changes who owes whom; otherwise just money handed over. */
+  const [countsInBalance, setCountsInBalance] = useState(
+    existing?.type === "settlement",
+  );
+  const [splitWith, setSplitWith] = useState<string[]>(
+    parseIds(existing?.splitWith ?? null),
+  );
+  const [link, setLink] = useState<{
+    type: Transaction["linkType"];
+    id: string | null;
+  }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });
   const [showAllCats, setShowAllCats] = useState(false);
   /** True while the category was filled in from the payee, so typing more can still change it. */
   const [autoCat, setAutoCat] = useState(false);
   /** True while "Paid with" was set by one of your rules, so a later rule match can still change it. */
   const [autoPay, setAutoPay] = useState(false);
-  const [more, setMore] = useState(Boolean(existing && (existing.splitWith || existing.note)));
+  const [more, setMore] = useState(
+    Boolean(existing && (existing.splitWith || existing.note)),
+  );
   const [saving, setSaving] = useState(false);
   const [showOcr, setShowOcr] = useState(false);
 
-  const catKind = type === 'income' ? 'income' : 'expense';
+  const catKind = type === "income" ? "income" : "expense";
   const categories = useSortedCategories(catKind);
 
   // Payees used before for this type, newest first, with the category they were filed under.
   const knownPayees = useMemo(() => {
     const seen = new Map<string, { name: string; categoryId: string | null }>();
     for (const t of txns) {
-      if (!t.payee || t.type !== type || t.status === 'rejected') continue;
+      if (!t.payee || t.type !== type || t.status === "rejected") continue;
       const k = t.payee.trim().toLowerCase();
-      if (!seen.has(k)) seen.set(k, { name: t.payee.trim(), categoryId: t.categoryId });
+      if (!seen.has(k))
+        seen.set(k, { name: t.payee.trim(), categoryId: t.categoryId });
       if (seen.size >= 300) break;
     }
     return [...seen.values()];
   }, [txns, type]);
   const payeeQuery = payee.trim().toLowerCase();
-  const payeeSuggestions = payeeQuery && !existing ? knownPayees.filter((p) => p.name.toLowerCase().includes(payeeQuery) && p.name.toLowerCase() !== payeeQuery).slice(0, 4) : [];
+  const payeeSuggestions =
+    payeeQuery && !existing
+      ? knownPayees
+          .filter(
+            (p) =>
+              p.name.toLowerCase().includes(payeeQuery) &&
+              p.name.toLowerCase() !== payeeQuery,
+          )
+          .slice(0, 4)
+      : [];
 
   const onPayee = (v: string, picked?: { categoryId: string | null }) => {
     setPayee(v);
-    if (type === 'transfer') return;
+    if (type === "transfer") return;
     // Your own rules for this payee can also say how it's paid ("Petrol pump → HDFC card"), unless
     // a payment box was picked by hand.
-    const mine = v.trim().length >= 3 ? applyRules(rules.filter((r) => !isLearned(r)), { payee: v, vpa: existing?.vpa ?? null, source: 'manual' }, targets) : { ruleIds: [] };
-    if (!pending && (autoPay || method === 'upi') && mine.method) {
+    const mine =
+      v.trim().length >= 3
+        ? applyRules(
+            rules.filter((r) => !isLearned(r)),
+            { payee: v, vpa: existing?.vpa ?? null, source: "manual" },
+            targets,
+          )
+        : { ruleIds: [] };
+    if (!pending && (autoPay || method === "upi") && mine.method) {
       setMethod(mine.method);
       if (mine.cardId) setCardId(mine.cardId);
       if (mine.accountId) setAccountId(mine.accountId);
       setAutoPay(true);
     }
     if (categoryId && !autoCat) return;
-    const exact = picked ?? knownPayees.find((p) => p.name.toLowerCase() === v.trim().toLowerCase());
-    const suggestion = mine.categoryId ?? exact?.categoryId ?? (v.trim().length >= 3 ? suggestCategory(v, rules) : null);
+    const exact =
+      picked ??
+      knownPayees.find((p) => p.name.toLowerCase() === v.trim().toLowerCase());
+    const suggestion =
+      mine.categoryId ??
+      exact?.categoryId ??
+      (v.trim().length >= 3 ? suggestCategory(v, rules) : null);
     if (suggestion && categories.some((c) => c.id === suggestion)) {
       setCategoryId(suggestion);
       setAutoCat(true);
@@ -109,80 +224,131 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   // Categories this payee was filed under before (matched across spellings and its UPI ID).
   const pastCats = useMemo(
     () =>
-      type === 'transfer'
+      type === "transfer"
         ? []
-        : categoryHistory(payee.trim() || null, existing?.vpa ?? null, type, txns, existing?.id)
+        : categoryHistory(
+            payee.trim() || null,
+            existing?.vpa ?? null,
+            type,
+            txns,
+            existing?.id,
+          )
             .filter((c) => categories.some((x) => x.id === c.categoryId))
             .slice(0, 3),
     [payee, existing?.vpa, existing?.id, type, txns, categories],
   );
-  const amount = Math.round(Number(amountStr || '0') * 100);
-  const ruleHits = flags.filter((f) => f.startsWith('rule:'));
+  const amount = Math.round(Number(amountStr || "0") * 100);
+  const memberOptions = members.map((m) => ({
+    value: m.id,
+    label: m.id === selfId ? "You" : m.name,
+    color: m.color,
+  }));
+  const nameOf = (id: string | null) =>
+    memberOptions.find((o) => o.value === id)?.label ?? "Someone";
+  const isFamily = type === "transfer" && family;
+  // What the two owe each other without this entry, for the "counts towards who owes whom" hint.
+  const balances = useMemo(
+    () => memberBalances(txns.filter((t) => t.id !== existing?.id)),
+    [txns, existing?.id],
+  );
+  const receiverOwed =
+    isFamily &&
+    payer &&
+    toMember &&
+    (balances[payer] ?? 0) < 0 &&
+    (balances[toMember] ?? 0) > 0
+      ? Math.min(-balances[payer], balances[toMember])
+      : 0;
+  const ruleHits = flags.filter((f) => f.startsWith("rule:"));
   const targets = ruleTargets({ categories, cards, accounts });
-  const cardHint = flags.find((f) => f.startsWith('card-hint:'))?.split(':')[1];
+  const cardHint = flags.find((f) => f.startsWith("card-hint:"))?.split(":")[1];
 
   // "Which bill?" — open bills, newest due first, for bill-type categories or when the capture matched a biller.
   const openBills = useMemo(
     () =>
       bills
-        .filter((b) => b.status !== 'draft')
-        .map((b) => ({ v: viewBill(b, txns, today), biller: billers.find((x) => x.id === b.billerId) }))
-        .filter((x) => x.biller && (x.v.remaining > 0 || x.v.bill.id === link.id))
+        .filter((b) => b.status !== "draft")
+        .map((b) => ({
+          v: viewBill(b, txns, today),
+          biller: billers.find((x) => x.id === b.billerId),
+        }))
+        .filter(
+          (x) => x.biller && (x.v.remaining > 0 || x.v.bill.id === link.id),
+        )
         .sort((a, b) => a.v.bill.dueDate.localeCompare(b.v.bill.dueDate)),
     [bills, billers, txns, today, link.id],
   );
-  const billCategory = categoryId === 'cat_utilities' || categoryId === 'cat_rent' || categoryId === 'cat_education' || flags.some((f) => f.startsWith('biller:'));
+  const billCategory =
+    categoryId === "cat_utilities" ||
+    categoryId === "cat_rent" ||
+    categoryId === "cat_education" ||
+    flags.some((f) => f.startsWith("biller:"));
 
+  const amountShown = groupAmount(amountStr);
   const onKey = (k: string) => {
-    if (k === 'clear') return setAmountStr('');
-    if (k === 'del') return setAmountStr((s) => s.slice(0, -1));
-    setAmountStr((s) => {
-      if (k === '.' && s.includes('.')) return s;
-      const next = s === '0' && k !== '.' ? k : s + k;
-      const [, dec] = next.split('.');
-      if (dec && dec.length > 2) return s;
-      if (Number(next) > 99_99_99_999) return s;
-      return next;
-    });
+    const next = applyAmountKey(amountStr, amountSel, k);
+    setAmount(next.raw, next.cursor);
   };
 
   const save = async (approve = false) => {
-    if (!amount) return toast('Enter an amount', { tone: 'error' });
-    if (method === 'card' && type === 'expense' && !cardId && cards.length) return toast('Pick which credit card', { tone: 'error' });
+    if (!amount) return toast("Enter an amount", { tone: "error" });
+    if (method === "card" && type === "expense" && !cardId && cards.length)
+      return toast("Pick which credit card", { tone: "error" });
+    if (isFamily && (!payer || !toMember || payer === toMember))
+      return toast("Pick who sent it and who got it", { tone: "error" });
     setSaving(true);
     try {
-      const time = existing && isoToYMD(existing.occurredAt) === date ? existing.occurredAt : toISO(date, date === today ? new Date().getHours() * 60 + new Date().getMinutes() : null);
-      const isCardPayment = type === 'transfer' && link.type === 'card';
+      const time =
+        existing && isoToYMD(existing.occurredAt) === date
+          ? existing.occurredAt
+          : toISO(
+              date,
+              date === today
+                ? new Date().getHours() * 60 + new Date().getMinutes()
+                : null,
+            );
+      const isCardPayment = type === "transfer" && link.type === "card";
       const draft = {
-        type,
+        type: isFamily && countsInBalance ? "settlement" : type,
         amount,
         occurredAt: time,
-        categoryId: type === 'transfer' ? null : categoryId,
-        method: isCardPayment && method === 'card' ? 'bank' : method,
-        cardId: method === 'card' || isCardPayment ? cardId : null,
-        accountId: method === 'card' && !isCardPayment ? null : accountId,
-        payee: payee.trim() || null,
+        categoryId: type === "transfer" ? null : categoryId,
+        method: isCardPayment && method === "card" ? "bank" : method,
+        cardId: method === "card" || isCardPayment ? cardId : null,
+        accountId: method === "card" && !isCardPayment ? null : accountId,
+        payee: isFamily ? null : payee.trim() || null,
         note: note.trim() || null,
         scope,
         memberId: payer,
-        splitWith: type === 'expense' && splitWith.length ? JSON.stringify(splitWith) : null,
-        linkType: link.id ? link.type : null,
-        linkId: link.id,
+        toMemberId: isFamily ? toMember : null,
+        splitWith:
+          type === "expense" && splitWith.length
+            ? JSON.stringify(splitWith)
+            : null,
+        linkType: link.id && !isFamily ? link.type : null,
+        linkId: isFamily ? null : link.id,
       } satisfies Partial<Transaction>;
       if (existing && (pending || approve)) {
         await approveCapture(existing.id, draft);
-        toast('Approved', { tone: 'success' });
+        toast("Approved", { tone: "success" });
       } else if (existing) {
         await saveTransaction(draft, existing.id);
-        await learnRule({ payee: draft.payee, vpa: existing.vpa, categoryId: draft.categoryId });
-        toast('Saved', { tone: 'success' });
+        await learnRule({
+          payee: draft.payee,
+          vpa: existing.vpa,
+          categoryId: draft.categoryId,
+        });
+        toast("Saved", { tone: "success" });
       } else {
         await saveTransaction(draft);
-        toast(`${type === 'income' ? 'Income' : type === 'transfer' ? 'Transfer' : 'Expense'} of ${formatINR(amount)} saved`, { tone: 'success' });
+        toast(
+          `${type === "income" ? "Income" : isFamily ? `Transfer to ${nameOf(toMember)}` : type === "transfer" ? "Transfer" : "Expense"} of ${formatINR(amount)} saved`,
+          { tone: "success" },
+        );
       }
       goBack();
     } catch (e) {
-      toast((e as Error).message, { tone: 'error' });
+      toast((e as Error).message, { tone: "error" });
     } finally {
       setSaving(false);
     }
@@ -192,24 +358,62 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
     if (!existing) return;
     if (pending) await rejectCapture(existing.id);
     else await deleteTransaction(existing.id);
-    toast(pending ? 'Rejected' : 'Deleted', { actionLabel: pending ? undefined : 'Undo', onAction: pending ? undefined : () => restore('transactions', existing.id) });
+    toast(pending ? "Rejected" : "Deleted", {
+      actionLabel: pending ? undefined : "Undo",
+      onAction: pending ? undefined : () => restoreTransaction(existing.id),
+    });
     goBack();
   };
 
   const catName = categories.find((c) => c.id === categoryId)?.name;
   const card = cards.find((c) => c.id === cardId);
-  const extras = [note.trim() ? 'Note' : '', splitWith.length ? `Split ${splitWith.length} ways` : '', scope === 'personal' ? 'Private' : ''].filter(Boolean).join(', ');
-  const title = existing ? (pending ? 'Check this capture' : 'Edit entry') : type === 'income' ? 'Money in' : type === 'transfer' ? 'Move money' : 'New expense';
+  const extras = [
+    note.trim() ? "Note" : "",
+    splitWith.length ? `Split ${splitWith.length} ways` : "",
+    scope === "personal" ? "Private" : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const title = existing
+    ? pending
+      ? "Check this capture"
+      : "Edit entry"
+    : type === "income"
+      ? "Money in"
+      : type === "transfer"
+        ? "Move money"
+        : "New expense";
   const CAT_LIMIT = 11;
-  const gridCats = showAllCats ? categories : [...categories.slice(0, CAT_LIMIT), ...categories.slice(CAT_LIMIT).filter((c) => c.id === categoryId)];
+  const gridCats = showAllCats
+    ? categories
+    : [
+        ...categories.slice(0, CAT_LIMIT),
+        ...categories.slice(CAT_LIMIT).filter((c) => c.id === categoryId),
+      ];
 
   // How it was paid, one box per choice: each saved card is its own box, so picking a card is one tap.
-  const payOptions: { key: string; icon: IconName; label: string; sub?: string; method: PayMethod; cardId?: string }[] = [
-    { key: 'upi', icon: 'qr-code', label: 'UPI', method: 'upi' },
-    ...(type === 'transfer' ? [] : cards.map((c) => ({ key: `card:${c.id}`, icon: 'card' as IconName, label: type === 'income' ? `Refund to ${c.name}` : c.name, sub: c.last4 ? `••${c.last4}` : 'Credit card', method: 'card' as PayMethod, cardId: c.id }))),
-    { key: 'cash', icon: 'cash', label: 'Cash', method: 'cash' },
-    { key: 'bank', icon: 'business', label: 'Bank', method: 'bank' },
-    { key: 'wallet', icon: 'wallet', label: 'Wallet', method: 'wallet' },
+  const payOptions: {
+    key: string;
+    icon: IconName;
+    label: string;
+    sub?: string;
+    method: PayMethod;
+    cardId?: string;
+  }[] = [
+    { key: "upi", icon: "qr-code", label: "UPI", method: "upi" },
+    ...(type === "transfer"
+      ? []
+      : cards.map((c) => ({
+          key: `card:${c.id}`,
+          icon: "card" as IconName,
+          label: type === "income" ? `Refund to ${c.name}` : c.name,
+          sub: c.last4 ? `••${c.last4}` : "Credit card",
+          method: "card" as PayMethod,
+          cardId: c.id,
+        }))),
+    { key: "cash", icon: "cash", label: "Cash", method: "cash" },
+    { key: "bank", icon: "business", label: "Bank", method: "bank" },
+    { key: "wallet", icon: "wallet", label: "Wallet", method: "wallet" },
   ];
   const pickPay = (o: (typeof payOptions)[number]) => {
     setKeypad(false);
@@ -231,17 +435,39 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
     <Screen
       title={title}
       back
-      right={existing ? <Button title={pending ? 'Reject' : 'Delete'} variant="ghost" size="sm" onPress={onDelete} /> : <Button title="Set up…" variant="ghost" size="sm" onPress={() => router.push('/add')} />}
+      right={
+        existing ? (
+          <Button
+            title={pending ? "Reject" : "Delete"}
+            variant="ghost"
+            size="sm"
+            onPress={onDelete}
+          />
+        ) : (
+          <Button
+            title="Set up…"
+            variant="ghost"
+            size="sm"
+            onPress={() => router.push("/add")}
+          />
+        )
+      }
       footer={
         <View style={{ gap: space(1) }}>
           {keypad ? <Keypad onKey={onKey} /> : null}
           <Button
-            title={pending ? 'Approve' : amount ? `Save ${formatINR(amount, { decimals: 'auto' })}` : 'Save'}
+            title={
+              pending
+                ? "Approve"
+                : amount
+                  ? `Save ${formatINR(amount, { decimals: "auto" })}`
+                  : "Save"
+            }
             icon="checkmark"
             onPress={() => save(pending)}
             loading={saving}
             size="lg"
-            variant={pending ? 'success' : 'primary'}
+            variant={pending ? "success" : "primary"}
           />
         </View>
       }
@@ -249,16 +475,46 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
       {pending ? (
         <Card tone="alt" style={{ gap: 6 }}>
           <Row gap={1} wrap>
-            <Pill label={existing?.source === 'sms' ? 'From SMS' : existing?.source === 'ocr' ? 'From screenshot' : 'Captured'} tone="info" />
-            {existing?.confidence != null ? <Pill label={`${Math.round(existing.confidence * 100)}% sure`} tone={existing.confidence < 0.7 ? 'warn' : 'good'} /> : null}
-            {flags.some((f) => f.startsWith('duplicate')) ? <Pill label="Possible duplicate" tone="expense" /> : null}
-            {flags.includes('payment-pending') ? <Pill label="Payment was pending" tone="warn" /> : null}
-            {flags.includes('amount-unsure') ? <Pill label="Check the amount" tone="warn" /> : null}
-            {ruleHits.length ? <Pill label={ruleHits.length > 1 ? `${ruleHits.length} rules applied` : 'Rule applied'} tone="primary" /> : null}
+            <Pill
+              label={
+                existing?.source === "sms"
+                  ? "From SMS"
+                  : existing?.source === "ocr"
+                    ? "From screenshot"
+                    : "Captured"
+              }
+              tone="info"
+            />
+            {existing?.confidence != null ? (
+              <Pill
+                label={`${Math.round(existing.confidence * 100)}% sure`}
+                tone={existing.confidence < 0.7 ? "warn" : "good"}
+              />
+            ) : null}
+            {flags.some((f) => f.startsWith("duplicate")) ? (
+              <Pill label="Possible duplicate" tone="expense" />
+            ) : null}
+            {flags.includes("payment-pending") ? (
+              <Pill label="Payment was pending" tone="warn" />
+            ) : null}
+            {flags.includes("amount-unsure") ? (
+              <Pill label="Check the amount" tone="warn" />
+            ) : null}
+            {ruleHits.length ? (
+              <Pill
+                label={
+                  ruleHits.length > 1
+                    ? `${ruleHits.length} rules applied`
+                    : "Rule applied"
+                }
+                tone="primary"
+              />
+            ) : null}
           </Row>
-          {flags.includes('amount-unsure') ? (
+          {flags.includes("amount-unsure") ? (
             <Txt variant="small" tone="warn">
-              The ₹ sign wasn't read clearly, so a digit may be wrong. Compare with the screenshot below.
+              The ₹ sign wasn't read clearly, so a digit may be wrong. Compare
+              with the screenshot below.
             </Txt>
           ) : null}
           {existing?.sourceRef ? (
@@ -268,13 +524,17 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
           ) : null}
           {cardHint ? (
             <Txt variant="small" tone="warn">
-              Card ending {cardHint} isn't saved yet. Add it from Dues, Cards to track its bill.
+              Card ending {cardHint} isn't saved yet. Add it from Dues, Cards to
+              track its bill.
             </Txt>
           ) : null}
           {ocrText ? (
-            <Pressable onPress={() => setShowOcr((v) => !v)} accessibilityRole="button">
+            <Pressable
+              onPress={() => setShowOcr((v) => !v)}
+              accessibilityRole="button"
+            >
               <Txt variant="small" tone="primary">
-                {showOcr ? 'Hide what was read' : 'Show what was read'}
+                {showOcr ? "Hide what was read" : "Show what was read"}
               </Txt>
             </Pressable>
           ) : null}
@@ -283,63 +543,166 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
               {ocrText}
             </Txt>
           ) : null}
-          {existing?.attachment ? <Image source={{ uri: existing.attachment }} style={{ width: '100%', height: 220, borderRadius: radius.md }} resizeMode="contain" accessibilityLabel="Captured screenshot" /> : null}
+          {existing?.attachment ? (
+            <Image
+              source={{ uri: existing.attachment }}
+              style={{ width: "100%", height: 220, borderRadius: radius.md }}
+              resizeMode="contain"
+              accessibilityLabel="Captured screenshot"
+            />
+          ) : null}
         </Card>
       ) : null}
 
       <Segmented
-        value={type === 'settlement' ? 'transfer' : type}
+        value={type === "settlement" ? "transfer" : type}
         onChange={(v) => {
           setType(v);
+          if (v !== "transfer") setFamily(false);
           setCategoryId(null);
           setAutoCat(false);
-          if (v !== 'transfer' && link.type === 'card') setLink({ type: null, id: null });
-          if (v !== 'expense' && method === 'card' && v === 'transfer') setMethod('upi');
+          if (v !== "transfer" && link.type === "card")
+            setLink({ type: null, id: null });
+          if (v !== "expense" && method === "card" && v === "transfer")
+            setMethod("upi");
         }}
         options={[
-          { value: 'expense', label: 'Expense' },
-          { value: 'income', label: 'Money in' },
-          { value: 'transfer', label: 'Move money' },
+          { value: "expense", label: "Expense" },
+          { value: "income", label: "Money in" },
+          { value: "transfer", label: "Move money" },
         ]}
       />
 
-      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} the keypad`} style={{ alignItems: 'center', gap: 2, paddingVertical: space(0.5) }}>
-        <Txt style={{ fontFamily: fonts.display, fontSize: 48, lineHeight: 56, letterSpacing: -2, color: amountStr ? (type === 'income' ? colors.incomeText : colors.text) : colors.textFaint, fontVariant: ['tabular-nums'] }}>
-          ₹{amountStr ? formatINR(Number(amountStr.split('.')[0]) * 100, { symbol: false, decimals: 'never' }) + (amountStr.includes('.') ? `.${amountStr.split('.')[1]}` : '') : '0'}
-        </Txt>
-        {!keypad ? (
-          <Txt variant="caption" tone="muted">
-            Tap to change the amount
+      <Pressable
+        onPress={() => setKeypad((k) => !k)}
+        accessibilityRole="button"
+        accessibilityLabel={`Tap to ${keypad ? "hide" : "show"} the keypad`}
+        style={{ alignItems: "center", gap: 2, paddingVertical: space(0.5) }}
+      >
+        <Row gap={0.5} style={{ alignItems: "center" }}>
+          <Txt
+            style={{
+              fontFamily: fonts.display,
+              fontSize: 36,
+              color: amountStr
+                ? type === "income"
+                  ? colors.incomeText
+                  : colors.text
+                : colors.textFaint,
+            }}
+          >
+            ₹
           </Txt>
-        ) : null}
+          {/* The app's keypad types here; the phone keyboard stays down. Tap or drag to move the cursor. */}
+          <TextInput
+            value={amountShown}
+            placeholder="0"
+            placeholderTextColor={colors.textFaint}
+            showSoftInputOnFocus={false}
+            contextMenuHidden
+            selection={{
+              start: toGroupedIndex(amountShown, amountSel.start),
+              end: toGroupedIndex(amountShown, amountSel.end),
+            }}
+            onSelectionChange={(e) => {
+              // Android reports the cursor jumping to the end when the text changes, before our
+              // cursor is applied; only taps and drags move it.
+              if (Date.now() - keyedAt.current < 250) return;
+              const { start, end } = e.nativeEvent.selection;
+              setAmountSel({
+                start: toRawIndex(amountShown, start),
+                end: toRawIndex(amountShown, end),
+              });
+            }}
+            // A hardware keyboard can still type; keep only well-formed amounts.
+            onChangeText={(t) => {
+              const raw = t.replace(/[^\d.]/g, "");
+              if (isValidAmountText(raw)) setAmountStr(raw);
+            }}
+            onFocus={() => setKeypad(true)}
+            selectionColor={colors.primary}
+            cursorColor={colors.primary}
+            accessibilityLabel={`Amount ${amountStr || "zero"} rupees`}
+            style={{
+              fontFamily: fonts.display,
+              fontSize: 48,
+              height: 60,
+              minWidth: 40,
+              padding: 0,
+              letterSpacing: -2,
+              color: type === "income" ? colors.incomeText : colors.text,
+              fontVariant: ["tabular-nums"],
+              includeFontPadding: false,
+            }}
+          />
+        </Row>
+        <Txt variant="caption" tone="muted">
+          {keypad
+            ? "Tap a digit to move the cursor there"
+            : "Tap to change the amount"}
+        </Txt>
       </Pressable>
 
       {!existing ? (
         <Row gap={1}>
-          <Button title="Read a screenshot" icon="scan-outline" variant="secondary" size="sm" onPress={() => router.replace('/scan')} style={{ flex: 1 }} />
-          <Button title="Paste a bank SMS" icon="chatbubble-ellipses-outline" variant="secondary" size="sm" onPress={() => router.replace('/paste-sms')} style={{ flex: 1 }} />
+          <Button
+            title="Read a screenshot"
+            icon="scan-outline"
+            variant="secondary"
+            size="sm"
+            onPress={() => router.replace("/scan")}
+            style={{ flex: 1 }}
+          />
+          <Button
+            title="Paste a bank SMS"
+            icon="chatbubble-ellipses-outline"
+            variant="secondary"
+            size="sm"
+            onPress={() => router.replace("/paste-sms")}
+            style={{ flex: 1 }}
+          />
         </Row>
       ) : null}
 
-      <View style={{ gap: space(1) }}>
-        <TextField
-          label={type === 'income' ? 'From' : type === 'transfer' ? 'Note' : 'Paid to'}
-          value={payee}
-          onChangeText={(v) => onPayee(v)}
-          onFocus={() => setKeypad(false)}
-          placeholder={type === 'income' ? 'Employer, tenant…' : type === 'transfer' ? 'Optional' : 'Shop, person, biller…'}
-          icon="storefront-outline"
-        />
-        {payeeSuggestions.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {payeeSuggestions.map((p) => (
-              <Chip key={p.name} compact icon="time-outline" label={p.name} onPress={() => onPayee(p.name, p)} />
-            ))}
-          </View>
-        ) : null}
-      </View>
+      {!isFamily ? (
+        <View style={{ gap: space(1) }}>
+          <TextField
+            label={
+              type === "income"
+                ? "From"
+                : type === "transfer"
+                  ? "Note"
+                  : "Paid to"
+            }
+            value={payee}
+            onChangeText={(v) => onPayee(v)}
+            onFocus={() => setKeypad(false)}
+            placeholder={
+              type === "income"
+                ? "Employer, tenant…"
+                : type === "transfer"
+                  ? "Optional"
+                  : "Shop, person, biller…"
+            }
+            icon="storefront-outline"
+          />
+          {payeeSuggestions.length ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {payeeSuggestions.map((p) => (
+                <Chip
+                  key={p.name}
+                  compact
+                  icon="time-outline"
+                  label={p.name}
+                  onPress={() => onPayee(p.name, p)}
+                />
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
-      {type === 'transfer' ? (
+      {type === "transfer" ? (
         <Field label="To">
           <TileGrid columns={3}>
             {(w) => (
@@ -351,53 +714,170 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
                     icon="card"
                     label={`Pay ${c.name}`}
                     sub={c.last4 ? `••${c.last4}` : undefined}
-                    selected={link.type === 'card' && cardId === c.id}
+                    selected={
+                      !family && link.type === "card" && cardId === c.id
+                    }
                     onPress={() => {
                       setKeypad(false);
+                      setFamily(false);
                       setCardId(c.id);
-                      setLink({ type: 'card', id: c.id });
+                      setLink({ type: "card", id: c.id });
                       setScope(c.scope);
                     }}
                   />
                 ))}
-                <Tile width={w} icon="swap-horizontal" label="Another account" selected={link.type !== 'card'} onPress={() => setLink({ type: null, id: null })} />
+                {members.length > 1 ? (
+                  <Tile
+                    width={w}
+                    icon="people"
+                    label="Family member"
+                    selected={family}
+                    onPress={() => {
+                      setKeypad(false);
+                      setFamily(true);
+                      setLink({ type: null, id: null });
+                      setScope("household");
+                    }}
+                  />
+                ) : null}
+                <Tile
+                  width={w}
+                  icon="swap-horizontal"
+                  label="Another account"
+                  selected={!family && link.type !== "card"}
+                  onPress={() => {
+                    setFamily(false);
+                    setLink({ type: null, id: null });
+                  }}
+                />
               </>
             )}
           </TileGrid>
-          {link.type === 'card' ? (
+          {!family && link.type === "card" ? (
             <Txt variant="small" tone="muted">
-              Paying a card bill moves money; it isn't counted as spending again.
+              Paying a card bill moves money; it isn't counted as spending
+              again.
             </Txt>
           ) : null}
         </Field>
       ) : (
-        <Field label="Category" hint={autoCat && catName ? `${catName}, from your past payments to ${payee.trim()}` : pastCats.length > 1 ? `${payee.trim() || 'This payee'} was filed two ways before` : undefined}>
+        <Field
+          label="Category"
+          hint={
+            autoCat && catName
+              ? `${catName}, from your past payments to ${payee.trim()}`
+              : pastCats.length > 1
+                ? `${payee.trim() || "This payee"} was filed two ways before`
+                : undefined
+          }
+        >
           <TileGrid columns={4}>
             {(w) => (
               <>
                 {gridCats.map((c) => (
-                  <Tile key={c.id} width={w} icon={c.icon as IconName} tint={c.color} label={c.name} selected={categoryId === c.id} onPress={() => pickCategory(c.id)} />
+                  <Tile
+                    key={c.id}
+                    width={w}
+                    icon={c.icon as IconName}
+                    tint={c.color}
+                    label={c.name}
+                    selected={categoryId === c.id}
+                    onPress={() => pickCategory(c.id)}
+                  />
                 ))}
-                {categories.length > CAT_LIMIT ? <Tile width={w} icon={showAllCats ? 'chevron-up' : 'apps-outline'} label={showAllCats ? 'Fewer' : `All ${categories.length}`} onPress={() => setShowAllCats((v) => !v)} /> : null}
+                {categories.length > CAT_LIMIT ? (
+                  <Tile
+                    width={w}
+                    icon={showAllCats ? "chevron-up" : "apps-outline"}
+                    label={showAllCats ? "Fewer" : `All ${categories.length}`}
+                    onPress={() => setShowAllCats((v) => !v)}
+                  />
+                ) : null}
               </>
             )}
           </TileGrid>
         </Field>
       )}
 
-      {type === 'expense' && billCategory && openBills.length ? (
+      {isFamily ? (
+        <>
+          <ChipSelect
+            label="From"
+            value={payer}
+            onChange={setPayer}
+            options={memberOptions}
+          />
+          <ChipSelect
+            label="To"
+            value={toMember}
+            onChange={setToMember}
+            options={memberOptions.filter((o) => o.value !== payer)}
+          />
+          <SwitchRow
+            icon="people-outline"
+            label="Counts towards who owes whom"
+            description={
+              receiverOwed
+                ? `${nameOf(payer)} owes ${nameOf(toMember)} ${formatINR(receiverOwed)}: turn on if this pays it back.`
+                : "On for paying back or lending. Off for money just handed over (pocket money, household cash)."
+            }
+            value={countsInBalance}
+            onChange={setCountsInBalance}
+          />
+          <Txt variant="small" tone="muted">
+            Not counted as spending: it is counted when they spend it. If they
+            don't record their spending here (say, parents in another city),
+            save it as an expense instead.
+          </Txt>
+        </>
+      ) : null}
+
+      {type === "expense" && categoryId === LEGACY_INVEST_CATEGORY ? (
+        <Card tone="alt" style={{ gap: 6 }}>
+          <Txt variant="small" tone="muted">
+            Money put into gold, shares or a fund isn't spent: you still own it.
+            Recorded as an investment, it doesn't count as spending and you can
+            track what you hold.
+          </Txt>
+          <Button
+            title="Record as an investment instead"
+            size="sm"
+            variant="secondary"
+            onPress={() =>
+              existing
+                ? router.replace({
+                    pathname: "/investments/new",
+                    params: { fromTxn: existing.id },
+                  })
+                : router.replace({
+                    pathname: "/investments/new",
+                    params: {
+                      amount: amount ? String(amount) : undefined,
+                      date,
+                    },
+                  })
+            }
+          />
+        </Card>
+      ) : null}
+
+      {type === "expense" && billCategory && openBills.length ? (
         <Field label="Which bill does this pay?">
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {openBills.map(({ v, biller }) => (
               <Chip
                 key={v.bill.id}
                 icon={billerMeta(biller!.type).icon as IconName}
                 label={`${biller!.name}, ${formatDay(v.bill.dueDate)}, ${formatINR(v.remaining || v.totalDue)}`}
-                selected={link.type === 'bill' && link.id === v.bill.id}
+                selected={link.type === "bill" && link.id === v.bill.id}
                 onPress={() => {
-                  const on = !(link.type === 'bill' && link.id === v.bill.id);
-                  setLink(on ? { type: 'bill', id: v.bill.id } : { type: null, id: null });
-                  if (on && !amountStr) setAmountStr(amountText(v.remaining));
+                  const on = !(link.type === "bill" && link.id === v.bill.id);
+                  setLink(
+                    on
+                      ? { type: "bill", id: v.bill.id }
+                      : { type: null, id: null },
+                  );
+                  if (on && !amountStr) setAmount(amountText(v.remaining));
                   if (on && !payee) setPayee(biller!.name);
                 }}
               />
@@ -406,21 +886,76 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         </Field>
       ) : null}
 
-      <Field label={type === 'transfer' ? 'From' : type === 'income' ? 'Received in' : 'Paid with'} hint={autoPay && method === 'card' && card ? `${card.name}, from a rule` : undefined}>
+      <Field
+        label={
+          type === "transfer"
+            ? "From"
+            : type === "income"
+              ? "Received in"
+              : "Paid with"
+        }
+        hint={
+          autoPay && method === "card" && card
+            ? `${card.name}, from a rule`
+            : undefined
+        }
+      >
         <TileRow>
           {payOptions.map((o) => (
-            <Tile key={o.key} width={92} icon={o.icon} label={o.label} sub={o.sub} selected={method === o.method && (o.method !== 'card' || cardId === o.cardId)} onPress={() => pickPay(o)} />
+            <Tile
+              key={o.key}
+              width={92}
+              icon={o.icon}
+              label={o.label}
+              sub={o.sub}
+              selected={
+                method === o.method &&
+                (o.method !== "card" || cardId === o.cardId)
+              }
+              onPress={() => pickPay(o)}
+            />
           ))}
-          {type === 'expense' && !cards.length ? <Tile width={92} icon="add" label="Add a card" onPress={() => router.push('/card/new')} /> : null}
+          {type === "expense" && !cards.length ? (
+            <Tile
+              width={92}
+              icon="add"
+              label="Add a card"
+              onPress={() => router.push("/card/new")}
+            />
+          ) : null}
         </TileRow>
-        {method !== 'card' && accounts.length > 1 ? (
-          <ChipSelect value={accountId} onChange={setAccountId} allowNone options={accounts.map((a) => ({ value: a.id, label: `${a.name}${a.last4 ? ` ••${a.last4}` : ''}`, icon: (a.type === 'cash' ? 'cash' : a.type === 'wallet' ? 'wallet' : 'business') as IconName }))} />
+        {method !== "card" && accounts.length > 1 ? (
+          <ChipSelect
+            value={accountId}
+            onChange={setAccountId}
+            allowNone
+            options={accounts.map((a) => ({
+              value: a.id,
+              label: `${a.name}${a.last4 ? ` ••${a.last4}` : ""}`,
+              icon: (a.type === "cash"
+                ? "cash"
+                : a.type === "wallet"
+                  ? "wallet"
+                  : "business") as IconName,
+            }))}
+          />
         ) : null}
       </Field>
 
       <DateField label="Date" value={date} onChange={setDate} />
 
-      {existing && !pending && type === 'expense' && method === 'card' && existing.cardId ? <EmiLink txnId={existing.id} plan={loans.find((l) => l.sourceTxnId === existing.id && !l.deletedAt)} /> : null}
+      {existing &&
+      !pending &&
+      type === "expense" &&
+      method === "card" &&
+      existing.cardId ? (
+        <EmiLink
+          txnId={existing.id}
+          plan={loans.find(
+            (l) => l.sourceTxnId === existing.id && !l.deletedAt,
+          )}
+        />
+      ) : null}
 
       {pending && existing && (payee.trim() || existing.vpa) ? (
         <Button
@@ -428,41 +963,120 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
           icon="flash-outline"
           variant="ghost"
           size="sm"
-          onPress={() => router.push({ pathname: '/rules/edit', params: { payee: payee.trim() || existing.vpa || '', categoryId: categoryId ?? '', method, cardId: method === 'card' ? (cardId ?? '') : '', source: existing.source === 'ocr' || existing.source === 'sms' ? existing.source : 'any' } })}
+          onPress={() =>
+            router.push({
+              pathname: "/rules/edit",
+              params: {
+                payee: payee.trim() || existing.vpa || "",
+                categoryId: categoryId ?? "",
+                method,
+                cardId: method === "card" ? (cardId ?? "") : "",
+                source:
+                  existing.source === "ocr" || existing.source === "sms"
+                    ? existing.source
+                    : "any",
+              },
+            })
+          }
         />
       ) : null}
 
-      <Card padded={false} style={{ overflow: 'hidden' }}>
+      <Card padded={false} style={{ overflow: "hidden" }}>
         <Pressable
           onPress={() => setMore((v) => !v)}
           accessibilityRole="button"
           accessibilityState={{ expanded: more }}
-          style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space(1.5), minHeight: 56, paddingHorizontal: space(2), backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}
+          style={({ pressed }) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: space(1.5),
+            minHeight: 56,
+            paddingHorizontal: space(2),
+            backgroundColor: pressed ? colors.surfaceAlt : "transparent",
+          })}
         >
           <Txt variant="bodyStrong" style={{ flex: 1 }}>
             More
           </Txt>
-          <Txt variant="small" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-            {extras || 'Note, split, private'}
+          <Txt
+            variant="small"
+            tone="muted"
+            numberOfLines={1}
+            style={{ flexShrink: 1 }}
+          >
+            {extras || "Note, split, private"}
           </Txt>
-          <Ionicons name={more ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+          <Ionicons
+            name={more ? "chevron-up" : "chevron-down"}
+            size={18}
+            color={colors.textMuted}
+          />
         </Pressable>
         {more ? (
-          <View style={{ paddingHorizontal: space(2), paddingBottom: space(2), gap: space(1.5) }}>
-            <TextField label="Note" value={note} onChangeText={setNote} onFocus={() => setKeypad(false)} placeholder="Optional" multiline />
-            {members.length > 1 && type === 'expense' ? (
+          <View
+            style={{
+              paddingHorizontal: space(2),
+              paddingBottom: space(2),
+              gap: space(1.5),
+            }}
+          >
+            <TextField
+              label="Note"
+              value={note}
+              onChangeText={setNote}
+              onFocus={() => setKeypad(false)}
+              placeholder="Optional"
+              multiline
+            />
+            {members.length > 1 && type === "expense" ? (
               <>
-                <ChipSelect label="Paid by" value={payer} onChange={setPayer} options={members.map((m) => ({ value: m.id, label: m.id === selfId ? 'You' : m.name, color: m.color }))} />
-                <Field label="Split equally with" hint={splitWith.length ? `${formatINR(Math.round(amount / splitWith.length))} each` : 'Not shared'}>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <ChipSelect
+                  label="Paid by"
+                  value={payer}
+                  onChange={setPayer}
+                  options={members.map((m) => ({
+                    value: m.id,
+                    label: m.id === selfId ? "You" : m.name,
+                    color: m.color,
+                  }))}
+                />
+                <Field
+                  label="Split equally with"
+                  hint={
+                    splitWith.length
+                      ? `${formatINR(Math.round(amount / splitWith.length))} each`
+                      : "Not shared"
+                  }
+                >
+                  <View
+                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                  >
                     {members.map((m) => (
-                      <Chip key={m.id} label={m.id === selfId ? 'You' : m.name} color={m.color} selected={splitWith.includes(m.id)} onPress={() => setSplitWith((s) => (s.includes(m.id) ? s.filter((x) => x !== m.id) : [...s, m.id]))} />
+                      <Chip
+                        key={m.id}
+                        label={m.id === selfId ? "You" : m.name}
+                        color={m.color}
+                        selected={splitWith.includes(m.id)}
+                        onPress={() =>
+                          setSplitWith((s) =>
+                            s.includes(m.id)
+                              ? s.filter((x) => x !== m.id)
+                              : [...s, m.id],
+                          )
+                        }
+                      />
                     ))}
                   </View>
                 </Field>
               </>
             ) : null}
-            <SwitchRow icon="lock-closed-outline" label="Keep private" description="Family phones won't see it" value={scope === 'personal'} onChange={(v) => setScope(v ? 'personal' : 'household')} />
+            <SwitchRow
+              icon="lock-closed-outline"
+              label="Keep private"
+              description="Family phones won't see it"
+              value={scope === "personal"}
+              onChange={(v) => setScope(v ? "personal" : "household")}
+            />
           </View>
         ) : null}
       </Card>
@@ -471,18 +1085,38 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
 }
 
 /** A card purchase: offer to split it into EMIs, or show the plan it's already on. */
-function EmiLink({ txnId, plan }: { txnId: string; plan?: { id: string; tenureMonths: number; name: string } }) {
+function EmiLink({
+  txnId,
+  plan,
+}: {
+  txnId: string;
+  plan?: { id: string; tenureMonths: number; name: string };
+}) {
   const { colors } = useTheme();
   return (
-    <Card onPress={() => (plan ? router.push(`/loan/${plan.id}`) : router.push({ pathname: '/card-emi/new', params: { txn: txnId } }))} style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.5) }}>
+    <Card
+      onPress={() =>
+        plan
+          ? router.push(`/loan/${plan.id}`)
+          : router.push({ pathname: "/card-emi/new", params: { txn: txnId } })
+      }
+      style={{ flexDirection: "row", alignItems: "center", gap: space(1.5) }}
+    >
       <View style={{ flex: 1 }}>
-        <Txt variant="bodyStrong">{plan ? `On ${plan.tenureMonths} monthly EMIs` : 'Pay this in EMIs'}</Txt>
+        <Txt variant="bodyStrong">
+          {plan ? `On ${plan.tenureMonths} monthly EMIs` : "Pay this in EMIs"}
+        </Txt>
         <Txt variant="small" tone="muted">
-          {plan ? 'Billed on the card each month. Tap to see the plan.' : 'Converted with your bank? Spread it across your card bills.'}
+          {plan
+            ? "Billed on the card each month. Tap to see the plan."
+            : "Converted with your bank? Spread it across your card bills."}
         </Txt>
       </View>
-      <Txt variant="small" style={{ color: colors.primary, fontFamily: fonts.bold }}>
-        {plan ? 'Open' : 'Set up'}
+      <Txt
+        variant="small"
+        style={{ color: colors.primary, fontFamily: fonts.bold }}
+      >
+        {plan ? "Open" : "Set up"}
       </Txt>
     </Card>
   );

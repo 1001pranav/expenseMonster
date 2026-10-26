@@ -6,15 +6,16 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 
 | Area | What it does |
 |---|---|
-| Transactions | Expense, income, transfer and settlement. Category splits, equal split with family members, private entries |
+| Transactions | Expense, income, transfer and settlement. Transfers go between your accounts, to a credit card, or to a family member (counted towards who owes whom only if you say so; UPI payments to a member's saved UPI ID are captured as family transfers, not spending). Category splits, equal split with family members, private entries |
 | Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Paste a bank SMS**: copy a bank message and paste it, or add entries manually. The Play build never asks for SMS permission. A sideloaded build made with `EXPO_PUBLIC_SMS_CAPTURE=1` can also **import bank SMS on request**: it reads the inbox only when you tap Import (Settings → Bank SMS), keeps only bank payment messages (never OTPs), and never listens in the background. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
+| Investments | Gold, silver, shares, mutual funds, bonds (corporate, government, tax-free: face value, coupon, maturity), deposits: buy and sell, by person or joint. Money invested is a transfer, not spending, so the savings rate isn't lowered by investing. Enter two of amount, quantity and price and the third is calculated. Nothing is mandatory: a blank amount, quantity or price is kept as not entered (unknown, never zero), and gains that depend on it aren't shown. Sales use FIFO cost and show the gain. Gifts and jewellery trade-ins (no cash) are supported, with a guided trade-in screen. Set a current price (one gold rate covers every holding of that purity) to see what it's worth and the gain not yet taken. Capital gains for the year, short and long term, are on the Tax screen; kinds the app can't estimate safely are listed for your CA. Mutual fund prices can be fetched from AMFI's public daily NAV file when you tap (the whole file is downloaded, so nobody learns which funds you hold), shown before saving, and labelled with their source. Shares and funds can be imported from your own CDSL/NSDL consolidated account statement (PDF, read on the phone with its PAN password, neither kept): prices updated, holdings linked or added, every row checked so quantity × price = value. Jewellery can be recorded as an investment, for own use or as a gift. See `docs/INVESTMENTS_PLAN.md` |
 | Loans & EMIs | Borrowed and lent loans, reducing or flat interest, amortisation schedule, prepayment simulator, overdue EMIs |
 | Credit cards | Statement day and due day per card. Purchases on or before the statement day go on this bill; anything after goes on the next one. Refunds reduce the cycle. Bill payments are **transfers, not expenses**, so spending is never counted twice. Bank statement amounts can override the computed total |
 | Bills | Variable bills (electricity/water/gas, with units), fixed bills (rent/internet, created each cycle automatically), prepaid recharges (validity tracking), LPG (predicts the next booking), autopay (warns if no debit shows up) |
 | Insurance | Premiums and renewals with alerts 30, 7 and 1 day before |
 | Reminders | Local notifications for every due item, with **Pay now / Mark paid / Snooze** actions |
 | Payments | UPI hand-off (`upi://pay`) to any UPI app. The app then asks whether the payment succeeded, because UPI apps don't report the result back |
-| Household | Members, who-owes-whom, simplified settle-up |
+| Household | Members, who-owes-whom, simplified settle-up. A household head can hold back, merge or discard edits from a phone, a day or one entry |
 | Insights | Category donut, 12-month income vs expense, savings trend, daily heat-calendar, budgets, card spend, debt payoff projection |
 
 ## Data storage
@@ -59,6 +60,21 @@ Setup:
    Without them, the cloud option is hidden. A test fails the build if a secret / service_role key is set.
 
 The anon key ships inside the APK, so anyone can call the functions. Without the household key they can neither read nor write a household's records.
+
+## Household head and review
+
+When a phone sends bad data, the household doesn't have to take it. Source: `src/domain/sync/holds.ts`, `src/services/holds.ts`.
+
+- **Damaged entries are never stored.** Every phone checks each entry it receives against the column types (`src/domain/sync/validate.ts`): an amount that isn't a whole number, a missing date, an unknown transaction type. A failing entry is **set aside** on that phone instead of being applied, so it can't break a screen.
+- **One phone is the household head.** Household → *Household head & review*: any phone can take the role while nobody has it, and the head can hand it to another phone. If two phones claim it before syncing, the earlier claim wins on every phone.
+- **The head can hold edits back:** everything from one phone, everything saved on one day (by one phone or by all), or a single entry. Every phone then sets matching entries aside, including ones it already applied. In that case it shows the version the edit replaced again, kept for 90 days for this purpose, or hides the entry if it was new.
+- **The head decides:** *Merge* applies the entries on every phone, *Discard* keeps them aside for good. This works per entry or for a whole rule. Damaged entries can only be discarded. Everyone sees what is waiting and who is reviewing it.
+- **Nothing is deleted or rewritten on the server.** Each phone only decides what it shows, from the same rules. The phone whose entries are held keeps them. If they are discarded, its user is asked to **delete them** or **separate this phone** (it leaves with all its data as a household of its own).
+- **The head role is kept by the app, not the server.** The server can't read anything, so it can't check roles: every phone ignores rules and head changes that the current head didn't make. A modified app could ignore them too.
+- **Removing a phone** is enforced with cryptography, not just by the app (`src/services/rotation.ts`, `src/domain/sync/grant.ts`). Every phone has an X25519 key pair (the private half stays in the Keystore) and publishes the public half. The head creates a new household key, seals it to each remaining phone's public key and uploads these grants under the old key, then switches to the new key. That is a new cloud space, so the head uploads everything there. The other phones open their grant on their next sync and follow. The removed phone can read the grants but not open them: it keeps what it already had, receives nothing new, and turns cloud sync off. Requires cloud sync; with files only, separate and pair again by QR.
+  - Before removing, the head sees exactly which phones get the new key. A phone record is only as trustworthy as the phone that published it, so a modified app on the phone being removed could have planted a fake one. Remove anything you don't recognise too.
+  - A phone that missed the new key (older app version, or no key published yet) pairs again by QR, in person. The head never reads the old space again, because the removed phone can still write to it.
+  - The old space stays on the server, unread. Removing it is left for later: phones that haven't switched yet still need their grant from it.
 
 ## Optional cloud backup (password-encrypted)
 

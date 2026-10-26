@@ -68,6 +68,12 @@ export const EMPTY_TABLES: Tables = {
   budgets: [],
   rules: [],
   sms_formats: [],
+  devices: [],
+  household: [],
+  sync_holds: [],
+  key_grants: [],
+  holdings: [],
+  trades: [],
 };
 
 interface State {

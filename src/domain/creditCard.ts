@@ -80,8 +80,12 @@ export interface CardLedger {
   daysToDue: number | null;
 }
 
+// An investment paid by card (gold from a jeweller) is not spending, but it is on the card's bill.
 const isCardCharge = (t: Transaction, cardId: string) =>
-  t.cardId === cardId && t.status === 'confirmed' && !t.deletedAt && (t.type === 'expense' || (t.type === 'income' && t.method === 'card'));
+  t.cardId === cardId &&
+  t.status === 'confirmed' &&
+  !t.deletedAt &&
+  (t.type === 'expense' || (t.method === 'card' && (t.type === 'income' || (t.type === 'transfer' && t.linkType === 'investment'))));
 
 const isCardPayment = (t: Transaction, cardId: string) =>
   t.cardId === cardId && t.status === 'confirmed' && !t.deletedAt && t.type === 'transfer' && t.linkType === 'card';
@@ -133,8 +137,8 @@ export function buildCardLedger(
     if (!isCardCharge(t, card.id) || converted.has(t.id)) continue;
     const key = statementDateFor(isoToYMD(t.occurredAt), card.statementDay);
     const bucket = byStatement.get(key) ?? empty();
-    if (t.type === 'expense') bucket.purchases += t.amount;
-    else bucket.refunds += t.amount;
+    if (t.type === 'income') bucket.refunds += t.amount;
+    else bucket.purchases += t.amount;
     bucket.ids.push(t.id);
     byStatement.set(key, bucket);
   }

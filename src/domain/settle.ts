@@ -1,5 +1,5 @@
 import { splitEvenly, type Paise } from './money';
-import type { Transaction } from './types';
+import type { Member, Transaction } from './types';
 
 export type Balances = Record<string, Paise>;
 
@@ -38,6 +38,19 @@ export function memberBalances(transactions: Transaction[]): Balances {
   }
   for (const k of Object.keys(bal)) if (bal[k] === 0) delete bal[k];
   return bal;
+}
+
+/**
+ * Money sent between two family members: a plain family transfer (pocket money, household cash,
+ * which never changes who owes whom) or a settlement (which does).
+ */
+export const isFamilyTransfer = (t: Pick<Transaction, 'type' | 'toMemberId'>) => t.type === 'settlement' || (t.type === 'transfer' && Boolean(t.toMemberId));
+
+/** The family member a UPI ID belongs to, never yourself (that is a move between your own accounts). */
+export function memberForVpa(vpa: string | null, members: Member[], selfId: string): Member | undefined {
+  const v = vpa?.trim().toLowerCase();
+  if (!v) return undefined;
+  return members.find((m) => !m.deletedAt && m.id !== selfId && m.upiId?.trim().toLowerCase() === v);
 }
 
 export interface Transfer {
