@@ -68,7 +68,7 @@ export async function learnRule(t: Pick<Transaction, 'payee' | 'vpa' | 'category
 export async function approveCapture(id: string, patch: Partial<Transaction> = {}) {
   const row = await update('transactions', id, { ...patch, status: 'confirmed', flags: stripFlag(patch.flags ?? findById('transactions', id)?.flags ?? null, 'duplicate') });
   await learnRule(row);
-  if (getState().settings.deleteCapturesAfterApproval && row.attachment) {
+  if (getState().settings.deleteScreenshots && row.attachment) {
     const { deleteAttachment } = await import('@/services/files');
     deleteAttachment(row.attachment);
     await update('transactions', id, { attachment: null });

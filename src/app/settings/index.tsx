@@ -71,7 +71,7 @@ export default function Settings() {
           <SwitchRow icon="eye-off" label="Block screenshots" description="Also hides amounts in the recent-apps view" value={settings.screenSecure} onChange={(v) => saveSettings({ screenSecure: v })} />
           <SwitchRow icon="trash-bin" label="Erase after 10 wrong PINs" value={settings.wipeAfterFailures} onChange={(v) => saveSettings({ wipeAfterFailures: v })} />
           <SwitchRow icon="flash-outline" label="Save clear screenshots automatically" description="When the amount, payee and category are all certain. You get Undo, and anything unsure still waits for a check." value={settings.autoSaveCaptures} onChange={(v) => saveSettings({ autoSaveCaptures: v })} />
-          <SwitchRow icon="image" label="Delete screenshots after approval" description="Keeps only the numbers you approved" value={settings.deleteCapturesAfterApproval} onChange={(v) => saveSettings({ deleteCapturesAfterApproval: v })} />
+          <SwitchRow icon="image" label="Delete screenshots after approval" description="Off: each entry keeps its screenshot to look at later" value={settings.deleteScreenshots} onChange={(v) => saveSettings({ deleteScreenshots: v })} />
         </Card>
       </Section>
 

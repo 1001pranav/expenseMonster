@@ -3,21 +3,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, View } from 'react-native';
-import { formatDay, isoToYMD } from '@/domain/dates';
+import { formatDay } from '@/domain/dates';
 import { formatINR, parseAmount } from '@/domain/money';
-import type { Transaction } from '@/domain/types';
 import { autoSaveCapture, deleteTransaction } from '@/data/actions';
-import { useCategoryMap, useTable } from '@/data/hooks';
 import { readScreenshot, saveScreenshot, type ImageCapture, type ScreenshotRead } from '@/services/capture';
 import { logError, logInfo } from '@/services/diagnostics';
 import { stageImage } from '@/services/files';
-import { Button, Card, EmptyState, IconCircle, Row, Txt } from '@/ui/components/core';
+import { Button, Card, EmptyState, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { TextField } from '@/ui/components/forms';
 import { Screen, goBack } from '@/ui/components/Screen';
 import { radius, space, useTheme } from '@/ui/theme';
 
-type Phase = 'idle' | 'reading' | 'confirm' | 'saving' | 'saved' | 'failed' | 'unreadable';
+type Phase = 'idle' | 'reading' | 'confirm' | 'saving' | 'failed' | 'unreadable';
 type StepState = 'waiting' | 'active' | 'found' | 'missing';
 interface Step {
   label: string;
@@ -30,9 +28,6 @@ const STEPS = ['Reading the screenshot', 'Identifying amount', 'Identifying who 
 const REVEAL_MS = 450;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const amountText = (paise: number | null) => (paise ? (paise % 100 ? (paise / 100).toFixed(2) : String(paise / 100)) : '');
-/** An unsure "7750" may be "₹750" with the ₹ read as a 7: too risky to pre-fill either way. */
-const startsWith7 = (paise: number | null) => amountText(paise).startsWith('7');
 
 export default function Scan() {
   const { colors } = useTheme();
@@ -44,7 +39,6 @@ export default function Scan() {
   const [amountInput, setAmountInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showRead, setShowRead] = useState(false);
-  const [saved, setSaved] = useState<Transaction | null>(null);
   const run = useRef(0);
 
   const setStep = (i: number, patch: Partial<Step>) => setSteps((s) => s.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -65,11 +59,16 @@ export default function Scan() {
         logError(`scan: auto-save failed: ${(e as Error).message}`);
         return null;
       });
+      // Clear: saved already, so open the saved entry (with its screenshot) and offer Undo there.
+      // Otherwise open it to check: the screenshot, the amount and any question on one screen.
       if (auto) {
         logInfo('scan: saved automatically');
-        setSaved(auto);
-        setPhase('saved');
-        return;
+        const id = res.transactionId;
+        toast(`Saved ${formatINR(auto.amount)}${auto.payee ? ` to ${auto.payee}` : ''}`, {
+          tone: 'success',
+          actionLabel: 'Undo',
+          onAction: () => deleteTransaction(id).then(goBack),
+        });
       }
       router.replace({ pathname: '/txn/[id]', params: { id: res.transactionId, ocr: res.text } });
     }
@@ -121,15 +120,16 @@ export default function Scan() {
         if (pause) await sleep(120);
         if (!alive()) return;
 
-        if (r.kind === 'payment' && r.payment.status !== 'failed' && (!r.payment.amount || !r.payment.amountSure)) {
-          // Ask now, while the screenshot is on screen, instead of saving a wrong or empty amount.
+        if (r.kind === 'payment' && r.payment.status !== 'failed' && !r.payment.amount) {
+          // No amount at all: ask for it here (an entry can't exist without one). An unsure amount is
+          // saved for checking instead, where the screenshot sits beside it with a one-tap fix.
           const anythingFound = r.payment.payee || r.payment.ref || r.payment.date || r.payment.amount;
           if (!anythingFound) {
             logInfo('scan: nothing recognisable');
             return setPhase('unreadable');
           }
-          logInfo(`scan: asking for the amount (${r.payment.amount ? 'not sure' : 'not found'})`);
-          setAmountInput(startsWith7(r.payment.amount) ? '' : amountText(r.payment.amount));
+          logInfo('scan: asking for the amount (not found)');
+          setAmountInput('');
           return setPhase('confirm');
         }
         setPhase('saving');
@@ -169,7 +169,6 @@ export default function Scan() {
   };
 
   const payment = read?.kind === 'payment' ? read.payment : null;
-  const leading7 = startsWith7(payment?.amount ?? null);
   const busy = phase === 'reading' || phase === 'saving';
 
   return (
@@ -221,20 +220,14 @@ export default function Scan() {
 
       {phase === 'confirm' && payment ? (
         <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: colors.warn }}>
-          <Txt variant="bodyStrong">{leading7 ? 'Type the amount' : payment.amount ? 'Is this the right amount?' : "Couldn't read the amount"}</Txt>
-          <Txt tone="muted">
-            {leading7
-              ? `Read as ${amountText(payment.amount)}, but the first 7 may be the ₹ sign. Type the amount shown on the screenshot below.`
-              : payment.amount
-                ? "The ₹ sign wasn't read clearly, so a digit may be off. Check it against the screenshot below."
-                : 'Type the amount shown on the screenshot. Everything else that was found is kept.'}
-          </Txt>
+          <Txt variant="bodyStrong">Couldn't read the amount</Txt>
+          <Txt tone="muted">Type the amount shown on the screenshot. Everything else that was found is kept.</Txt>
           {payment.payee || payment.date ? (
             <Txt variant="small" tone="muted">
               {[payment.payee ? `${payment.direction === 'credit' ? 'From' : 'To'} ${payment.payee}` : null, payment.date ? formatDay(payment.date, { year: true }) : null].filter(Boolean).join(' · ')}
             </Txt>
           ) : null}
-          <TextField label="Amount (₹)" value={amountInput} onChangeText={setAmountInput} keyboardType="decimal-pad" autoFocus={!payment.amount || leading7} placeholder="0.00" />
+          <TextField label="Amount (₹)" value={amountInput} onChangeText={setAmountInput} keyboardType="decimal-pad" autoFocus placeholder="0.00" />
           <Row gap={1}>
             <Button title="Continue" icon="checkmark" onPress={confirmAmount} style={{ flex: 1 }} disabled={!parseAmount(amountInput)} />
             <Button title="Cancel" variant="secondary" onPress={goBack} />
@@ -245,8 +238,6 @@ export default function Scan() {
       {uri && phase === 'confirm' ? (
         <Image source={{ uri }} style={{ width: '100%', height: 260, borderRadius: radius.lg, backgroundColor: colors.surfaceAlt }} resizeMode="contain" accessibilityLabel="Selected screenshot" />
       ) : null}
-
-      {phase === 'saved' && saved ? <SavedPanel t={saved} /> : null}
 
       {phase === 'failed' ? (
         <Card style={{ gap: 6, borderWidth: 1.5, borderColor: colors.expense }}>
@@ -286,7 +277,7 @@ export default function Scan() {
         <EmptyState icon="scan-outline" title="Pick a payment screenshot" body="GPay, PhonePe, BHIM, Paytm, bank apps, or a photo of a bill. Payments and money received are both read, with who it was paid to or received from. Tip: share the screenshot to ExpenseMonster to skip this step." />
       ) : null}
 
-      {phase !== 'confirm' && phase !== 'saved' ? (
+      {phase !== 'confirm' ? (
         <Row gap={1}>
           <Button title={uri ? 'Pick another' : 'Choose from gallery'} icon="images-outline" onPress={pick} style={{ flex: 1 }} disabled={busy} />
         </Row>
@@ -295,80 +286,3 @@ export default function Scan() {
     </Screen>
   );
 }
-
-/** Shown after a clear screenshot was saved without asking: what was saved, Undo and Edit. Closes by itself. */
-function SavedPanel({ t }: { t: Transaction }) {
-  const { colors } = useTheme();
-  const cats = useCategoryMap();
-  const cards = useTable('cards');
-  const accounts = useTable('accounts');
-  const [held, setHeld] = useState(false);
-  useEffect(() => {
-    if (held) return;
-    const timer = setTimeout(goBack, 6000);
-    return () => clearTimeout(timer);
-  }, [held]);
-  const card = cards.find((c) => c.id === t.cardId);
-  const account = accounts.find((a) => a.id === t.accountId);
-  const byRule = (t.flags ?? '').split(',').some((f) => f.startsWith('rule:'));
-  const paidBy = t.method === 'card' ? `${card?.name ?? 'Credit card'}${card?.last4 ? ` ••${card.last4}` : ''}${byRule ? ', from your rule' : ''}` : `${t.method === 'upi' ? 'UPI' : t.method === 'bank' ? 'Bank' : t.method}${account ? ` from ${account.name}` : ''}`;
-  const lines: [string, string][] = [
-    ['Category', cats.get(t.categoryId ?? '')?.name ?? 'None'],
-    ['Paid by', paidBy],
-    ['When', formatDay(isoToYMD(t.occurredAt), { year: true })],
-    ...(t.sourceRef ? [['UPI reference', t.sourceRef] as [string, string]] : []),
-  ];
-  return (
-    <Card style={{ gap: space(1.5) }}>
-      <Row gap={1.5}>
-        <IconCircle name="checkmark" state="good" size={44} />
-        <View style={{ flex: 1 }}>
-          <Txt variant="h3">
-            Saved {formatINR(t.amount)}
-            {t.payee ? ` to ${t.payee}` : ''}
-          </Txt>
-          <Txt variant="small" tone="muted">
-            The screenshot was clear, so it didn't need checking
-          </Txt>
-        </View>
-      </Row>
-      <View>
-        {lines.map(([k, v], i) => (
-          <Row key={k} style={{ justifyContent: 'space-between', minHeight: 44, borderTopWidth: i ? 1 : 0, borderTopColor: colors.surfaceAlt }}>
-            <Txt variant="small" tone="muted">
-              {k}
-            </Txt>
-            <Txt variant="bodyStrong" numberOfLines={1} style={{ flexShrink: 1, textAlign: 'right' }}>
-              {v}
-            </Txt>
-          </Row>
-        ))}
-      </View>
-      <Row gap={1}>
-        <Button
-          title="Undo"
-          variant="secondary"
-          style={{ flex: 1 }}
-          onPress={async () => {
-            setHeld(true);
-            await deleteTransaction(t.id);
-            toast('Not saved');
-            goBack();
-          }}
-        />
-        <Button
-          title="Edit"
-          style={{ flex: 1 }}
-          onPress={() => {
-            setHeld(true);
-            router.replace(`/txn/${t.id}`);
-          }}
-        />
-      </Row>
-      <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
-        This closes by itself in a few seconds.
-      </Txt>
-    </Card>
-  );
-}
-

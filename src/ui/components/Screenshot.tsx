@@ -7,9 +7,24 @@ import { space, useTheme } from '../theme';
 import { Txt } from './core';
 
 /** A captured screenshot as a small tile; tapping it opens it full screen. */
-export function ScreenshotThumb({ uri, width = 84, height = 140 }: { uri: string; width?: number; height?: number }) {
+export function ScreenshotThumb({
+  uri,
+  width = 84,
+  height = 140,
+  open: openProp,
+  onOpenChange,
+}: {
+  uri: string;
+  width?: number;
+  height?: number;
+  /** Controlled viewer state, for a separate "View full screen" button. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { colors } = useTheme();
-  const [open, setOpen] = useState(false);
+  const [openSelf, setOpenSelf] = useState(false);
+  const open = openProp ?? openSelf;
+  const setOpen = onOpenChange ?? setOpenSelf;
   return (
     <>
       <Pressable onPress={() => setOpen(true)} accessibilityRole="imagebutton" accessibilityLabel="Open the screenshot full screen" style={{ width, height, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.elevated }}>

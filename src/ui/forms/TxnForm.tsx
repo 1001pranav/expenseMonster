@@ -11,7 +11,7 @@ import {
   type Selection,
 } from "@/domain/amountInput";
 import { billerMeta, viewBill } from "@/domain/bills";
-import { recentRepeats, suggestAmountFix, type Repeat } from "@/domain/captures";
+import { appOf, recentRepeats, suggestAmountFix, type Repeat } from "@/domain/captures";
 import { formatDay, isoToYMD, toISO, type YMD } from "@/domain/dates";
 import { formatINR, type Paise } from "@/domain/money";
 import { LEGACY_INVEST_CATEGORY } from "@/domain/investments";
@@ -168,6 +168,7 @@ export function TxnForm({
   /** "Always use this card when a screenshot says credit card" (saved as one of your rules). */
   const [rememberCredit, setRememberCredit] = useState(true);
   const queue = usePending().transactions;
+  const [viewShot, setViewShot] = useState(false);
 
   const catKind = type === "income" ? "income" : "expense";
   const categories = useSortedCategories(catKind);
@@ -279,6 +280,12 @@ export function TxnForm({
       queue.find((t) => t.id !== existing?.id))
     : undefined;
   const amountFix = pending && existing ? suggestAmountFix(existing.amount, flags) : null;
+  const warned = flags.some(
+    (f) =>
+      f.startsWith("duplicate") ||
+      f === "amount-unsure" ||
+      f === "payment-pending",
+  );
   const repeats = useMemo(
     () => (existing ? [] : recentRepeats(txns, type, today)),
     [existing, txns, type, today],
@@ -292,6 +299,12 @@ export function TxnForm({
     method === "card" &&
     Boolean(cardId) &&
     /credit\s*card/i.test(ocrText ?? "credit card");
+  // A card payment that isn't sure of its card asks, in a highlighted "Paid with" (designs 1b, 2a).
+  const askCard =
+    pending &&
+    type === "expense" &&
+    (Boolean(cardHint) ||
+      (method === "card" && (!cardId || offerCardRule)));
 
   // "Which bill?" — open bills, newest due first, for bill-type categories or when the capture matched a biller.
   const openBills = useMemo(
@@ -494,7 +507,7 @@ export function TxnForm({
               existing?.source === "sms"
                 ? "from a bank SMS"
                 : existing?.source === "ocr"
-                  ? "from a screenshot"
+                  ? `from a ${appOf(existing) ? `${appOf(existing)} ` : ""}screenshot`
                   : null,
             ]
               .filter(Boolean)
@@ -541,7 +554,7 @@ export function TxnForm({
         </View>
       }
     >
-      {pending ? (
+      {pending && (existing?.attachment || warned) ? (
         <Card tone="alt" style={{ gap: 6, flexDirection: "row" }}>
           {existing?.attachment ? (
             <ScreenshotThumb uri={existing.attachment} />
@@ -623,7 +636,7 @@ export function TxnForm({
         </Card>
       ) : existing?.attachment ? (
         <Card style={{ flexDirection: "row", gap: space(1.75), padding: space(1.5) }}>
-          <ScreenshotThumb uri={existing.attachment} width={92} height={150} />
+          <ScreenshotThumb uri={existing.attachment} width={92} height={150} open={viewShot} onOpenChange={setViewShot} />
           <View style={{ flex: 1, gap: 4 }}>
             <Txt variant="bodyStrong">Payment screenshot</Txt>
             <Txt variant="small" tone="muted">
@@ -631,6 +644,14 @@ export function TxnForm({
               Kept on this phone. Tap it to see it full screen.
             </Txt>
             <View style={{ flex: 1 }} />
+            <Button
+              title="View full screen"
+              icon="expand-outline"
+              variant="secondary"
+              size="sm"
+              style={{ alignSelf: "flex-start" }}
+              onPress={() => setViewShot(true)}
+            />
             <Button
               title="Delete screenshot only"
               icon="trash-outline"
@@ -1015,7 +1036,7 @@ export function TxnForm({
 
       <View
         style={
-          cardHint && type === "expense"
+          askCard
             ? {
                 backgroundColor: colors.warnSoft,
                 borderRadius: 20,
@@ -1028,8 +1049,10 @@ export function TxnForm({
       >
       <Field
         label={
-          cardHint && type === "expense"
-            ? `Which card ends in ${cardHint}?`
+          askCard
+            ? cardHint
+              ? `Which card ends in ${cardHint}?`
+              : "Which credit card paid this?"
             : type === "transfer"
               ? "From"
               : type === "income"
