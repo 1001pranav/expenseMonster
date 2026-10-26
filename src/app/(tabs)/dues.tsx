@@ -8,11 +8,11 @@ import { loanEmisPaid } from '@/domain/dues';
 import { loanProgress, scheduleFor } from '@/domain/emi';
 import { FREQUENCY_LABEL } from '@/domain/recurrence';
 import { useDues, useTable, useToday } from '@/data/hooks';
-import { Button, Card, Chip, EmptyState, IconCircle, ListRow, Money, Pill, ProgressBar, Row, Section, Stat, Txt, type IconName } from '@/ui/components/core';
+import { Button, Card, Chip, EmptyState, IconCircle, ListRow, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { CardFace } from '@/ui/components/CardFace';
 import { DueRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
-import { space, useTheme } from '@/ui/theme';
+import { fonts, space, useTheme } from '@/ui/theme';
 
 type Seg = 'all' | 'loans' | 'cards' | 'bills' | 'insurance';
 const SEGS: { key: Seg; label: string; icon: IconName }[] = [
@@ -39,59 +39,48 @@ export default function Dues() {
 }
 
 function AllDues() {
+  const { colors } = useTheme();
   const dues = useDues(45);
   const today = useToday();
   const overdue = dues.filter((d) => d.state === 'overdue');
   const week = dues.filter((d) => d.state === 'due');
   const later = dues.filter((d) => d.state === 'upcoming');
   const owed = dues.filter((d) => !d.incoming && d.state !== 'upcoming').reduce((a, d) => a + (d.amount ?? 0), 0);
-  const month = dues.filter((d) => !d.incoming).reduce((a, d) => a + (d.amount ?? 0), 0);
+  const lateTotal = overdue.filter((d) => !d.incoming).reduce((a, d) => a + (d.amount ?? 0), 0);
+  const money = useMoneyText();
 
   if (!dues.length) {
-    return <EmptyState icon="calendar-outline" title="No dues" body="Add your loans, credit cards, bills and insurance to get reminders before every due date." action="Add something" onAction={() => router.push('/add')} />;
+    return <EmptyState icon="calendar-outline" title="Nothing due" body="Add your loans, credit cards, bills and insurance to get a reminder before each one is due." action="Set up a reminder" onAction={() => router.push('/add')} />;
   }
   const group = (title: string, items: typeof dues) =>
     items.length ? (
       <Section title={title} key={title}>
         <Card padded={false} style={{ overflow: 'hidden' }}>
-          {items.map((d) => (
-            <DueRow key={d.key} d={d} today={today} onPay={() => openPay(d)} />
+          {items.map((d, i) => (
+            <View key={d.key}>
+              {i ? <View style={{ height: 1, backgroundColor: colors.surfaceAlt, marginLeft: space(8.5) }} /> : null}
+              <DueRow d={d} today={today} onPay={() => openPay(d)} />
+            </View>
           ))}
         </Card>
       </Section>
     ) : null;
   return (
     <>
-      <Card tone="primary" style={{ gap: space(1.5) }}>
-        <View style={{ gap: 2 }}>
-          <Txt variant="small" tone="inverse" style={{ opacity: 0.85 }}>
-            Due in the next 7 days
+      <View style={{ gap: 4, paddingHorizontal: 4 }}>
+        <Txt variant="small" tone="muted">
+          Due in the next 7 days
+        </Txt>
+        <Money value={owed} variant="display" decimals="never" fit="narrow" />
+        {lateTotal ? (
+          <Txt variant="small" tone="expense" style={{ fontFamily: fonts.bold }}>
+            {money(lateTotal, { decimals: 'never' })} of it is already late
           </Txt>
-          <Money value={owed} variant="display" tone="inverse" decimals="never" fit="narrow" />
-        </View>
-        {overdue.length ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,79,139,0.3)' }}>
-            <Txt variant="small" tone="inverse">
-              {overdue.length} overdue — pay these first
-            </Txt>
-          </View>
         ) : null}
-        <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.16)' }} />
-        <Row gap={2}>
-          <Stat label="Next 45 days" value={month} tone="inverse" />
-          <View style={{ flex: 1, gap: 2 }}>
-            <Txt variant="caption" tone="inverse" style={{ opacity: 0.75 }}>
-              ITEMS
-            </Txt>
-            <Txt variant="h3" tone="inverse">
-              {dues.length}
-            </Txt>
-          </View>
-        </Row>
-      </Card>
-      {group('Overdue', overdue)}
+      </View>
+      {group('Late', overdue)}
       {group('This week', week)}
-      {group('Coming up', later)}
+      {group('Later', later)}
     </>
   );
 }
@@ -148,13 +137,13 @@ function Loans() {
           <Row gap={2}>
             <View style={{ flex: 1 }}>
               <Txt variant="caption" tone="muted">
-                OUTSTANDING
+                Still to pay
               </Txt>
               <Money value={totalOutstanding} variant="h2" />
             </View>
             <View style={{ flex: 1 }}>
               <Txt variant="caption" tone="muted">
-                MONTHLY EMIs
+                EMIs a month
               </Txt>
               <Money value={totalEmi} variant="h2" />
             </View>
@@ -186,13 +175,13 @@ function Cards() {
                 <Row gap={2}>
                   <View style={{ flex: 1 }}>
                     <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                      UNBILLED
+                      This cycle so far
                     </Txt>
                     <Money value={l.current.total} variant="h3" style={{ color: '#fff' }} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                      {due ? `DUE ${formatDay(due.dueDate).toUpperCase()}` : 'NO BILL DUE'}
+                      {due ? `Due ${formatDay(due.dueDate)}` : 'No bill due'}
                     </Txt>
                     <Money value={due?.remaining ?? 0} variant="h3" style={{ color: '#fff' }} />
                   </View>
@@ -265,7 +254,7 @@ function Insurance() {
     <>
       <Card tone="alt">
         <Txt variant="caption" tone="muted">
-          PREMIUMS PER YEAR
+          Premiums per year
         </Txt>
         <Money value={Math.round(yearly)} variant="h2" />
       </Card>

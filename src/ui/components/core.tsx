@@ -369,7 +369,7 @@ export function Stat({ label, value, tone, compact }: { label: string; value: Pa
   return (
     <View style={{ flex: 1, gap: 2 }}>
       <Txt variant="caption" tone={tone === 'inverse' ? 'inverse' : 'muted'} style={tone === 'inverse' ? { opacity: 0.75 } : undefined}>
-        {label.toUpperCase()}
+        {label}
       </Txt>
       <Money value={value} variant="h3" tone={tone} compact={compact} decimals="never" fit="tight" />
     </View>

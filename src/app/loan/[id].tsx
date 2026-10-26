@@ -85,7 +85,7 @@ export default function LoanDetail() {
           </ProgressRing>
           <View style={{ flex: 1, gap: 4 }}>
             <Txt variant="caption" tone="muted">
-              OUTSTANDING
+              Still to pay
             </Txt>
             <Money value={p.outstanding} variant="h1" decimals="never" fit="narrow" />
             {p.overdueCount ? <Pill label={`${p.overdueCount} EMI overdue`} tone="expense" /> : p.payoffDate ? <Txt variant="small" tone="muted">Free by {formatMonth(monthKey(p.payoffDate))}</Txt> : null}

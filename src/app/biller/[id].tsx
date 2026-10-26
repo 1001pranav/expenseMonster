@@ -103,7 +103,7 @@ export default function BillerDetail() {
         {prepaid ? (
           <View>
             <Txt variant="caption" tone="muted">
-              PLAN VALID TILL
+              Plan valid till
             </Txt>
             <Txt variant="h2" tone={prepaid.state === 'expired' ? 'expense' : prepaid.state === 'expiring' ? 'warn' : 'default'}>
               {prepaid.validUntil ? `${formatDay(prepaid.validUntil, { year: true })} · ${relativeDay(prepaid.validUntil, today)}` : 'No recharge yet'}
@@ -112,7 +112,7 @@ export default function BillerDetail() {
         ) : lpg ? (
           <View>
             <Txt variant="caption" tone="muted">
-              BOOK NEXT AROUND
+              Book next around
             </Txt>
             <Txt variant="h2">{formatDay(lpg.nextDate)}</Txt>
             <Txt variant="small" tone="muted">
@@ -123,7 +123,7 @@ export default function BillerDetail() {
           <Row style={{ justifyContent: 'space-between' }}>
             <View>
               <Txt variant="caption" tone="muted">
-                {current.state === 'paid' ? 'LAST BILL' : 'CURRENT BILL'}
+                {current.state === 'paid' ? 'Last bill' : 'Current bill'}
               </Txt>
               <Money value={current.state === 'paid' ? current.totalDue : current.remaining} variant="h1" />
               <Txt variant="small" tone={current.state === 'overdue' ? 'expense' : 'muted'}>

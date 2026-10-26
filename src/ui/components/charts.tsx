@@ -87,7 +87,7 @@ export function Donut({ slices, size = 168, stroke = 22, onSelect, centerLabel }
         </Svg>
         <View style={{ alignItems: 'center', maxWidth: size - stroke * 2 - 8 }}>
           <Txt variant="caption" tone="muted" numberOfLines={1}>
-            {selected ? selected.label.toUpperCase() : (centerLabel ?? 'TOTAL')}
+            {selected ? selected.label : (centerLabel ?? 'Total')}
           </Txt>
           <Money value={selected ? selected.value : total} variant="h3" compact />
           {selected && total ? (

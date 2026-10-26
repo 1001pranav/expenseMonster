@@ -76,13 +76,13 @@ export default function CardDetail() {
         <Row gap={2}>
           <View style={{ flex: 1 }}>
             <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              OUTSTANDING
+              Still to pay
             </Txt>
             <Money value={ledger.outstanding} variant="h2" style={{ color: '#fff' }} fit="tight" />
           </View>
           <View style={{ flex: 1 }}>
             <Txt variant="caption" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              {ledger.daysToDue !== null ? (ledger.daysToDue < 0 ? 'OVERDUE' : `DUE IN ${ledger.daysToDue} DAYS`) : 'NO BILL DUE'}
+              {ledger.daysToDue !== null ? (ledger.daysToDue < 0 ? 'Late' : `Due in ${ledger.daysToDue} days`) : 'No bill due'}
             </Txt>
             <Money value={unpaid?.remaining ?? 0} variant="h2" style={{ color: '#fff' }} />
           </View>

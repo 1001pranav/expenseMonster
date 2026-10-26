@@ -11,7 +11,8 @@ import { AmountField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
-export default function Budgets() {
+/** The page body, also shown inside the Insights tab. */
+export function BudgetsBody() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const today = useToday();
@@ -45,15 +46,15 @@ export default function Budgets() {
   };
 
   return (
-    <Screen title="Monthly budgets" subtitle="Alerts at 80% and 100% of each budget" back>
+    <>
       {total ? (
         <Card style={{ gap: space(1.25) }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="caption" tone="muted">
-              {formatMonth(month).toUpperCase()} · BUDGETED CATEGORIES
+              {formatMonth(month)}, budgeted categories
             </Txt>
             <Txt variant="caption" tone={over ? 'expense' : 'muted'}>
-              {over ? `${over} OVER` : `${daysLeft} DAYS LEFT`}
+              {over ? `${over} over budget` : `${daysLeft} days left`}
             </Txt>
           </Row>
           <Row gap={0.75} style={{ alignItems: 'baseline' }}>
@@ -116,6 +117,14 @@ export default function Budgets() {
         <Button title="Save" onPress={save} />
         <View style={{ height: space(1) }} />
       </Sheet>
+    </>
+  );
+}
+
+export default function Budgets() {
+  return (
+    <Screen title="Budgets" back>
+      <BudgetsBody />
     </Screen>
   );
 }

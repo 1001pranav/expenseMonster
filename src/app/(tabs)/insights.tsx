@@ -7,12 +7,14 @@ import { addMonths, daysInMonth, formatMonth, fromParts, isoToYMD, monthKey, par
 import { loanEmisPaid } from '@/domain/dues';
 import { scheduleFor } from '@/domain/emi';
 import type { Paise } from '@/domain/money';
-import { financialHealth, type HealthStatus } from '@/domain/health';
+import { financialHealth } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
 import { Bars, HeatCalendar, LineChart, RankedBars, type Slice } from '@/ui/components/charts';
-import { Card, IconButton, ListRow, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
+import { Card, IconButton, Money, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
+import { BudgetsBody } from '../budgets';
+import { TaxBody } from '../tax';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -30,9 +32,9 @@ export default function Insights() {
   const loans = useTable('loans');
   const allTxns = useTable('transactions');
   const health = useMemo(() => financialHealth({ transactions: allTxns, loans, cards, cardOverrides: overrides, budgets }, today, money), [allTxns, loans, cards, overrides, budgets, today, money]);
-  const healthTone: Record<HealthStatus, 'income' | 'warn' | 'expense' | 'muted'> = { good: 'income', watch: 'warn', risk: 'expense', unknown: 'muted' };
   const [range, setRange] = useState<Range>('month');
   const [month, setMonth] = useState(monthKey(today));
+  const [view, setView] = useState<'overview' | 'budgets' | 'tax'>('overview');
 
   const months = range === 'month' ? 1 : range === 'quarter' ? 3 : 12;
   const monthList = Array.from({ length: months }, (_, i) => monthKey(addMonths(`${month}-01`, -i)));
@@ -131,168 +133,179 @@ export default function Insights() {
 
   return (
     <Screen title="Insights" large tabBar right={<IconButton name="sparkles" label="Ask the assistant" onPress={() => router.push('/assistant')} />}>
-      <Section title="Financial health" action="Ask" onAction={() => router.push('/assistant')}>
-        <Card style={{ gap: space(1.5) }}>
-          {health.map((m) => (
-            <View key={m.key} style={{ gap: 4 }}>
-              <Row style={{ justifyContent: 'space-between' }}>
-                <Txt variant="bodyStrong">{m.label}</Txt>
-                <Pill label={m.status === 'unknown' ? 'No data' : `${m.value} · ${m.status}`} tone={healthTone[m.status]} />
-              </Row>
-              <Txt variant="small" tone="muted">
-                {m.reason}
-              </Txt>
-            </View>
-          ))}
-        </Card>
-      </Section>
-
-      {mom.length ? (
-        <Section title="Month on month">
-          <Card style={{ gap: space(1.5) }}>
-            <Bars
-              data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense] }))}
-              colors={[colors.expense]}
-              height={150}
-              highlightLast
-            />
-            <View>
-              {(allMonths ? momRows : momRows.slice(0, 6)).map((r, i) => {
-                const selected = range === 'month' && month === r.month;
-                const flat = r.change !== null && Math.abs(r.change) < 0.005;
-                return (
-                  <Pressable
-                    key={r.month}
-                    onPress={() => {
-                      setRange('month');
-                      setMonth(r.month);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    accessibilityHint="Shows this month's categories below"
-                    style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: space(1),
-                      paddingVertical: space(1.25),
-                      paddingHorizontal: space(1),
-                      marginHorizontal: -space(1),
-                      borderRadius: 12,
-                      borderTopWidth: i ? StyleSheet.hairlineWidth : 0,
-                      borderTopColor: colors.border,
-                      backgroundColor: selected ? colors.primarySoft : pressed ? colors.surfaceAlt : 'transparent',
-                    })}
-                  >
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Txt variant="bodyStrong">
-                        {formatMonth(r.month)}
-                        {r.month === currentMonth ? ' · so far' : ''}
-                      </Txt>
-                      <Txt variant="small" tone="muted" numberOfLines={1}>
-                        {r.income ? `In ${money(r.income, { compact: true })} · ${r.net < 0 ? 'Overspent' : 'Saved'} ${money(Math.abs(r.net), { compact: true })}` : 'No income recorded'}
-                      </Txt>
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                      <Money value={r.expense} variant="bodyStrong" decimals="never" />
-                      {r.change !== null ? (
-                        <Txt variant="small" tone={flat ? 'muted' : r.change > 0 ? 'expense' : 'income'}>
-                          {flat ? 'Same as before' : `${r.change > 0 ? '↑' : '↓'} ${Math.min(999, Math.abs(Math.round(r.change * 100)))}%`}
-                        </Txt>
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {momRows.length > 6 ? (
-              <Pressable onPress={() => setAllMonths((v) => !v)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start' }}>
-                <Txt variant="small" tone="primary">
-                  {allMonths ? 'Show fewer' : `Show all ${momRows.length} months`}
-                </Txt>
-              </Pressable>
-            ) : null}
-            <Txt variant="small" tone="muted">
-              Change is against the month before; the current month is compared with the same days of last month.
-            </Txt>
-          </Card>
-        </Section>
-      ) : null}
-
       <Segmented
-        value={range}
-        onChange={setRange}
+        value={view}
+        onChange={setView}
         options={[
-          { value: 'month', label: 'Month' },
-          { value: 'quarter', label: 'Quarter' },
-          { value: 'year', label: 'Year' },
+          { value: 'overview', label: 'Overview' },
+          { value: 'budgets', label: 'Budgets' },
+          { value: 'tax', label: 'Tax' },
         ]}
       />
-      <Row style={{ justifyContent: 'space-between' }}>
-        <IconButton name="chevron-back" label={range === 'month' ? 'Previous month' : 'Earlier'} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, -1)))} />
-        <Txt variant="h3">{range === 'month' ? formatMonth(month) : `${formatMonth(monthList[monthList.length - 1])} – ${formatMonth(month)}`}</Txt>
-        <IconButton name="chevron-forward" label="Next month" disabled={month >= monthKey(today)} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, 1)))} />
-      </Row>
-
-      <Section title="Spending by category">
-        <Card style={{ gap: space(1.5) }}>
-          <Txt variant="small" tone="muted">
-            {takeaway}
-          </Txt>
-          {slices.length ? <RankedBars slices={slices} onSelect={(k) => router.push({ pathname: '/activity', params: { category: k } })} /> : null}
-        </Card>
-      </Section>
-
-      <Section title="Savings trend">
-        <Card>
-          <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.good} />
-        </Card>
-      </Section>
-
-      <Section title={`Daily spending · ${formatMonth(month)}`}>
-        <Card>
-          <HeatCalendar days={heat} />
-        </Card>
-      </Section>
-
-      {budget.length ? (
-        <Section title="Budgets" action="Edit" onAction={() => router.push('/budgets')}>
+      {view === 'budgets' ? <BudgetsBody /> : view === 'tax' ? <TaxBody /> : (
+        <>
           <Card style={{ gap: space(1.5) }}>
-            {budget.map((b) => (
-              <View key={b.categoryId} style={{ gap: 6 }}>
-                <Row style={{ justifyContent: 'space-between' }}>
-                  <Txt variant="bodyStrong">{cats.get(b.categoryId)?.name ?? 'Category'}</Txt>
-                  <Txt variant="small" tone={b.level === 'over' ? 'expense' : b.level === 'warn' ? 'warn' : 'muted'}>
-                    {money(b.spent, { compact: true })} / {money(b.limit, { compact: true })}
+            {health.map((m) => (
+              <Row key={m.key} gap={1.25} style={{ alignItems: 'flex-start' }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, marginTop: 6, backgroundColor: { good: colors.good, watch: colors.warn, risk: colors.expense, unknown: colors.border }[m.status] }} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Txt variant="bodyStrong">
+                    {m.label}
+                    {m.status === 'unknown' ? '' : `: ${m.value}`}
                   </Txt>
-                </Row>
-                <ProgressBar value={b.ratio} color={b.level === 'over' ? colors.expense : b.level === 'warn' ? colors.warn : colors.good} />
-              </View>
+                  <Txt variant="small" tone="muted">
+                    {m.reason}
+                  </Txt>
+                </View>
+              </Row>
             ))}
           </Card>
-        </Section>
-      ) : null}
 
-      {cardSpend.some((c) => c.spend) ? (
-        <Section title="Credit card spend">
-          <Card>
-            <Bars data={cardSpend.map((c) => ({ key: c.card.id, label: c.card.name.split(' ')[0], values: [c.spend] }))} colors={[colors.primary]} height={130} />
-          </Card>
-        </Section>
-      ) : null}
+          {mom.length ? (
+            <Section title="Month on month">
+              <Card style={{ gap: space(1.5) }}>
+                <Bars
+                  data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense] }))}
+                  colors={[colors.expense]}
+                  height={150}
+                  highlightLast
+                />
+                <View>
+                  {(allMonths ? momRows : momRows.slice(0, 6)).map((r, i) => {
+                    const selected = range === 'month' && month === r.month;
+                    const flat = r.change !== null && Math.abs(r.change) < 0.005;
+                    return (
+                      <Pressable
+                        key={r.month}
+                        onPress={() => {
+                          setRange('month');
+                          setMonth(r.month);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        accessibilityHint="Shows this month's categories below"
+                        style={({ pressed }) => ({
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: space(1),
+                          paddingVertical: space(1.25),
+                          paddingHorizontal: space(1),
+                          marginHorizontal: -space(1),
+                          borderRadius: 12,
+                          borderTopWidth: i ? StyleSheet.hairlineWidth : 0,
+                          borderTopColor: colors.border,
+                          backgroundColor: selected ? colors.primarySoft : pressed ? colors.surfaceAlt : 'transparent',
+                        })}
+                      >
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Txt variant="bodyStrong">
+                            {formatMonth(r.month)}
+                            {r.month === currentMonth ? ' · so far' : ''}
+                          </Txt>
+                          <Txt variant="small" tone="muted" numberOfLines={1}>
+                            {r.income ? `In ${money(r.income, { compact: true })} · ${r.net < 0 ? 'Overspent' : 'Saved'} ${money(Math.abs(r.net), { compact: true })}` : 'No income recorded'}
+                          </Txt>
+                        </View>
+                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                          <Money value={r.expense} variant="bodyStrong" decimals="never" />
+                          {r.change !== null ? (
+                            <Txt variant="small" tone={flat ? 'muted' : r.change > 0 ? 'expense' : 'income'}>
+                              {flat ? 'Same as before' : `${r.change > 0 ? '↑' : '↓'} ${Math.min(999, Math.abs(Math.round(r.change * 100)))}%`}
+                            </Txt>
+                          ) : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {momRows.length > 6 ? (
+                  <Pressable onPress={() => setAllMonths((v) => !v)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start' }}>
+                    <Txt variant="small" tone="primary">
+                      {allMonths ? 'Show fewer' : `Show all ${momRows.length} months`}
+                    </Txt>
+                  </Pressable>
+                ) : null}
+                <Txt variant="small" tone="muted">
+                  Change is against the month before; the current month is compared with the same days of last month.
+                </Txt>
+              </Card>
+            </Section>
+          ) : null}
 
-      {debt ? (
-        <Section title="Debt payoff projection">
-          <Card style={{ gap: space(1) }}>
-            <Txt variant="small" tone="muted">
-              Outstanding loan principal over the next 5 years if you pay every EMI on time.
-            </Txt>
-            <LineChart points={debt.points} labels={debt.labels} color={colors.expense} />
-          </Card>
-        </Section>
-      ) : null}
-      <Card padded={false} style={{ overflow: 'hidden' }}>
-        <ListRow icon="receipt" iconColor={colors.income} title="Tax saver" subtitle="80C, 80D and home-loan deductions this year" chevron onPress={() => router.push('/tax')} />
-      </Card>
+          <Segmented
+            value={range}
+            onChange={setRange}
+            options={[
+              { value: 'month', label: 'Month' },
+              { value: 'quarter', label: 'Quarter' },
+              { value: 'year', label: 'Year' },
+            ]}
+          />
+          <Row style={{ justifyContent: 'space-between' }}>
+            <IconButton name="chevron-back" label={range === 'month' ? 'Previous month' : 'Earlier'} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, -1)))} />
+            <Txt variant="h3">{range === 'month' ? formatMonth(month) : `${formatMonth(monthList[monthList.length - 1])} – ${formatMonth(month)}`}</Txt>
+            <IconButton name="chevron-forward" label="Next month" disabled={month >= monthKey(today)} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, 1)))} />
+          </Row>
+
+          <Section title="Spending by category">
+            <Card style={{ gap: space(1.5) }}>
+              <Txt variant="small" tone="muted">
+                {takeaway}
+              </Txt>
+              {slices.length ? <RankedBars slices={slices} onSelect={(k) => router.push({ pathname: '/activity', params: { category: k } })} /> : null}
+            </Card>
+          </Section>
+
+          <Section title="Savings trend">
+            <Card>
+              <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.good} />
+            </Card>
+          </Section>
+
+          <Section title={`Daily spending · ${formatMonth(month)}`}>
+            <Card>
+              <HeatCalendar days={heat} />
+            </Card>
+          </Section>
+
+          {budget.length ? (
+            <Section title="Budgets" action="Change" onAction={() => setView('budgets')}>
+              <Card style={{ gap: space(1.5) }}>
+                {budget.map((b) => (
+                  <View key={b.categoryId} style={{ gap: 6 }}>
+                    <Row style={{ justifyContent: 'space-between' }}>
+                      <Txt variant="bodyStrong">{cats.get(b.categoryId)?.name ?? 'Category'}</Txt>
+                      <Txt variant="small" tone={b.level === 'over' ? 'expense' : b.level === 'warn' ? 'warn' : 'muted'}>
+                        {money(b.spent, { compact: true })} / {money(b.limit, { compact: true })}
+                      </Txt>
+                    </Row>
+                    <ProgressBar value={b.ratio} color={b.level === 'over' ? colors.expense : b.level === 'warn' ? colors.warn : colors.good} />
+                  </View>
+                ))}
+              </Card>
+            </Section>
+          ) : null}
+
+          {cardSpend.some((c) => c.spend) ? (
+            <Section title="Credit card spend">
+              <Card>
+                <Bars data={cardSpend.map((c) => ({ key: c.card.id, label: c.card.name.split(' ')[0], values: [c.spend] }))} colors={[colors.primary]} height={130} />
+              </Card>
+            </Section>
+          ) : null}
+
+          {debt ? (
+            <Section title="Debt payoff projection">
+              <Card style={{ gap: space(1) }}>
+                <Txt variant="small" tone="muted">
+                  Outstanding loan principal over the next 5 years if you pay every EMI on time.
+                </Txt>
+                <LineChart points={debt.points} labels={debt.labels} color={colors.expense} />
+              </Card>
+            </Section>
+          ) : null}
+        </>
+      )}
     </Screen>
   );
 }

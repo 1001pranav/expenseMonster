@@ -73,7 +73,7 @@ export default function Review() {
                           </Txt>
                           <Txt variant="small" tone="muted" numberOfLines={1}>
                             {relativeDay(isoToYMD(t.occurredAt), today)} · {t.source === 'sms' ? 'SMS' : 'Screenshot'}
-                            {t.method === 'card' ? ` · ${card?.name ?? 'Credit card'}` : ` · ${t.method.toUpperCase()}`}
+                            {t.method === 'card' ? ` · ${card?.name ?? 'Credit card'}` : ` · ${t.method === 'upi' ? 'UPI' : t.method.charAt(0).toUpperCase() + t.method.slice(1)}`}
                           </Txt>
                         </View>
                         <Money value={t.type === 'expense' ? -t.amount : t.amount} variant="h3" tone={t.type === 'income' ? 'income' : 'default'} />

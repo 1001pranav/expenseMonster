@@ -57,7 +57,7 @@ export default function PolicyDetail() {
     >
       <Card style={{ gap: space(1) }}>
         <Txt variant="caption" tone="muted">
-          NEXT PREMIUM
+          Next premium
         </Txt>
         <Money value={policy.premium} variant="h1" />
         <Row gap={1}>

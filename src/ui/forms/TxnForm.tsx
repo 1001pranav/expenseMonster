@@ -189,25 +189,43 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
     goBack();
   };
 
-  const color = type === 'income' ? colors.income : type === 'expense' ? colors.expense : colors.info;
-  const soft = type === 'income' ? colors.incomeSoft : type === 'expense' ? colors.expenseSoft : colors.infoSoft;
+  type Part = 'payee' | 'category' | 'method' | 'date' | 'more';
+  const [open, setOpen] = useState<Part | null>(null);
+  const toggle = (part: Part) => {
+    setKeypad(false);
+    setOpen((o) => (o === part ? null : part));
+  };
+  const catName = categories.find((c) => c.id === categoryId)?.name;
+  const card = cards.find((c) => c.id === cardId);
+  const account = accounts.find((a) => a.id === accountId);
+  const methodLabel = METHODS.find((m) => m.value === method)?.label ?? method;
+  const paidWith = method === 'card' && card ? card.name : `${methodLabel}${account ? ` from ${account.name}` : ''}`;
+  const dateLabel = date === today ? 'Today' : formatDay(date, { year: true });
+  const extras = [note.trim() ? 'Note' : '', splitWith.length ? `Split ${splitWith.length} ways` : '', scope === 'personal' ? 'Private' : ''].filter(Boolean).join(', ');
+  const divider = <View style={{ height: 1, backgroundColor: colors.surfaceAlt, marginHorizontal: space(2) }} />;
+  const title = existing ? (pending ? 'Check this capture' : 'Edit entry') : type === 'income' ? 'Money in' : type === 'transfer' ? 'Move money' : 'New expense';
 
   return (
     <Screen
-      title={existing ? (pending ? 'Review capture' : 'Edit transaction') : 'New transaction'}
+      title={title}
       back
-      right={existing ? <Button title={pending ? 'Reject' : 'Delete'} variant="ghost" size="sm" onPress={onDelete} /> : null}
+      right={existing ? <Button title={pending ? 'Reject' : 'Delete'} variant="ghost" size="sm" onPress={onDelete} /> : <Button title="Set up…" variant="ghost" size="sm" onPress={() => router.push('/add')} />}
       footer={
-        <Row gap={1}>
-          <Button title={pending ? 'Approve' : 'Save'} icon="checkmark" onPress={() => save(pending)} loading={saving} style={{ flex: 1 }} size="lg" variant={pending ? 'success' : 'primary'} />
-        </Row>
+        <Button
+          title={pending ? 'Approve' : amount ? `Save ${formatINR(amount, { decimals: 'auto' })}` : 'Save'}
+          icon="checkmark"
+          onPress={() => save(pending)}
+          loading={saving}
+          size="lg"
+          variant={pending ? 'success' : 'primary'}
+        />
       }
     >
       {pending ? (
         <Card tone="alt" style={{ gap: 6 }}>
           <Row gap={1} wrap>
             <Pill label={existing?.source === 'sms' ? 'From SMS' : existing?.source === 'ocr' ? 'From screenshot' : 'Captured'} tone="info" />
-            {existing?.confidence != null ? <Pill label={`${Math.round(existing.confidence * 100)}% sure`} tone={existing.confidence < 0.7 ? 'warn' : 'income'} /> : null}
+            {existing?.confidence != null ? <Pill label={`${Math.round(existing.confidence * 100)}% sure`} tone={existing.confidence < 0.7 ? 'warn' : 'good'} /> : null}
             {flags.some((f) => f.startsWith('duplicate')) ? <Pill label="Possible duplicate" tone="expense" /> : null}
             {flags.includes('payment-pending') ? <Pill label="Payment was pending" tone="warn" /> : null}
             {flags.includes('amount-unsure') ? <Pill label="Check the amount" tone="warn" /> : null}
@@ -219,12 +237,12 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
           ) : null}
           {existing?.sourceRef ? (
             <Txt variant="small" tone="muted">
-              UPI ref {existing.sourceRef}
+              UPI reference {existing.sourceRef}
             </Txt>
           ) : null}
           {cardHint ? (
             <Txt variant="small" tone="warn">
-              Card ending {cardHint} isn't saved. Add it under Dues → Cards to track its bill.
+              Card ending {cardHint} isn't saved yet. Add it from Dues, Cards to track its bill.
             </Txt>
           ) : null}
           {ocrText ? (
@@ -244,7 +262,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
       ) : null}
 
       <Segmented
-        value={type === 'settlement' ? 'expense' : type}
+        value={type === 'settlement' ? 'transfer' : type}
         onChange={(v) => {
           setType(v);
           setCategoryId(null);
@@ -253,179 +271,215 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         }}
         options={[
           { value: 'expense', label: 'Expense' },
-          { value: 'income', label: 'Income' },
-          { value: 'transfer', label: 'Transfer' },
+          { value: 'income', label: 'Money in' },
+          { value: 'transfer', label: 'Move money' },
         ]}
       />
 
-      <Pressable onPress={() => setKeypad((k) => !k)} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} keypad`} style={{ alignItems: 'center', paddingVertical: space(2.5), borderRadius: radius.xl, backgroundColor: soft }}>
-        <Row gap={0.5} style={{ alignItems: 'flex-start' }}>
-          <Txt variant="h1" style={{ color, marginTop: 6 }}>
-            ₹
-          </Txt>
-          <Txt style={{ fontFamily: fonts.display, fontSize: 52, lineHeight: 64, letterSpacing: -1.5, color: amountStr ? colors.text : colors.textFaint, fontVariant: ['tabular-nums'] }}>
-            {amountStr ? formatINR(Number(amountStr.split('.')[0]) * 100, { symbol: false, decimals: 'never' }) + (amountStr.includes('.') ? `.${amountStr.split('.')[1]}` : '') : '0'}
-          </Txt>
+      {!existing ? (
+        <Row gap={1}>
+          <Button title="Read a screenshot" icon="scan-outline" variant="secondary" size="sm" onPress={() => router.replace('/scan')} style={{ flex: 1 }} />
+          <Button title="Paste a bank SMS" icon="chatbubble-ellipses-outline" variant="secondary" size="sm" onPress={() => router.replace('/paste-sms')} style={{ flex: 1 }} />
         </Row>
-        {!keypad ? (
-          <Txt variant="small" tone="faint">
-            Tap to edit
-          </Txt>
-        ) : null}
-      </Pressable>
-      {keypad ? <Keypad onKey={onKey} /> : null}
-
-      {type === 'transfer' ? (
-        <Field label="Transfer to">
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {cards.map((c) => (
-              <Chip
-                key={c.id}
-                icon="card"
-                label={`Pay ${c.name}`}
-                selected={link.type === 'card' && cardId === c.id}
-                onPress={() => {
-                  setCardId(c.id);
-                  setLink({ type: 'card', id: c.id });
-                  setScope(c.scope);
-                }}
-              />
-            ))}
-            <Chip label="Another account" icon="business" selected={link.type !== 'card'} onPress={() => setLink({ type: null, id: null })} />
-          </View>
-          {link.type === 'card' ? (
-            <Txt variant="small" tone="muted" style={{ marginTop: 6 }}>
-              Card bill payments are transfers, so your spending isn't counted twice.
-            </Txt>
-          ) : null}
-        </Field>
-      ) : (
-        <Field label="Category">
-          {pastCats.length ? (
-            <View style={{ gap: 6, marginBottom: space(1) }}>
-              <Txt variant="small" tone="muted">
-                {pastCats.length > 1
-                  ? `${payee.trim() || 'This payee'} was filed two ways before — pick the one for this payment:`
-                  : `${payee.trim() || 'This payee'} was filed here ${pastCats[0].count === 1 ? 'last time' : `the last ${pastCats[0].count} times`}:`}
-              </Txt>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {pastCats.map((p) => {
-                  const c = categories.find((x) => x.id === p.categoryId)!;
-                  return (
-                    <Chip
-                      key={p.categoryId}
-                      label={`${c.name} ×${p.count}`}
-                      icon={c.icon as IconName}
-                      color={c.color}
-                      selected={categoryId === p.categoryId}
-                      onPress={() => {
-                        setCategoryId(p.categoryId);
-                        setAutoCat(false);
-                      }}
-                    />
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {shownCats.map((c) => (
-              <Chip
-                key={c.id}
-                label={c.name}
-                icon={c.icon as IconName}
-                color={c.color}
-                selected={categoryId === c.id}
-                onPress={() => {
-                  setCategoryId(categoryId === c.id ? null : c.id);
-                  setAutoCat(false);
-                }}
-              />
-            ))}
-            {categories.length > 8 ? <Chip label={showAllCats ? 'Less' : `+${categories.length - 8} more`} onPress={() => setShowAllCats((v) => !v)} /> : null}
-          </View>
-        </Field>
-      )}
-
-      {type === 'expense' && billCategory && openBills.length ? (
-        <Field label="Which bill?">
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {openBills.map(({ v, biller }) => (
-              <Chip
-                key={v.bill.id}
-                icon={billerMeta(biller!.type).icon as IconName}
-                label={`${biller!.name} · ${formatDay(v.bill.dueDate)} · ${formatINR(v.remaining || v.totalDue)}`}
-                selected={link.type === 'bill' && link.id === v.bill.id}
-                onPress={() => {
-                  const on = !(link.type === 'bill' && link.id === v.bill.id);
-                  setLink(on ? { type: 'bill', id: v.bill.id } : { type: null, id: null });
-                  if (on && !amountStr) setAmountStr(amountText(v.remaining));
-                  if (on && !payee) setPayee(biller!.name);
-                }}
-              />
-            ))}
-          </View>
-        </Field>
       ) : null}
 
-      <ChipSelect label={type === 'transfer' ? 'Paid from' : type === 'income' ? 'Received via' : 'Paid with'} value={method} onChange={(v) => v && setMethod(v)} options={METHODS.filter((m) => !(type !== 'expense' && m.value === 'card') || type === 'income')} />
-
-      {method === 'card' && type !== 'transfer' ? (
-        cards.length ? (
-          <ChipSelect label={type === 'income' ? 'Refund to card' : 'Which card?'} value={cardId} onChange={setCardId} options={cards.map((c) => ({ value: c.id, label: `${c.name}${c.last4 ? ` ••${c.last4}` : ''}`, icon: 'card' as IconName }))} />
-        ) : (
-          <Button title="Add a credit card" icon="add" size="sm" variant="secondary" onPress={() => router.push('/card/new')} />
-        )
-      ) : accounts.length ? (
-        <ChipSelect label="Account" value={accountId} onChange={setAccountId} allowNone options={accounts.map((a) => ({ value: a.id, label: `${a.name}${a.last4 ? ` ••${a.last4}` : ''}`, icon: (a.type === 'cash' ? 'cash' : a.type === 'wallet' ? 'wallet' : 'business') as IconName }))} />
-      ) : null}
-
-      <DateField label="Date" value={date} onChange={setDate} />
-      <View style={{ gap: space(1) }}>
-        <TextField label={type === 'income' ? 'From' : 'Paid to'} value={payee} onChangeText={(v) => onPayee(v)} placeholder={type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…'} icon="storefront-outline" />
-        {payeeSuggestions.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {payeeSuggestions.map((p) => (
-              <Chip key={p.name} compact icon="time-outline" label={p.name} onPress={() => onPayee(p.name, p)} />
-            ))}
-          </View>
-        ) : null}
-        {autoCat && categoryId ? (
-          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 2 }}>
-            Filed under {categories.find((c) => c.id === categoryId)?.name} like your past entries — tap a category to change it.
-          </Txt>
-        ) : null}
-      </View>
-
-      <Pressable onPress={() => setMore((m) => !m)} accessibilityRole="button" style={{ paddingVertical: 4 }}>
-        <Txt variant="small" tone="primary">
-          {more ? 'Hide details' : 'Note, split with family, privacy…'}
+      <Pressable onPress={() => { setOpen(null); setKeypad((k) => !k); }} accessibilityRole="button" accessibilityLabel={`Amount ${amountStr || 'zero'} rupees. Tap to ${keypad ? 'hide' : 'show'} the keypad`} style={{ paddingHorizontal: 4, gap: 2 }}>
+        <Txt variant="small" tone="muted">
+          Amount
+        </Txt>
+        <Txt style={{ fontFamily: fonts.display, fontSize: 48, lineHeight: 56, letterSpacing: -2, color: amountStr ? (type === 'income' ? colors.incomeText : colors.text) : colors.textFaint, fontVariant: ['tabular-nums'] }}>
+          ₹{amountStr ? formatINR(Number(amountStr.split('.')[0]) * 100, { symbol: false, decimals: 'never' }) + (amountStr.includes('.') ? `.${amountStr.split('.')[1]}` : '') : '0'}
         </Txt>
       </Pressable>
-      {more ? (
-        <>
-          <TextField label="Note" value={note} onChangeText={setNote} placeholder="Optional" multiline />
-          {members.length > 1 && type === 'expense' ? (
-            <>
-              <ChipSelect label="Paid by" value={payer} onChange={setPayer} options={members.map((m) => ({ value: m.id, label: m.id === selfId ? 'You' : m.name, color: m.color }))} />
-              <Field label="Split equally with" hint={splitWith.length ? `${formatINR(Math.round(amount / splitWith.length))} each` : 'Not shared'}>
+      {keypad ? (
+        <Card style={{ padding: space(1) }}>
+          <Keypad onKey={onKey} />
+          <Button title="Done" variant="secondary" size="sm" onPress={() => { setKeypad(false); setOpen(payee ? null : 'payee'); }} />
+        </Card>
+      ) : null}
+
+      <Card padded={false} style={{ overflow: 'hidden' }}>
+        <FormRow label={type === 'income' ? 'From' : type === 'transfer' ? 'Note' : 'Paid to'} value={payee.trim() || (type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…')} empty={!payee.trim()} open={open === 'payee'} onPress={() => toggle('payee')} />
+        {open === 'payee' ? (
+          <View style={{ paddingHorizontal: space(2), paddingBottom: space(2), gap: space(1) }}>
+            <TextField value={payee} onChangeText={(v) => onPayee(v)} placeholder={type === 'income' ? 'Employer, tenant…' : 'Shop, person, biller…'} icon="storefront-outline" autoFocus />
+            {payeeSuggestions.length ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {payeeSuggestions.map((p) => (
+                  <Chip key={p.name} compact icon="time-outline" label={p.name} onPress={() => { onPayee(p.name, p); setOpen(type === 'transfer' ? 'method' : 'category'); }} />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        {divider}
+
+        {type === 'transfer' ? (
+          <>
+            <FormRow label="To" value={link.type === 'card' ? `Pay ${card?.name ?? 'card'} bill` : 'Another account'} open={open === 'category'} onPress={() => toggle('category')} />
+            {open === 'category' ? (
+              <View style={{ paddingHorizontal: space(2), paddingBottom: space(2), gap: space(1) }}>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {members.map((m) => (
-                    <Chip key={m.id} label={m.id === selfId ? 'You' : m.name} color={m.color} selected={splitWith.includes(m.id)} onPress={() => setSplitWith((s) => (s.includes(m.id) ? s.filter((x) => x !== m.id) : [...s, m.id]))} />
+                  {cards.map((c) => (
+                    <Chip
+                      key={c.id}
+                      icon="card"
+                      label={`Pay ${c.name}`}
+                      selected={link.type === 'card' && cardId === c.id}
+                      onPress={() => {
+                        setCardId(c.id);
+                        setLink({ type: 'card', id: c.id });
+                        setScope(c.scope);
+                        setOpen(null);
+                      }}
+                    />
                   ))}
+                  <Chip label="Another account" icon="business" selected={link.type !== 'card'} onPress={() => { setLink({ type: null, id: null }); setOpen(null); }} />
                 </View>
-              </Field>
-            </>
-          ) : null}
-          <SwitchRow
-            icon="lock-closed-outline"
-            label="Keep private"
-            description="Private entries never leave this phone when syncing with family"
-            value={scope === 'personal'}
-            onChange={(v) => setScope(v ? 'personal' : 'household')}
-          />
-        </>
+                {link.type === 'card' ? (
+                  <Txt variant="small" tone="muted">
+                    Paying a card bill moves money; it isn't counted as spending again.
+                  </Txt>
+                ) : null}
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <FormRow label="Category" value={catName ?? 'Choose'} empty={!catName} open={open === 'category'} onPress={() => toggle('category')} />
+            {open === 'category' ? (
+              <View style={{ paddingHorizontal: space(2), paddingBottom: space(2), gap: space(1) }}>
+                {pastCats.length ? (
+                  <Txt variant="small" tone="muted">
+                    {pastCats.length > 1
+                      ? `${payee.trim() || 'This payee'} was filed two ways before.`
+                      : `${payee.trim() || 'This payee'} was filed as ${categories.find((c) => c.id === pastCats[0].categoryId)?.name} ${pastCats[0].count === 1 ? 'last time' : `the last ${pastCats[0].count} times`}.`}
+                  </Txt>
+                ) : null}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {shownCats.map((c) => (
+                    <Chip
+                      key={c.id}
+                      label={c.name}
+                      icon={c.icon as IconName}
+                      color={colors.primary}
+                      selected={categoryId === c.id}
+                      onPress={() => {
+                        setCategoryId(c.id);
+                        setAutoCat(false);
+                        setOpen(null);
+                      }}
+                    />
+                  ))}
+                  {categories.length > 8 ? <Chip label={showAllCats ? 'Fewer' : `${categories.length - 8} more`} onPress={() => setShowAllCats((v) => !v)} /> : null}
+                </View>
+              </View>
+            ) : null}
+          </>
+        )}
+        {type === 'expense' && billCategory && openBills.length ? (
+          <>
+            {divider}
+            <View style={{ padding: space(2), gap: space(1) }}>
+              <Txt variant="small" tone="muted">
+                Which bill does this pay?
+              </Txt>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {openBills.map(({ v, biller }) => (
+                  <Chip
+                    key={v.bill.id}
+                    icon={billerMeta(biller!.type).icon as IconName}
+                    label={`${biller!.name}, ${formatDay(v.bill.dueDate)}, ${formatINR(v.remaining || v.totalDue)}`}
+                    selected={link.type === 'bill' && link.id === v.bill.id}
+                    onPress={() => {
+                      const on = !(link.type === 'bill' && link.id === v.bill.id);
+                      setLink(on ? { type: 'bill', id: v.bill.id } : { type: null, id: null });
+                      if (on && !amountStr) setAmountStr(amountText(v.remaining));
+                      if (on && !payee) setPayee(biller!.name);
+                    }}
+                  />
+                ))}
+              </View>
+            </View>
+          </>
+        ) : null}
+        {divider}
+
+        <FormRow label={type === 'transfer' ? 'From' : type === 'income' ? 'Received in' : 'Paid with'} value={paidWith} open={open === 'method'} onPress={() => toggle('method')} />
+        {open === 'method' ? (
+          <View style={{ paddingHorizontal: space(2), paddingBottom: space(2), gap: space(1.5) }}>
+            <ChipSelect value={method} onChange={(v) => v && setMethod(v)} options={METHODS.filter((m) => !(type !== 'expense' && m.value === 'card') || type === 'income')} />
+            {method === 'card' && type !== 'transfer' ? (
+              cards.length ? (
+                <ChipSelect label={type === 'income' ? 'Refund to card' : 'Which card?'} value={cardId} onChange={setCardId} options={cards.map((c) => ({ value: c.id, label: `${c.name}${c.last4 ? ` ••${c.last4}` : ''}`, icon: 'card' as IconName }))} />
+              ) : (
+                <Button title="Add a credit card" icon="add" size="sm" variant="secondary" onPress={() => router.push('/card/new')} />
+              )
+            ) : accounts.length ? (
+              <ChipSelect label="Account" value={accountId} onChange={setAccountId} allowNone options={accounts.map((a) => ({ value: a.id, label: `${a.name}${a.last4 ? ` ••${a.last4}` : ''}`, icon: (a.type === 'cash' ? 'cash' : a.type === 'wallet' ? 'wallet' : 'business') as IconName }))} />
+            ) : null}
+          </View>
+        ) : null}
+        {divider}
+
+        <FormRow label="Date" value={dateLabel} open={open === 'date'} onPress={() => toggle('date')} />
+        {open === 'date' ? (
+          <View style={{ paddingHorizontal: space(2), paddingBottom: space(2) }}>
+            <DateField value={date} onChange={(v) => { setDate(v); setOpen(null); }} />
+          </View>
+        ) : null}
+      </Card>
+
+      <Card padded={false} style={{ overflow: 'hidden' }}>
+        <FormRow label="More" value={extras || 'Note, split with family, private'} empty={!extras} open={open === 'more' || more} onPress={() => { setMore(false); toggle('more'); }} />
+        {open === 'more' || more ? (
+          <View style={{ paddingHorizontal: space(2), paddingBottom: space(2), gap: space(1.5) }}>
+            <TextField label="Note" value={note} onChangeText={setNote} placeholder="Optional" multiline />
+            {members.length > 1 && type === 'expense' ? (
+              <>
+                <ChipSelect label="Paid by" value={payer} onChange={setPayer} options={members.map((m) => ({ value: m.id, label: m.id === selfId ? 'You' : m.name, color: m.color }))} />
+                <Field label="Split equally with" hint={splitWith.length ? `${formatINR(Math.round(amount / splitWith.length))} each` : 'Not shared'}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {members.map((m) => (
+                      <Chip key={m.id} label={m.id === selfId ? 'You' : m.name} color={m.color} selected={splitWith.includes(m.id)} onPress={() => setSplitWith((s) => (s.includes(m.id) ? s.filter((x) => x !== m.id) : [...s, m.id]))} />
+                    ))}
+                  </View>
+                </Field>
+              </>
+            ) : null}
+            <SwitchRow icon="lock-closed-outline" label="Keep private" description="Family phones won't see it" value={scope === 'personal'} onChange={(v) => setScope(v ? 'personal' : 'household')} />
+          </View>
+        ) : null}
+      </Card>
+      {autoCat && categoryId && open !== 'category' ? (
+        <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+          {catName} was filled in from your past payments to {payee.trim()}. Tap Category to change it.
+        </Txt>
       ) : null}
     </Screen>
+  );
+}
+
+/** One line of the form: label, current value, and a Change/Done hint; tapping opens its picker below. */
+function FormRow({ label, value, open, empty, onPress }: { label: string; value: string; open: boolean; empty?: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={`${label}: ${value}`}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space(1.5), minHeight: 58, paddingHorizontal: space(2), backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}
+    >
+      <Txt variant="small" tone="muted" style={{ width: 84 }}>
+        {label}
+      </Txt>
+      <Txt variant="bodyStrong" tone={empty ? 'faint' : 'default'} style={{ flex: 1 }} numberOfLines={1}>
+        {value}
+      </Txt>
+      <Txt variant="small" style={{ color: colors.primary, fontFamily: fonts.bold }}>
+        {open ? 'Done' : 'Change'}
+      </Txt>
+    </Pressable>
   );
 }
