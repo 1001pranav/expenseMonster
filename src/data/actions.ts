@@ -90,6 +90,32 @@ export async function autoSaveCapture(id: string): Promise<Transaction | null> {
 /** Rejected captures are kept (as tombstone-like rows) so the same SMS is never offered again. */
 export const rejectCapture = (id: string) => update('transactions', id, { status: 'rejected' });
 
+/** "Not the same payment": drop the possible-duplicate mark so the capture can be approved. */
+export const keepBothCaptures = (id: string) => update('transactions', id, { flags: stripFlag(findById('transactions', id)?.flags ?? null, 'duplicate') });
+
+/**
+ * Answer "Which card ends in 4417?": the capture becomes a payment on that card, and the next
+ * message naming 4417 is matched by itself — the card takes the number when it has none, otherwise
+ * (an add-on card) a rule remembers it.
+ */
+export async function answerCardHint(id: string, cardId: string) {
+  const t = findById('transactions', id);
+  const card = findById('cards', cardId);
+  const hint = (t?.flags ?? '').split(',').find((f) => f.startsWith('card-hint:'))?.split(':')[1];
+  if (!t || !card) return;
+  if (hint && !card.last4) await update('cards', cardId, { last4: hint });
+  else if (hint && card.last4 !== hint) await rememberCard(hint, t.source === 'ocr' ? 'ocr' : 'sms', cardId);
+  await update('transactions', id, { method: 'card', cardId, accountId: null, flags: stripFlag(t.flags, 'card-hint') });
+}
+
+/** A rule of your own: "when a screenshot / SMS mentions `text`, it was paid with this card". */
+export async function rememberCard(text: string, source: 'ocr' | 'sms', cardId: string) {
+  const pattern = text.trim().toLowerCase();
+  const existing = getState().tables.rules.find((r) => !isLearned(r) && r.pattern === pattern && r.field === 'text' && r.source === source);
+  if (existing) return update('rules', existing.id, { method: 'card', cardId, accountId: null });
+  return insert('rules', { pattern, categoryId: '', field: 'text', source, method: 'card', cardId, accountId: null, rename: null, learned: 0, scope: 'household' });
+}
+
 /** Delete a transaction; an investment's trade goes with it (the money and what it bought are one entry). */
 export async function deleteTransaction(id: string) {
   const t = findById('transactions', id);

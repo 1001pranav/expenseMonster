@@ -22,6 +22,10 @@ export interface Settings {
   autoSaveCaptures: boolean;
   /** When the last bank SMS import the user asked for started (ms); the next one reads from here. */
   smsImportedTo: number | null;
+  /** After the first import: read bank SMS received since the last one each time the app opens (never in the background). */
+  smsCheckOnOpen: boolean;
+  /** The Home card offering bank SMS reading was closed. */
+  smsOfferDismissed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,7 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reviewNudge: true,
   hideAmounts: false,
   wipeAfterFailures: false,
-  deleteCapturesAfterApproval: true,
+  deleteCapturesAfterApproval: false,
   defaultTxnScope: 'household',
   theme: 'system',
   syncConflictPolicy: 'ask',
@@ -40,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
   vaultSync: false,
   autoSaveCaptures: true,
   smsImportedTo: null,
+  smsCheckOnOpen: true,
+  smsOfferDismissed: false,
 };
 
 export interface Identity {

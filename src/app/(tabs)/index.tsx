@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import { budgetUsage } from '@/domain/budget';
+import { splitCaptures } from '@/domain/captures';
 import { addMonths, daysInMonth, diffDays, monthKey, parts } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
 import { comparableChange, monthTotals } from '@/domain/transactions';
@@ -9,6 +10,7 @@ import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { useCategoryMap, useConfirmed, useDues, useMembers, usePending, useSelfId, useTable, useToday } from '@/data/hooks';
 import { Card, IconButton, IconCircle, Money, ProgressBar, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
+import { smsCaptureAvailable } from '@/services/smsInbox';
 import { DueRow, TxnRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
 import { fonts, space, useTheme } from '@/ui/theme';
@@ -47,6 +49,10 @@ export default function Home() {
   const budgetTotal = useMemo(() => budgetUsage(budgets, confirmed, month).reduce((a, b) => a + b.limit, 0), [budgets, confirmed, month]);
   const recent = useMemo(() => all.filter((t) => t.status !== 'rejected').slice(0, 5), [all]);
   const reviewCount = pending.transactions.length + pending.bills.length;
+  const fromSms = useMemo(() => pending.transactions.filter((t) => t.source === 'sms'), [pending.transactions]);
+  const smsReady = useMemo(() => splitCaptures(fromSms).ready.length, [fromSms]);
+  // Offered once, until the user imports or closes it: Android asks for SMS access only after they tap Allow.
+  const offerSms = smsCaptureAvailable && !settings.smsImportedTo && !settings.smsOfferDismissed;
 
   const late = dues.filter((x) => x.state === 'overdue' && !x.incoming);
   const soon = dues.filter((x) => x.state !== 'overdue').slice(0, 3);
@@ -129,16 +135,33 @@ export default function Home() {
         </Row>
       </View>
 
-      {late.length || reviewCount || showSetup ? (
+      {late.length || reviewCount || showSetup || offerSms ? (
         <View style={{ gap: space(1.25) }}>
           {late[0] ? <LateCard d={late[0]} today={today} more={late.length - 1} /> : null}
           {reviewCount ? (
             <AttentionRow
-              icon="scan-outline"
+              icon={fromSms.length === reviewCount ? 'chatbubble-ellipses-outline' : 'scan-outline'}
               state="warn"
-              title={reviewCount === 1 ? '1 capture needs a quick check' : `${reviewCount} captures need a quick check`}
+              title={
+                fromSms.length === reviewCount
+                  ? `${reviewCount} new from your bank SMS`
+                  : reviewCount === 1
+                    ? '1 capture needs a quick check'
+                    : `${reviewCount} captures need a quick check`
+              }
+              subtitle={fromSms.length === reviewCount && smsReady ? `${smsReady} read clearly · ${reviewCount - smsReady} need a quick look` : undefined}
               action="Check"
               onPress={() => router.push('/review')}
+            />
+          ) : null}
+          {offerSms ? (
+            <AttentionRow
+              icon="chatbubble-ellipses-outline"
+              title="Record bank payments from SMS"
+              subtitle="Reads bank messages on this phone, only if you allow it"
+              action="Turn on"
+              onPress={() => router.push('/settings/sms')}
+              onClose={() => saveSettings({ smsOfferDismissed: true })}
             />
           ) : null}
           {showSetup ? (

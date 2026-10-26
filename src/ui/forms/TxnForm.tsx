@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, TextInput, View } from "react-native";
+import { Alert, Pressable, TextInput, View } from "react-native";
 import {
   applyAmountKey,
   groupAmount,
@@ -11,6 +11,7 @@ import {
   type Selection,
 } from "@/domain/amountInput";
 import { billerMeta, viewBill } from "@/domain/bills";
+import { recentRepeats, suggestAmountFix, type Repeat } from "@/domain/captures";
 import { formatDay, isoToYMD, toISO, type YMD } from "@/domain/dates";
 import { formatINR, type Paise } from "@/domain/money";
 import { LEGACY_INVEST_CATEGORY } from "@/domain/investments";
@@ -22,17 +23,21 @@ import {
   suggestCategory,
 } from "@/domain/transactions";
 import type { PayMethod, Scope, Transaction, TxnType } from "@/domain/types";
+import { update } from "@/db/repo";
 import { useStore } from "@/db/store";
 import {
+  answerCardHint,
   approveCapture,
   deleteTransaction,
   learnRule,
   rejectCapture,
+  rememberCard,
   restoreTransaction,
   saveTransaction,
 } from "@/data/actions";
 import {
   useMembers,
+  usePending,
   useSelfId,
   useSortedCategories,
   useTable,
@@ -57,8 +62,10 @@ import {
   TextField,
 } from "../components/forms";
 import { Screen, goBack } from "../components/Screen";
+import { ScreenshotThumb } from "../components/Screenshot";
 import { Tile, TileGrid, TileRow } from "../components/tiles";
-import { fonts, radius, space, useTheme } from "../theme";
+import { fonts, space, useTheme } from "../theme";
+import { deleteAttachment } from "@/services/files";
 
 function amountText(paise: Paise | null) {
   if (!paise) return "";
@@ -158,6 +165,9 @@ export function TxnForm({
   );
   const [saving, setSaving] = useState(false);
   const [showOcr, setShowOcr] = useState(false);
+  /** "Always use this card when a screenshot says credit card" (saved as one of your rules). */
+  const [rememberCredit, setRememberCredit] = useState(true);
+  const queue = usePending().transactions;
 
   const catKind = type === "income" ? "income" : "expense";
   const categories = useSortedCategories(catKind);
@@ -262,6 +272,26 @@ export function TxnForm({
   const ruleHits = flags.filter((f) => f.startsWith("rule:"));
   const targets = ruleTargets({ categories, cards, accounts });
   const cardHint = flags.find((f) => f.startsWith("card-hint:"))?.split(":")[1];
+  // Where this capture sits in Check captures, and the one to open after approving it.
+  const position = pending ? queue.findIndex((t) => t.id === existing?.id) : -1;
+  const nextPending = pending
+    ? (queue.slice(position + 1).find((t) => t.id !== existing?.id) ??
+      queue.find((t) => t.id !== existing?.id))
+    : undefined;
+  const amountFix = pending && existing ? suggestAmountFix(existing.amount, flags) : null;
+  const repeats = useMemo(
+    () => (existing ? [] : recentRepeats(txns, type, today)),
+    [existing, txns, type, today],
+  );
+  // A screenshot that said "credit card" but not which one: offer to remember the card picked.
+  const offerCardRule =
+    pending &&
+    existing?.source === "ocr" &&
+    !cardHint &&
+    !ruleHits.length &&
+    method === "card" &&
+    Boolean(cardId) &&
+    /credit\s*card/i.test(ocrText ?? "credit card");
 
   // "Which bill?" — open bills, newest due first, for bill-type categories or when the capture matched a biller.
   const openBills = useMemo(
@@ -329,8 +359,14 @@ export function TxnForm({
         linkId: isFamily ? null : link.id,
       } satisfies Partial<Transaction>;
       if (existing && (pending || approve)) {
+        // Answer "which card ends in …" once, so the next message naming it is matched by itself.
+        if (cardHint && draft.method === "card" && draft.cardId)
+          await answerCardHint(existing.id, draft.cardId);
+        if (offerCardRule && rememberCredit && draft.cardId)
+          await rememberCard("credit card", "ocr", draft.cardId);
         await approveCapture(existing.id, draft);
         toast("Approved", { tone: "success" });
+        if (nextPending) return router.replace(`/txn/${nextPending.id}`);
       } else if (existing) {
         await saveTransaction(draft, existing.id);
         await learnRule({
@@ -430,10 +466,41 @@ export function TxnForm({
     setCategoryId(id);
     setAutoCat(false);
   };
+  // "Again?": the same payee, amount, category and way of paying as the last time.
+  const fillRepeat = (r: Repeat) => {
+    setKeypad(false);
+    // Cursor at the end, where Android's selection report puts it anyway: no keypad timestamp needed.
+    const raw = amountText(r.amount);
+    setAmountStr(raw);
+    setAmountSel({ start: raw.length, end: raw.length });
+    setPayee(r.payee);
+    if (r.categoryId) setCategoryId(r.categoryId);
+    setAutoCat(false);
+    setMethod(r.method);
+    setAutoPay(false);
+    if (r.cardId) setCardId(r.cardId);
+    if (r.accountId) setAccountId(r.accountId);
+  };
 
   return (
     <Screen
       title={title}
+      subtitle={
+        pending
+          ? [
+              queue.length > 1 && position >= 0
+                ? `${position + 1} of ${queue.length}`
+                : null,
+              existing?.source === "sms"
+                ? "from a bank SMS"
+                : existing?.source === "ocr"
+                  ? "from a screenshot"
+                  : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          : undefined
+      }
       back
       right={
         existing ? (
@@ -458,7 +525,9 @@ export function TxnForm({
           <Button
             title={
               pending
-                ? "Approve"
+                ? nextPending
+                  ? "Approve & next"
+                  : "Approve"
                 : amount
                   ? `Save ${formatINR(amount, { decimals: "auto" })}`
                   : "Save"
@@ -473,7 +542,11 @@ export function TxnForm({
       }
     >
       {pending ? (
-        <Card tone="alt" style={{ gap: 6 }}>
+        <Card tone="alt" style={{ gap: 6, flexDirection: "row" }}>
+          {existing?.attachment ? (
+            <ScreenshotThumb uri={existing.attachment} />
+          ) : null}
+          <View style={{ flex: 1, gap: 6 }}>
           <Row gap={1} wrap>
             <Pill
               label={
@@ -514,18 +587,21 @@ export function TxnForm({
           {flags.includes("amount-unsure") ? (
             <Txt variant="small" tone="warn">
               The ₹ sign wasn't read clearly, so a digit may be wrong. Compare
-              with the screenshot below.
+              with the screenshot.
             </Txt>
+          ) : null}
+          {amountFix && amount !== amountFix ? (
+            <Button
+              title={`It's ${formatINR(amountFix, { decimals: "auto" })}`}
+              size="sm"
+              variant="secondary"
+              onPress={() => setAmount(amountText(amountFix))}
+              style={{ alignSelf: "flex-start" }}
+            />
           ) : null}
           {existing?.sourceRef ? (
             <Txt variant="small" tone="muted">
               UPI reference {existing.sourceRef}
-            </Txt>
-          ) : null}
-          {cardHint ? (
-            <Txt variant="small" tone="warn">
-              Card ending {cardHint} isn't saved yet. Add it from Dues, Cards to
-              track its bill.
             </Txt>
           ) : null}
           {ocrText ? (
@@ -543,15 +619,50 @@ export function TxnForm({
               {ocrText}
             </Txt>
           ) : null}
-          {existing?.attachment ? (
-            <Image
-              source={{ uri: existing.attachment }}
-              style={{ width: "100%", height: 220, borderRadius: radius.md }}
-              resizeMode="contain"
-              accessibilityLabel="Captured screenshot"
-            />
-          ) : null}
+          </View>
         </Card>
+      ) : existing?.attachment ? (
+        <Card style={{ flexDirection: "row", gap: space(1.75), padding: space(1.5) }}>
+          <ScreenshotThumb uri={existing.attachment} width={92} height={150} />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Txt variant="bodyStrong">Payment screenshot</Txt>
+            <Txt variant="small" tone="muted">
+              {existing.sourceRef ? `UPI reference ${existing.sourceRef} · ` : ""}
+              Kept on this phone. Tap it to see it full screen.
+            </Txt>
+            <View style={{ flex: 1 }} />
+            <Button
+              title="Delete screenshot only"
+              icon="trash-outline"
+              variant="ghost"
+              size="sm"
+              style={{ alignSelf: "flex-start", paddingHorizontal: 4 }}
+              onPress={() =>
+                Alert.alert(
+                  "Delete the screenshot?",
+                  "The entry stays; only the picture is removed from this phone.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: async () => {
+                        deleteAttachment(existing.attachment);
+                        await update("transactions", existing.id, { attachment: null });
+                        toast("Screenshot deleted");
+                      },
+                    },
+                  ],
+                )
+              }
+            />
+          </View>
+        </Card>
+      ) : existing?.source === "ocr" ? (
+        <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+          The screenshot was deleted after approval. To keep future ones, turn
+          off Delete screenshots after approval in Settings.
+        </Txt>
       ) : null}
 
       <Segmented
@@ -642,6 +753,22 @@ export function TxnForm({
             : "Tap to change the amount"}
         </Txt>
       </Pressable>
+
+      {repeats.length ? (
+        <Field label="Again? One tap fills it all">
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {repeats.map((r) => (
+              <Chip
+                key={`${r.payee}|${r.amount}`}
+                compact
+                icon="time-outline"
+                label={`${r.payee} · ${formatINR(r.amount, { decimals: "auto" })}`}
+                onPress={() => fillRepeat(r)}
+              />
+            ))}
+          </View>
+        </Field>
+      ) : null}
 
       {!existing ? (
         <Row gap={1}>
@@ -886,13 +1013,28 @@ export function TxnForm({
         </Field>
       ) : null}
 
+      <View
+        style={
+          cardHint && type === "expense"
+            ? {
+                backgroundColor: colors.warnSoft,
+                borderRadius: 20,
+                padding: space(1.5),
+                paddingRight: 0,
+                gap: space(1),
+              }
+            : { gap: space(1) }
+        }
+      >
       <Field
         label={
-          type === "transfer"
-            ? "From"
-            : type === "income"
-              ? "Received in"
-              : "Paid with"
+          cardHint && type === "expense"
+            ? `Which card ends in ${cardHint}?`
+            : type === "transfer"
+              ? "From"
+              : type === "income"
+                ? "Received in"
+                : "Paid with"
         }
         hint={
           autoPay && method === "card" && card
@@ -941,6 +1083,16 @@ export function TxnForm({
           />
         ) : null}
       </Field>
+        {offerCardRule ? (
+          <SwitchRow
+            icon="flash-outline"
+            label="Always use this card when a screenshot says credit card"
+            description="Saved as one of your rules; change it under Rules"
+            value={rememberCredit}
+            onChange={setRememberCredit}
+          />
+        ) : null}
+      </View>
 
       <DateField label="Date" value={date} onChange={setDate} />
 
