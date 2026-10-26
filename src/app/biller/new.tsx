@@ -12,6 +12,7 @@ import { Button, Card, Chip, Txt, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { AmountField, ChipSelect, DayOfMonthField, Field, SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
+import { askForReminders } from '@/services/notifications';
 
 export default function BillerForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -86,6 +87,7 @@ export default function BillerForm() {
       const saved = existing ? await update('billers', existing.id, data) : await insert('billers', data);
       await generateFixedBills();
       toast(existing ? 'Bill updated' : mode === 'variable' ? "Added — you'll be asked for the amount each cycle" : 'Added — reminders are on', { tone: 'success' });
+      askForReminders();
       if (!existing && mode === 'variable') router.replace({ pathname: '/bill/new', params: { billerId: saved.id } });
       else router.back();
     } finally {

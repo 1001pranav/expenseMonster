@@ -41,6 +41,18 @@ export async function ensurePermission(): Promise<boolean> {
 }
 
 /**
+ * Ask for notifications the first time something with a due date is saved, when the reason is
+ * obvious (first run no longer asks), then build the schedule at once.
+ */
+export async function askForReminders(): Promise<void> {
+  try {
+    if (await ensurePermission()) await rescheduleAll();
+  } catch (e) {
+    logFailure('reminders: permission request failed', e, 'warn');
+  }
+}
+
+/**
  * Local notifications only: nothing leaves the phone. We cancel and rebuild the whole
  * schedule from current data after changes, which is simpler and safer than tracking
  * individual notification ids (Android keeps scheduled alarms across reboots).
