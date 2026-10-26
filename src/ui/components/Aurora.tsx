@@ -66,20 +66,19 @@ export function GradientTile({
   );
 }
 
-/** The ExpenseMonster mascot: a friendly coin with horns. Mirrors scripts/brand/mark.js. */
-export function BrandMark({ size = 72, color = '#FFFFFF', ink = '#0F5C4A' }: { size?: number; color?: string; ink?: string }) {
+/** The ExpenseMonster mark: a horned monster peeking over the household ledger. Mirrors scripts/brand/mark.js. */
+export function BrandMark({ size = 72, color = '#E8F1EC', ink = '#0F5C4A' }: { size?: number; color?: string; ink?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel="ExpenseMonster">
-      <Path d="M30 34 C24 28 22 19 25 11 C30 17 36 22 43 25 Z" fill={color} />
-      <Path d="M70 34 C76 28 78 19 75 11 C70 17 64 22 57 25 Z" fill={color} />
-      <Circle cx={50} cy={56} r={34} fill={color} />
-      <Circle cx={50} cy={56} r={28} fill="none" stroke={ink} strokeOpacity={0.1} strokeWidth={2.5} />
-      <Ellipse cx={39} cy={49} rx={4.8} ry={6.2} fill={ink} />
-      <Ellipse cx={61} cy={49} rx={4.8} ry={6.2} fill={ink} />
-      <Circle cx={40.5} cy={46.8} r={1.6} fill="#FFFFFF" />
-      <Circle cx={62.5} cy={46.8} r={1.6} fill="#FFFFFF" />
-      <Path d="M36 62 Q50 64 64 62 Q62 78 50 78 Q38 78 36 62 Z" fill={ink} />
-      <Path d="M44 62.6 L47 69 L50 63 Z" fill={color} />
+    <Svg width={size} height={size} viewBox="0 4 100 100" accessibilityLabel="ExpenseMonster">
+      <Path d="M38 35 C31 31 28 22 30 14 C34 20 40 24 46 28 Z" fill={color} />
+      <Path d="M62 35 C69 31 72 22 70 14 C66 20 60 24 54 28 Z" fill={color} />
+      <Circle cx={50} cy={46} r={19} fill={color} />
+      <Ellipse cx={43} cy={43.5} rx={3.4} ry={4.4} fill={ink} />
+      <Ellipse cx={57} cy={43.5} rx={3.4} ry={4.4} fill={ink} />
+      <Rect x={22} y={52} width={56} height={34} rx={6} fill="#FFFFFF" />
+      <Path d="M31 66 H69 M31 75 H58" stroke={ink} strokeOpacity={0.35} strokeWidth={3} strokeLinecap="round" />
+      <Rect x={31} y={47} width={11} height={12} rx={5.5} fill="#C7DCD2" />
+      <Rect x={58} y={47} width={11} height={12} rx={5.5} fill="#C7DCD2" />
     </Svg>
   );
 }

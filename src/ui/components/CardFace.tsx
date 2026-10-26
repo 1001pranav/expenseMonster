@@ -6,7 +6,7 @@ import { GradientFill } from './Aurora';
 import { Row, Txt } from './core';
 
 export function CardFace({ name, last4, color, children }: { name: string; last4: string | null; color: string | null; children?: ReactNode }) {
-  const base = color && /^#[0-9a-f]{6}$/i.test(color) ? color : '#2A1F7A';
+  const base = color && /^#[0-9a-f]{6}$/i.test(color) ? color : '#14201B';
   return (
     <View style={{ borderRadius: radius.lg, shadowColor: base, shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 6, backgroundColor: base }}>
       <View style={{ borderRadius: radius.lg, padding: space(2.25), gap: space(1.5), overflow: 'hidden' }}>
