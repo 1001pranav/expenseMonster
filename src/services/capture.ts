@@ -175,6 +175,9 @@ function parseMessage(sender: string, body: string, received: YMD): Parsed | nul
   return parseSms(body, received);
 }
 
+/** What a pasted message says, read without saving anything (Paste SMS shows it live). */
+export const readSms = (text: string, sender = ''): Parsed | null => (text.trim() ? parseMessage(sender, text, todayYMD()) : null);
+
 async function captureParsed(parsed: Parsed, raw: string, hash: string, received: YMD, source: 'sms', summary: CaptureSummary, fallbackISO: string | null) {
   if (parsed.kind === 'bill') return saveDraftBill(parsed, raw, hash, received, null, summary);
   if (parsed.kind === 'card_statement') return saveStatement(parsed, received, summary);

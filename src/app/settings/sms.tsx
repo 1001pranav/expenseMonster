@@ -1,14 +1,16 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Linking } from 'react-native';
+import { Linking, View } from 'react-native';
 import { formatDay, toYMD } from '@/domain/dates';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { useTable } from '@/data/hooks';
 import { importBankSms, requestSmsPermission, smsCaptureAvailable } from '@/services/smsInbox';
-import { Button, Card, Chip, ListRow, Row, Section, Txt } from '@/ui/components/core';
+import { GradientTile } from '@/ui/components/Aurora';
+import { Button, Card, Chip, IconCircle, ListRow, Row, Section, Txt, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
-import { Screen } from '@/ui/components/Screen';
+import { SwitchRow } from '@/ui/components/forms';
+import { Screen, goBack } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
 const PERIODS = [
@@ -17,18 +19,28 @@ const PERIODS = [
   { months: 6, label: '6 months' },
 ];
 
+const PROMISES: { icon: IconName; state?: 'good'; title: string; body: string }[] = [
+  { icon: 'checkmark', state: 'good', title: 'Read', body: 'Bank, card and bill messages only' },
+  { icon: 'close', title: 'Skipped', body: 'Personal chats, OTPs, offers, failed payments' },
+  { icon: 'lock-closed-outline', title: 'Stays on this phone', body: 'The message text is never kept or uploaded' },
+];
+
 /**
- * Bank messages reach the app when the user pastes one or, in builds made with SMS capture, when they
- * tap Import here: only then is the inbox read (bank senders only, never OTPs; services/smsInbox.ts).
+ * Bank messages reach the app when the user pastes one or, in builds made with SMS capture, after
+ * they tap "Allow and import" here: only then does Android ask for SMS access. After that, new bank
+ * SMS are read each time the app opens (never in the background) unless the user turns it off.
  * Taught formats help the parser recognise either.
  */
 export default function SmsSettings() {
   const { colors } = useTheme();
   const formats = useTable('sms_formats');
   const importedTo = useStore((s) => s.settings.smsImportedTo);
+  const checkOnOpen = useStore((s) => s.settings.smsCheckOnOpen);
   const [importing, setImporting] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [pickPeriod, setPickPeriod] = useState(false);
+  const [months, setMonths] = useState(3);
+  const firstTime = smsCaptureAvailable && !importedTo;
 
   const run = async (since: number) => {
     const perm = await requestSmsPermission();
@@ -44,6 +56,7 @@ export default function SmsSettings() {
         !added ? (read ? 'Those bank SMS are already in' : 'No new bank SMS found') : waiting ? `${added} added, ${waiting} to check in Check captures` : `${added} bank SMS saved`,
         { tone: 'success' },
       );
+      if (waiting) router.push('/review');
     } catch (e) {
       toast((e as Error).message, { tone: 'error' });
     } finally {
@@ -51,18 +64,90 @@ export default function SmsSettings() {
     }
   };
 
-  const fromMonths = (months: number) => {
+  const fromMonths = (m: number) => {
     const d = new Date();
-    d.setMonth(d.getMonth() - months);
+    d.setMonth(d.getMonth() - m);
     return run(d.getTime());
   };
 
+  const checkSwitch = (
+    <SwitchRow icon="chatbubble-ellipses-outline" label="Check for new ones when I open the app" description="Never in the background" value={checkOnOpen} onChange={(v) => saveSettings({ smsCheckOnOpen: v })} />
+  );
+  const blockedNote = blocked ? (
+    <Card tone="alt" style={{ gap: space(1) }}>
+      <Txt variant="small" tone="muted">
+        Android isn't asking any more. Open App info and allow SMS. If the app was installed outside Play, first tap ⋮ → Allow restricted settings there.
+      </Txt>
+      <Button title="Open App info" icon="settings-outline" variant="secondary" size="sm" onPress={() => Linking.openSettings()} />
+    </Card>
+  ) : null;
+
   return (
-    <Screen title="Bank SMS" back>
-      {smsCaptureAvailable ? (
+    <Screen
+      title="Bank SMS"
+      back
+      footer={
+        firstTime ? (
+          <Row gap={1}>
+            <Button
+              title="Not now"
+              variant="secondary"
+              size="lg"
+              style={{ flex: 1 }}
+              onPress={() => {
+                saveSettings({ smsOfferDismissed: true });
+                goBack();
+              }}
+            />
+            <Button title="Allow and import" icon="download-outline" size="lg" loading={importing} style={{ flex: 1.5 }} onPress={() => fromMonths(months)} />
+          </Row>
+        ) : undefined
+      }
+    >
+      {firstTime ? (
+        <>
+          <View style={{ alignItems: 'center', gap: space(1.25), paddingHorizontal: space(2) }}>
+            <GradientTile icon="chatbubble-ellipses-outline" size={64} radius={20} iconSize={30} />
+            <Txt variant="h3" style={{ textAlign: 'center' }}>
+              Record bank payments from SMS
+            </Txt>
+            <Txt tone="muted" style={{ textAlign: 'center' }}>
+              They wait in Check captures for you to approve. Nothing is saved on its own.
+            </Txt>
+          </View>
+          <Card style={{ gap: space(1.75) }}>
+            {PROMISES.map((p) => (
+              <Row key={p.title} gap={1.5}>
+                <IconCircle name={p.icon} state={p.state} />
+                <View style={{ flex: 1 }}>
+                  <Txt variant="bodyStrong">{p.title}</Txt>
+                  <Txt variant="small" tone="muted">
+                    {p.body}
+                  </Txt>
+                </View>
+              </Row>
+            ))}
+          </Card>
+          <View style={{ gap: 6 }}>
+            <Txt variant="small" tone="muted" style={{ paddingHorizontal: 2 }}>
+              Bring in bank SMS from the last
+            </Txt>
+            <Row gap={1} wrap>
+              {PERIODS.map((p) => (
+                <Chip key={p.months} label={p.label} selected={months === p.months} onPress={() => setMonths(p.months)} />
+              ))}
+            </Row>
+          </View>
+          {checkSwitch}
+          {blockedNote}
+          <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
+            {importing ? 'Reading your bank SMS…' : 'Android asks for permission after you tap Allow.'}
+          </Txt>
+        </>
+      ) : smsCaptureAvailable ? (
         <Card style={{ gap: space(1.5) }}>
           <Txt tone="muted">
-            ExpenseMonster reads your SMS only when you tap Import, never in the background. It keeps just bank and payment messages that look like a payment, never OTPs or personal messages, and doesn't keep their text.
+            ExpenseMonster reads only bank and payment messages that look like a payment, never OTPs or personal messages, and doesn't keep their text.
           </Txt>
           {importedTo && !pickPeriod ? (
             <>
@@ -83,14 +168,8 @@ export default function SmsSettings() {
               {importing ? <Txt variant="small" tone="muted">Reading your bank SMS…</Txt> : null}
             </>
           )}
-          {blocked ? (
-            <>
-              <Txt variant="small" tone="muted">
-                Android isn't asking any more. Open App info and allow SMS. If the app was installed outside Play, first tap ⋮ → Allow restricted settings there.
-              </Txt>
-              <Button title="Open App info" icon="settings-outline" variant="secondary" size="sm" onPress={() => Linking.openSettings()} />
-            </>
-          ) : null}
+          {checkSwitch}
+          {blockedNote}
         </Card>
       ) : (
         <Card>

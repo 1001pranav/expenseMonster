@@ -2,6 +2,8 @@ import Constants from 'expo-constants';
 import { Directory, File, Paths } from 'expo-file-system';
 import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { autoSaveCapture } from '@/data/actions';
+import { saveSettings } from '@/db/repo';
+import { getState } from '@/db/store';
 import { captureText } from './capture';
 import { logFailure, logInfo } from './diagnostics';
 
@@ -27,6 +29,11 @@ export async function requestSmsPermission(): Promise<SmsPermission> {
   if (await PermissionsAndroid.check(perm)) return 'granted';
   const res = await PermissionsAndroid.request(perm);
   return res === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : res === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ? 'blocked' : 'denied';
+}
+
+/** Whether READ_SMS is already granted. Never shows the Android prompt. */
+export async function smsPermissionGranted(): Promise<boolean> {
+  return smsCaptureAvailable && PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
 }
 
 export interface SmsImport {
@@ -98,4 +105,17 @@ async function drain(): Promise<SmsImport> {
   }
   if (files.length) logInfo(`sms: ${files.length} read, ${added} new, ${saved} saved automatically`);
   return { read: files.length, added, saved };
+}
+
+/**
+ * On app open, after the user has imported once and left "Check for new ones when I open the app"
+ * on: read bank SMS received since the last import. Never asks for the permission; if it was
+ * taken away in Android settings this does nothing (and only drains leftovers).
+ */
+export async function checkNewBankSms(): Promise<SmsImport> {
+  const { smsCheckOnOpen, smsImportedTo } = getState().settings;
+  if (!smsCheckOnOpen || !smsImportedTo || !(await smsPermissionGranted())) return drainSmsInbox();
+  const { startedAt, ...summary } = await importBankSms(smsImportedTo);
+  await saveSettings({ smsImportedTo: startedAt });
+  return summary;
 }

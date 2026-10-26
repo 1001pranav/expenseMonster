@@ -1,12 +1,17 @@
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
+import { cardHintOf, duplicateOf, splitCaptures } from '@/domain/captures';
 import { formatDay, isoToYMD, relativeDay } from '@/domain/dates';
+import { formatINR } from '@/domain/money';
 import { flagsOf } from '@/domain/transactions';
-import type { Transaction } from '@/domain/types';
-import { remove, update } from '@/db/repo';
-import { approveCapture, rejectCapture } from '@/data/actions';
+import type { Category, CreditCard, Transaction } from '@/domain/types';
+import { findById, remove, saveSettings, update } from '@/db/repo';
+import { useStore } from '@/db/store';
+import { answerCardHint, approveCapture, keepBothCaptures, rejectCapture } from '@/data/actions';
 import { useCategoryMap, usePending, useTable, useToday } from '@/data/hooks';
-import { Button, Card, EmptyState, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
+import { importBankSms, requestSmsPermission, smsCaptureAvailable } from '@/services/smsInbox';
+import { Button, Card, Chip, EmptyState, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
@@ -19,6 +24,9 @@ export default function Review() {
   const cards = useTable('cards');
   const billers = useTable('billers');
   const today = useToday();
+  const importedTo = useStore((s) => s.settings.smsImportedTo);
+  const [importing, setImporting] = useState(false);
+  const { ready, needsYou } = useMemo(() => splitCaptures(transactions), [transactions]);
 
   const approve = async (t: Transaction) => {
     await approveCapture(t.id);
@@ -28,11 +36,25 @@ export default function Review() {
     await rejectCapture(t.id);
     toast('Rejected', { actionLabel: 'Undo', onAction: () => update('transactions', t.id, { status: 'pending' }) });
   };
-  const confident = transactions.filter((t) => (t.confidence ?? 0) >= 0.8 && t.categoryId && !flagsOf(t).some((f) => f.startsWith('duplicate')));
+  const approveReady = async () => {
+    for (const t of ready) await approveCapture(t.id);
+    toast(`Approved ${ready.length}`, { tone: 'success' });
+  };
 
-  const approveConfident = async () => {
-    for (const t of confident) await approveCapture(t.id);
-    toast(`Approved ${confident.length}`, { tone: 'success' });
+  // Tapping Import is the user asking, so the Android prompt may show here (never on its own).
+  const importSms = async () => {
+    if (!importedTo) return router.push('/settings/sms');
+    if ((await requestSmsPermission()) !== 'granted') return toast('Android did not allow reading SMS. Allow it in Bank SMS settings.', { tone: 'error' });
+    setImporting(true);
+    try {
+      const { added, startedAt } = await importBankSms(importedTo);
+      await saveSettings({ smsImportedTo: startedAt });
+      toast(added ? `${added} new from your bank SMS` : 'No new bank SMS', { tone: added ? 'success' : 'default' });
+    } catch (e) {
+      toast((e as Error).message, { tone: 'error' });
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -40,61 +62,49 @@ export default function Review() {
       title="Check captures"
       subtitle="Nothing is saved until you approve it"
       back
-      footer={confident.length > 1 ? <Button title={`Approve ${confident.length} that were read clearly`} icon="checkmark-done" variant="success" size="lg" onPress={approveConfident} /> : undefined}
+      right={smsCaptureAvailable ? <Button title="Import" icon="download-outline" variant="ghost" size="sm" loading={importing} onPress={importSms} /> : undefined}
+      footer={ready.length ? <Button title={ready.length === 1 ? 'Approve the one read clearly' : `Approve ${ready.length} that were read clearly`} icon="checkmark-done" variant="success" size="lg" onPress={approveReady} /> : undefined}
     >
       {transactions.length + bills.length === 0 ? (
         <EmptyState icon="checkmark-done-circle-outline" title="All caught up" body="Share a payment screenshot from GPay / PhonePe to ExpenseMonster, or paste a bank SMS." action="Scan a screenshot" onAction={() => router.replace('/scan')} />
       ) : null}
 
-      {transactions.length ? (
-        <Section title={`Transactions · ${transactions.length}`}>
+      {ready.length ? (
+        <Section title={`Ready · ${ready.length}`}>
           <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
-            Tap one to change it. Swipe it sideways for Approve and Reject.
+            Read clearly, from payees you know. Tap one to change it.
+          </Txt>
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {ready.map((t, i) => (
+              <View key={t.id}>
+                {i ? <View style={{ height: 1, backgroundColor: colors.surfaceAlt, marginLeft: space(8.5) }} /> : null}
+                <Pressable onPress={() => router.push(`/txn/${t.id}`)} accessibilityRole="button" style={({ pressed }) => ({ paddingHorizontal: space(2), paddingVertical: space(1.5), backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}>
+                  <CaptureLine t={t} cat={cats.get(t.categoryId ?? '')} card={cards.find((c) => c.id === t.cardId)} today={today} />
+                </Pressable>
+              </View>
+            ))}
+          </Card>
+        </Section>
+      ) : null}
+
+      {needsYou.length ? (
+        <Section title={`Needs you · ${needsYou.length}`}>
+          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+            Answer the question on each, or tap it to change anything. Swipe for Approve and Reject.
           </Txt>
           <View style={{ gap: space(1.25) }}>
-            {transactions.map((t) => {
-              const flags = flagsOf(t);
-              const cat = cats.get(t.categoryId ?? '');
-              const card = cards.find((c) => c.id === t.cardId);
-              const dup = flags.some((f) => f.startsWith('duplicate'));
-              return (
-                <Card key={t.id} padded={false} style={{ overflow: 'hidden' }}>
-                  <SwipeRow left={[{ label: 'Approve', icon: 'checkmark', color: colors.good, onPress: () => approve(t) }]} right={[{ label: 'Reject', icon: 'close', color: colors.expense, onPress: () => reject(t) }]}>
-                    <View style={{ padding: space(2), gap: space(1.25) }}>
-                      <Row gap={1.5}>
-                        <IconCircle name={t.type === 'income' ? 'arrow-down' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? 'arrow-up')} color={t.type === 'income' ? colors.income : (cat?.color ?? colors.expense)} />
-                        <View style={{ flex: 1 }}>
-                          <Txt variant="bodyStrong" numberOfLines={1}>
-                            {t.payee ?? (t.type === 'income' ? 'Money received' : 'Payment')}
-                          </Txt>
-                          <Txt variant="small" tone="muted" numberOfLines={1}>
-                            {relativeDay(isoToYMD(t.occurredAt), today)} · {t.source === 'sms' ? 'SMS' : 'Screenshot'}
-                            {t.method === 'card' ? ` · ${card?.name ?? 'Credit card'}` : ` · ${t.method === 'upi' ? 'UPI' : t.method.charAt(0).toUpperCase() + t.method.slice(1)}`}
-                          </Txt>
-                        </View>
-                        <Money value={t.type === 'expense' ? -t.amount : t.amount} variant="h3" tone={t.type === 'income' ? 'income' : 'default'} />
-                      </Row>
-                      <Row gap={1} wrap>
-                        {[
-                          dup ? <Pill key="dup" label="Possible duplicate" tone="expense" /> : null,
-                          (t.confidence ?? 1) < 0.7 ? <Pill key="amt" label="Check the amount" tone="warn" /> : null,
-                          cat ? <Pill key="cat" label={cat.name} tone="primary" /> : <Pill key="nocat" label="No category" tone="warn" />,
-                          t.linkType === 'bill' ? <Pill key="bill" label="Pays a bill" tone="info" /> : null,
-                          t.linkType === 'card' ? <Pill key="cardbill" label="Card bill payment" tone="info" /> : null,
-                          flags.includes('refund') ? <Pill key="refund" label="Refund" tone="income" /> : null,
-                        ]
-                          .filter(Boolean)
-                          .slice(0, 2)}
-                      </Row>
-                      <Row gap={1}>
-                        <Button title="Approve" size="sm" variant="success" icon="checkmark" onPress={() => approve(t)} style={{ flex: 1 }} />
-                        <Button title="Change" size="sm" variant="secondary" onPress={() => router.push(`/txn/${t.id}`)} style={{ flex: 1 }} />
-                      </Row>
-                    </View>
-                  </SwipeRow>
-                </Card>
-              );
-            })}
+            {needsYou.map((t) => (
+              <Card key={t.id} padded={false} style={{ overflow: 'hidden' }}>
+                <SwipeRow left={[{ label: 'Approve', icon: 'checkmark', color: colors.good, onPress: () => approve(t) }]} right={[{ label: 'Reject', icon: 'close', color: colors.expense, onPress: () => reject(t) }]}>
+                  <View style={{ padding: space(2), gap: space(1.25) }}>
+                    <Pressable onPress={() => router.push(`/txn/${t.id}`)} accessibilityRole="button" accessibilityHint="Opens it to change">
+                      <CaptureLine t={t} cat={cats.get(t.categoryId ?? '')} card={cards.find((c) => c.id === t.cardId)} today={today} />
+                    </Pressable>
+                    <Question t={t} cards={cards} hasCategory={Boolean(cats.get(t.categoryId ?? ''))} onApprove={() => approve(t)} onReject={() => reject(t)} />
+                  </View>
+                </SwipeRow>
+              </Card>
+            ))}
           </View>
         </Section>
       ) : null}
@@ -125,7 +135,98 @@ export default function Review() {
           })}
         </Section>
       ) : null}
-
     </Screen>
+  );
+}
+
+function CaptureLine({ t, cat, card, today }: { t: Transaction; cat?: Category; card?: CreditCard; today: string }) {
+  const how = t.method === 'card' ? (card?.name ?? 'Credit card') : t.method === 'upi' ? 'UPI' : t.method.charAt(0).toUpperCase() + t.method.slice(1);
+  return (
+    <Row gap={1.5}>
+      <IconCircle name={t.type === 'income' ? 'arrow-down' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? 'arrow-up')} state={t.type === 'income' ? 'income' : undefined} />
+      <View style={{ flex: 1 }}>
+        <Txt variant="bodyStrong" numberOfLines={1}>
+          {t.payee ?? (t.type === 'income' ? 'Money received' : 'Payment')}
+        </Txt>
+        <Txt variant="small" tone="muted" numberOfLines={1}>
+          {[relativeDay(isoToYMD(t.occurredAt), today), t.source === 'sms' ? 'SMS' : 'Screenshot', cat?.name, how].filter(Boolean).join(' · ')}
+        </Txt>
+      </View>
+      <Money value={t.type === 'expense' ? -t.amount : t.amount} variant="h3" tone={t.type === 'income' ? 'income' : 'default'} />
+    </Row>
+  );
+}
+
+/** The one thing a capture needs from you, answered right on its card. */
+function Question({ t, cards, hasCategory, onApprove, onReject }: { t: Transaction; cards: CreditCard[]; hasCategory: boolean; onApprove: () => void; onReject: () => void }) {
+  const flags = flagsOf(t);
+  const hint = cardHintOf(t);
+  const dupId = duplicateOf(t);
+
+  if (dupId) {
+    const other = findById('transactions', dupId);
+    return (
+      <>
+        <Row gap={1} wrap>
+          <Pill label="Possible duplicate" tone="expense" />
+          {other ? (
+            <Txt variant="small" tone="muted">
+              {formatINR(other.amount)}
+              {other.payee ? ` to ${other.payee}` : ''}, {formatDay(isoToYMD(other.occurredAt))}
+            </Txt>
+          ) : null}
+        </Row>
+        <Row gap={1}>
+          <Button title="Same one, discard" size="sm" variant="secondary" style={{ flex: 1 }} onPress={onReject} />
+          <Button title="Keep both" size="sm" variant="secondary" style={{ flex: 1 }} onPress={() => keepBothCaptures(t.id)} />
+        </Row>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {hint ? (
+        <>
+          <Row gap={1} wrap>
+            <Pill label="Which card?" tone="warn" />
+            <Txt variant="small" tone="muted">
+              Card ending {hint} isn't saved
+            </Txt>
+          </Row>
+          <Row gap={1} wrap>
+            {cards.map((c) => (
+              <Chip
+                key={c.id}
+                compact
+                icon="card"
+                label={c.name}
+                onPress={async () => {
+                  await answerCardHint(t.id, c.id);
+                  toast(`${c.name} ••${hint}: remembered`, { tone: 'success' });
+                }}
+              />
+            ))}
+            <Chip compact icon="add" label="New card" onPress={() => router.push('/card/new')} />
+          </Row>
+        </>
+      ) : (
+        <Row gap={1} wrap>
+          {[
+            flags.includes('amount-unsure') ? <Pill key="amt" label="Check the amount" tone="warn" /> : null,
+            flags.includes('payment-pending') ? <Pill key="pend" label="Payment was pending" tone="warn" /> : null,
+            !hasCategory ? <Pill key="cat" label="No category" tone="warn" /> : null,
+            !t.payee?.trim() ? <Pill key="payee" label="Who was it paid to?" tone="warn" /> : null,
+            (t.confidence ?? 1) < 0.8 ? <Pill key="sure" label="Not read clearly" tone="warn" /> : null,
+          ]
+            .filter(Boolean)
+            .slice(0, 2)}
+        </Row>
+      )}
+      <Row gap={1}>
+        <Button title="Approve" size="sm" variant="success" icon="checkmark" onPress={onApprove} style={{ flex: 1 }} disabled={Boolean(hint)} />
+        <Button title="Change" size="sm" variant="secondary" onPress={() => router.push(`/txn/${t.id}`)} style={{ flex: 1 }} />
+      </Row>
+    </>
   );
 }
