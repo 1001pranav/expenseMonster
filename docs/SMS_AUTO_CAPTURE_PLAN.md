@@ -1,5 +1,17 @@
 # Plan: automatic bank SMS capture
 
+> **Decision (Oct 2026): import on request only.** The app reads SMS only when the user taps
+> Import in Settings → Bank SMS. There is no receiver and no RECEIVE_SMS permission, and the
+> background-capture parts of this plan (Source A's receiver and Source B) are on hold.
+> What shipped:
+> - `plugins/withSmsCapture.js`: `SmsImportActivity` is guarded by a signature permission and has
+>   no UI. It reads the inbox after a given time, keeps bank-sender payment messages (never OTPs),
+>   and writes them to app-private files.
+> - `src/services/smsInbox.ts`: parses those files, auto-saves clear ones with Undo, and deletes
+>   each file.
+> - The first import offers 1, 3 or 6 months; later imports continue from the last one.
+> - It is built only with `EXPO_PUBLIC_SMS_CAPTURE=1` (sideload), because Play restricts READ_SMS.
+
 ## Why this is the most important missing feature
 Today a bank SMS reaches the app only when the user long-presses it in Messages, copies it, opens ExpenseMonster, opens + → Paste SMS, pastes and taps Read. That is 6 steps per transaction, and nobody repeats them for a ₹40 chai. Coverage decays within a week, and once coverage drops every number in Insights is wrong. Every Indian tracker that people keep using (Axio/Walnut, Money Manager, CRED's spends view) reads bank SMS automatically.
 

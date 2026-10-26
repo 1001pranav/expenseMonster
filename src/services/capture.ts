@@ -1,6 +1,6 @@
 import { matchBiller, viewBill } from '@/domain/bills';
 import { statementDateFor } from '@/domain/creditCard';
-import { addDays, addMonths, toISO, todayYMD, type YMD } from '@/domain/dates';
+import { addDays, addMonths, toISO, toYMD, todayYMD, type YMD } from '@/domain/dates';
 import { textHash } from '@/domain/ids';
 import type { Paise } from '@/domain/money';
 import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domain/parsers/common';
@@ -23,9 +23,11 @@ export interface CaptureSummary {
   statements: number;
   skipped: number;
   unknownBillers: string[];
+  /** Transactions added to Review by this capture. */
+  addedIds: string[];
 }
 
-const emptySummary = (): CaptureSummary => ({ added: 0, duplicates: 0, bills: 0, statements: 0, skipped: 0, unknownBillers: [] });
+const emptySummary = (): CaptureSummary => ({ added: 0, duplicates: 0, bills: 0, statements: 0, skipped: 0, unknownBillers: [], addedIds: [] });
 
 function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawText: string, attachment: string | null): TxnDraft {
   const { tables } = getState();
@@ -157,20 +159,24 @@ async function captureParsed(parsed: Parsed, raw: string, hash: string, received
   const draft = toDraft(parsed, source, hash, raw, null);
   if (!parsed.time && fallbackISO) draft.occurredAt = fallbackISO;
   const { row, duplicate } = await addCapture(draft);
-  if (row) summary.added++;
+  if (row) {
+    summary.added++;
+    summary.addedIds.push(row.id);
+  }
   if (duplicate && !row) summary.duplicates++;
 }
 
 /**
- * Paste a bank SMS and it goes through the parsers into Review. The app never reads the SMS
- * inbox; the text itself is not stored.
+ * A bank SMS (pasted, or picked up automatically when that's switched on) goes through the parsers
+ * into Review. The text itself is not stored. `receivedAt` is when the phone got the message, for
+ * SMS read from the phone; pasted ones count as received now.
  */
-export async function captureText(text: string, sender = ''): Promise<CaptureSummary & { recognised: boolean }> {
+export async function captureText(text: string, sender = '', receivedAt?: Date): Promise<CaptureSummary & { recognised: boolean }> {
   const summary = emptySummary();
-  const today = todayYMD();
-  const parsed = parseMessage(sender, text, today);
+  const received = receivedAt ? toYMD(receivedAt) : todayYMD();
+  const parsed = parseMessage(sender, text, received);
   if (!parsed) return { ...summary, recognised: false };
-  await captureParsed(parsed, text, textHash(`${sender}|${text}`), today, 'sms', summary, null);
+  await captureParsed(parsed, text, textHash(`${sender}|${text}`), received, 'sms', summary, receivedAt ? receivedAt.toISOString() : null);
   return { ...summary, recognised: true };
 }
 

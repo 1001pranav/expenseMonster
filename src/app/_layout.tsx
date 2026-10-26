@@ -28,6 +28,7 @@ import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
 import { installErrorCapture, logError, logFailure, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
+import { drainSmsInbox, smsCaptureAvailable } from '@/services/smsInbox';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
 import { ToastHost, toast } from '@/ui/components/feedback';
@@ -182,6 +183,14 @@ function App() {
     if (!ready || locked || !identity.onboarded) return;
     rescheduleAll().catch((e) => logFailure('reminders: reschedule failed', e));
     // Only on unlock / first ready.
+  }, [ready, locked, identity.onboarded]);
+
+  // An SMS import cut short (app closed mid-way) leaves copied messages behind: finish them on unlock.
+  useEffect(() => {
+    if (!ready || locked || !identity.onboarded || !smsCaptureAvailable) return;
+    drainSmsInbox()
+      .then(({ added }) => added && toast(`${added} bank SMS from your last import are in Check captures`, { tone: 'success' }))
+      .catch((e) => logFailure('sms: reading copied messages failed', e));
   }, [ready, locked, identity.onboarded]);
 
   if (!fontsLoaded || (!ready && !error)) {

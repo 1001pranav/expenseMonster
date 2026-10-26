@@ -7,7 +7,7 @@ An offline household finance app for Android (Expo / React Native). It tracks ex
 | Area | What it does |
 |---|---|
 | Transactions | Expense, income, transfer and settlement. Category splits, equal split with family members, private entries |
-| Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Paste a bank SMS**: the app never asks for SMS permission or reads your inbox; copy a bank message and paste it, or add entries manually. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
+| Capture | **Payment screenshots**: share from GPay / PhonePe / Paytm, read on the phone with ML Kit OCR. **Paste a bank SMS**: copy a bank message and paste it, or add entries manually. The Play build never asks for SMS permission. A sideloaded build made with `EXPO_PUBLIC_SMS_CAPTURE=1` can also **import bank SMS on request**: it reads the inbox only when you tap Import (Settings → Bank SMS), keeps only bank payment messages (never OTPs), and never listens in the background. **Teach your bank's format**: paste a sample and tap the amount, payee, date and so on; only a pattern is stored, and it is shared with family phones. Every capture goes to a **Review** inbox and nothing is booked until you approve it. Duplicates are detected by UPI ref, or same amount within ±10 min |
 | Loans & EMIs | Borrowed and lent loans, reducing or flat interest, amortisation schedule, prepayment simulator, overdue EMIs |
 | Credit cards | Statement day and due day per card. Purchases on or before the statement day go on this bill; anything after goes on the next one. Refunds reduce the cycle. Bill payments are **transfers, not expenses**, so spending is never counted twice. Bank statement amounts can override the computed total |
 | Bills | Variable bills (electricity/water/gas, with units), fixed bills (rent/internet, created each cycle automatically), prepaid recharges (validity tracking), LPG (predicts the next booking), autopay (warns if no debit shows up) |
@@ -102,7 +102,7 @@ Both are deep links on `expensemonster://`, so Expo Router opens the screen and 
 - App lock: biometrics and/or a 6-digit PIN. The PIN is stored as a salted PBKDF2 hash in the Keystore. Auto-lock timeout is configurable, and you can opt in to an erase after 10 wrong PINs.
 - `FLAG_SECURE` blocks screenshots and the recent-apps preview. You can turn it off.
 - Nothing is sent over the network unless you turn on cloud sync (end-to-end encrypted household rows) or cloud backup (everything, encrypted with your password). ML Kit's bundled model works offline.
-- Raw SMS text is never stored, only the parsed fields plus a hash. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
+- Raw SMS text is never kept: imported messages sit in app-private files only until parsed, then are deleted. Only the parsed fields plus a hash. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
 - Backups are encrypted with your passphrase (PBKDF2-SHA256 → AES-GCM). CSV export escapes formula characters.
 
 ## Build and run

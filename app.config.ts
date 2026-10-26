@@ -34,12 +34,16 @@ function buildId(): string {
   return `${ref} ${sha.slice(0, 7)}`;
 }
 
+// Bank SMS import on request (plugins/withSmsCapture.js). Off by default: Google Play allows READ_SMS
+// only with an approved declaration, so it's for sideloaded builds made with EXPO_PUBLIC_SMS_CAPTURE=1.
+const smsCapture = process.env.EXPO_PUBLIC_SMS_CAPTURE === '1';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'ExpenseMonster',
   slug: 'expense-monster',
   version: '1.0.0',
-  extra: { ...config.extra, build: buildId() },
+  extra: { ...config.extra, build: buildId(), smsCapture },
   scheme: 'expensemonster',
   orientation: 'portrait',
   icon: './assets/icon.png',
@@ -64,14 +68,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     predictiveBackGestureEnabled: false,
     // Nothing is backed up to Google's cloud: the DB key lives in the Keystore and wouldn't restore anyway.
     allowBackup: false,
-    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA'],
+    permissions: ['android.permission.USE_BIOMETRIC', 'android.permission.CAMERA', ...(smsCapture ? ['android.permission.READ_SMS'] : [])],
     blockedPermissions: [
       'android.permission.RECORD_AUDIO',
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.ACCESS_COARSE_LOCATION',
-      'android.permission.READ_SMS',
+      ...(smsCapture ? [] : ['android.permission.READ_SMS']),
+      // Never listens for incoming SMS, even in SMS builds: messages are read only when the user asks.
       'android.permission.RECEIVE_SMS',
     ],
   },
@@ -100,6 +105,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     './plugins/withAndroidShortcuts',
     // Home-screen "Quick add" widget: Expense / Income / Scan buttons, no amounts shown.
     './plugins/withAndroidWidget',
+    ...(smsCapture ? ['./plugins/withSmsCapture'] : []),
   ],
   experiments: { typedRoutes: false },
 });

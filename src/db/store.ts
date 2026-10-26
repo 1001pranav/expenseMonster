@@ -20,6 +20,8 @@ export interface Settings {
   vaultSync: boolean;
   /** Save a capture without asking when everything was read clearly (see isClearCapture); Undo is offered. */
   autoSaveCaptures: boolean;
+  /** When the last bank SMS import the user asked for started (ms); the next one reads from here. */
+  smsImportedTo: number | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cloudSync: false,
   vaultSync: false,
   autoSaveCaptures: true,
+  smsImportedTo: null,
 };
 
 export interface Identity {
