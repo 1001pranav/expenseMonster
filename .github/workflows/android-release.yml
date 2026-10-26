@@ -36,6 +36,9 @@ jobs:
     environment: DEV
     env:
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" -Dorg.gradle.daemon=false
+      # This APK is sideloaded, so it includes bank SMS import (app.config.ts): READ_SMS is asked for
+      # only after the user taps Allow. Never upload this APK to Play; a Play build leaves this unset.
+      EXPO_PUBLIC_SMS_CAPTURE: '1'
     steps:
       - uses: actions/checkout@v7
 
