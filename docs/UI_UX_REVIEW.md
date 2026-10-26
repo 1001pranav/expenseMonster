@@ -309,3 +309,37 @@ The Aurora is a good signature, but it is used on Home, Dues *and* Tax heroes, t
 - **Investments and split with outsiders (P1): I disagree for now.** Both expand scope while the goal is to simplify. Splitwise and INDmoney own those jobs. Revisit after the IA is fixed.
 - **The visual identity work (Aurora, 8 gradients):** it gave the app personality, but it went too far. See §3.2.
 - **Agree:** collapse the keypad, add a calendar view, the large-text pass, the two Settings entry points problem, and Household mixing three jobs. My proposal resolves the last one by removing the tab, not by adding a "More" sheet.
+
+---
+
+## 10. Follow-up: two gaps raised in review
+
+### 10.1 Credit card EMIs are missing (P0)
+**Confirmed in code.** A `Loan` has no `cardId`, `LoanKind` has no card-EMI type, and `buildCardLedger` has no idea of instalments. For Indian users this is not an edge case: phones, appliances and flights are routinely bought on "No-cost EMI".
+
+**What goes wrong today**, whichever way a user tries to model it:
+- **Logged as a plain card purchase:** the full ₹60,000 lands in one statement. The computed bill is wrong for that cycle *and* for the next 5 (each will be ₹10k + interest + GST short). Month spending spikes, budgets show "Over by…", and the savings rate collapses for one month.
+- **Logged as a Personal loan:** the app raises a **separate EMI due and reminder**, while the same instalment is also inside the card bill. That gives two reminders and, once both are marked paid, double-counted outflow.
+
+**Design**
+- **Entry points:** a "Convert to EMI" action on any card purchase (transaction ⋯ menu, card statement row), plus "Card EMI" in the bill/EMI setup picker for plans that already exist.
+- **The form asks only what the bank's SMS or app shows:** card (pre-filled), amount, tenure (3/6/9/12/18/24), rate (with a **No-cost** toggle that sets the rate to 0 for display), processing fee, first-instalment statement. GST at 18 % on interest and the fee is computed and shown. Most people don't know no-cost EMIs still carry GST, which is a good "aha" moment.
+- **Data:** extend `Loan` with `cardId`, `kind: 'card_emi'`, `sourceTxnId`, `processingFee`. Reuse `scheduleFor`.
+- **Ledger:**
+  - The original purchase is excluded from cycle totals (marked `converted`). It still counts toward category spend, attributed **when bought**, which is what users expect ("I bought a phone in October").
+  - Each schedule row whose date falls in a cycle is added to that cycle as an "EMI 2/6 · iPhone" line: principal + interest + GST, plus the fee in the first cycle.
+  - Utilisation counts the **remaining principal** as blocked limit, the same way banks do.
+- **Paid state:** an instalment is paid when the card cycle it sits in is paid. `loanEmisPaid` must derive from the card ledger for `card_emi`, not from linked transactions. Otherwise the same double-count comes back.
+- **No separate dues or reminders.** The card bill reminder already covers it. Show "includes EMI ₹10,180" on the card due row instead.
+- **Where it shows:** card detail gets an "Active EMIs" section; Dues → Loans lists it as "on HDFC Millennia · 2/6"; Home's hero doesn't change.
+- **Capture:** bank SMS like "converted to EMI" / "EMI booked" should pre-fill the conversion through Review.
+
+### 10.2 The screenshot flow has one screen too many (P0)
+Today a shared screenshot goes **Scan progress (≥2 s, staged steps) → [amount confirm if unsure] → "Review capture" form → Approve**. For a clean GPay screenshot that is 2 screens and 2 taps to record something the app already read correctly.
+
+I would **not** remove validation altogether. OCR is heuristic, and one wrong amount silently written into the ledger costs more trust than a tap saves. The right move is **approve by exception**:
+
+- **Confident captures save straight away** when all of these hold: the amount was read with a ₹ sign (`amountSure`), the payee was found, it is not a possible duplicate, the payment wasn't pending or failed, and the payee has a learned category. Then show a single result sheet over the screenshot: "₹250 to Swiggy · Food · UPI" with **Undo** and **Edit**, auto-closing after a few seconds. One screen, zero extra taps.
+- **Unsure captures** keep the current check, but **merge the scan screen and the approval form into one screen**: the screenshot thumbnail at the top, the parsed fields editable inline beneath (amount first, problem field highlighted), and one Approve button. Remove the separate amount-confirm phase and the minimum 2 s progress theatre (§2.5).
+- **Make it a setting**, "Save confident screenshots automatically", **on by default**. The Review inbox and its "nothing is booked until you approve" promise stay for SMS and for low-confidence reads, so the privacy and accuracy story still holds.
+- Auto-saved entries should carry a small "auto" marker in Activity for a week, so a wrong one is easy to spot and fix.
