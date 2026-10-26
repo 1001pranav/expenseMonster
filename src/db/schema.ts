@@ -63,6 +63,10 @@ export const TABLES: Record<TableName, Record<string, string>> = {
     closed: IN0,
     upiId: T,
     note: T,
+    // v4: an EMI on a credit card (cardId set) is billed on that card's statements.
+    cardId: T,
+    sourceTxnId: T,
+    processingFee: IN0,
   },
   billers: {
     name: TN,
@@ -118,10 +122,14 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
 };
 
+/** Columns added by a later migration: the v1 CREATE must not include them, or ALTER TABLE would fail on new installs. */
+const ADDED_LATER: Partial<Record<TableName, string[]>> = { loans: ['cardId', 'sourceTxnId', 'processingFee'] };
+
 export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table])];
 
-function createTable(name: TableName): string {
-  const cols = { ...COMMON, ...TABLES[name] };
+function createTable(name: TableName, asOfV1 = false): string {
+  const later = asOfV1 ? (ADDED_LATER[name] ?? []) : [];
+  const cols = Object.fromEntries(Object.entries({ ...COMMON, ...TABLES[name] }).filter(([c]) => !later.includes(c)));
   const body = Object.entries(cols)
     .map(([c, def]) => `"${c}" ${def}`)
     .join(', ');
@@ -132,7 +140,7 @@ function createTable(name: TableName): string {
 export const MIGRATIONS: string[] = [
   [
     // v1 tables (later tables get their own migration below).
-    ...(Object.keys(TABLES) as TableName[]).filter((t) => t !== 'sms_formats').map(createTable),
+    ...(Object.keys(TABLES) as TableName[]).filter((t) => t !== 'sms_formats').map((t) => createTable(t, true)),
     'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY NOT NULL, value TEXT);',
     'CREATE TABLE IF NOT EXISTS peers (deviceId TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, lastSentAt TEXT, lastReceivedAt TEXT, pairedAt TEXT NOT NULL);',
     'CREATE INDEX IF NOT EXISTS txn_when ON transactions(occurredAt);',
@@ -148,4 +156,6 @@ export const MIGRATIONS: string[] = [
   [
     'CREATE TABLE IF NOT EXISTS cloud_records (space TEXT NOT NULL, tbl TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (space, tbl, id));',
   ].join('\n'),
+  // v4: credit card EMIs. Existing loans get NULL / 0 and behave exactly as before.
+  ['ALTER TABLE loans ADD COLUMN "cardId" TEXT;', 'ALTER TABLE loans ADD COLUMN "sourceTxnId" TEXT;', 'ALTER TABLE loans ADD COLUMN "processingFee" INTEGER NOT NULL DEFAULT 0;'].join('\n'),
 ];

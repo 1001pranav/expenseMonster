@@ -19,6 +19,7 @@ const ENTRIES: Entry[] = [
   { label: 'A bill', hint: 'Electricity, rent, internet, recharge, gas', icon: 'flash-outline', href: '/biller/new' },
   { label: 'A loan', hint: 'Home, car, personal, or money you lent', icon: 'home-outline', href: '/loan/new' },
   { label: 'A credit card', hint: 'Know each bill before the bank sends it', icon: 'card-outline', href: '/card/new' },
+  { label: 'An EMI on a card', hint: 'Something you bought on no-cost or interest EMI', icon: 'albums-outline', href: '/card-emi/new' },
   { label: 'Insurance', hint: 'Reminders 30, 7 and 1 day before renewal', icon: 'shield-checkmark-outline', href: '/policy/new' },
   { label: 'Regular income', hint: 'Salary, or rent you receive', icon: 'arrow-up', href: '/income/new', income: true },
 ];

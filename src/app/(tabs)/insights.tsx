@@ -93,10 +93,10 @@ export default function Insights() {
   const cardSpend = useMemo(
     () =>
       cards.map((c) => {
-        const l = buildCardLedger(c, allTxns, overrides, today);
+        const l = buildCardLedger(c, allTxns, overrides, today, undefined, loans);
         return { card: c, spend: l.cycles.slice(-months).reduce((a, x) => a + x.purchases - x.refunds, 0) };
       }),
-    [cards, allTxns, overrides, today, months],
+    [cards, allTxns, overrides, loans, today, months],
   );
 
   const debt = useMemo(() => {
@@ -109,7 +109,7 @@ export default function Insights() {
       let total = 0;
       for (const l of borrowed) {
         const s = scheduleFor(l);
-        const paid = loanEmisPaid(l, allTxns);
+        const paid = loanEmisPaid(l, allTxns, today);
         const idx = Math.max(paid, s.filter((r) => r.date <= at).length) - 1;
         total += idx < 0 ? l.principal : (s[idx]?.balance ?? 0);
       }

@@ -27,6 +27,7 @@ export default function Pay() {
   const txns = useTable('transactions');
   const overrides = useTable('card_overrides');
   const billers = useTable('billers');
+  const loans = useTable('loans');
   const due = useMemo<DueItem | undefined>(() => {
     const found = dues.find((d) => d.key === dueKey);
     if (found || !dueKey?.startsWith('biller:')) return found;
@@ -54,10 +55,10 @@ export default function Pay() {
     if (due?.link?.type !== 'card') return null;
     const card = cards.find((c) => c.id === due.link!.id);
     if (!card) return null;
-    const unpaid = buildCardLedger(card, txns, overrides, today).cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
+    const unpaid = buildCardLedger(card, txns, overrides, today, undefined, loans).cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
     if (!unpaid.length) return null;
     return { total: unpaid.reduce((a, c) => a + c.remaining, 0), min: unpaid.reduce((a, c) => a + Math.min(c.minDue, c.remaining), 0) };
-  }, [due, cards, txns, overrides, today]);
+  }, [due, cards, txns, overrides, loans, today]);
 
   const [amount, setAmount] = useState<Paise | null>(due?.amount ?? null);
   const [method, setMethod] = useState<PayMethod>(due?.link?.type === 'card' ? 'bank' : 'upi');

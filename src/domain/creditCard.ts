@@ -1,6 +1,7 @@
 import { addDays, addMonths, clampedDate, diffDays, isoToYMD, parts, type YMD } from './dates';
 import type { Paise } from './money';
-import type { CardStatementOverride, CreditCard, Transaction } from './types';
+import { cardEmiPlans, instalments } from './cardEmi';
+import type { CardStatementOverride, CreditCard, Loan, Transaction } from './types';
 
 export interface Cycle {
   /** First day included in the cycle. */
@@ -40,10 +41,21 @@ export const estimateMinDue = (total: Paise): Paise => (total <= 0 ? 0 : Math.mi
 
 export type StatementStatus = 'unbilled' | 'due' | 'paid' | 'partly_paid' | 'overdue' | 'nil';
 
+export interface EmiLine {
+  loanId: string;
+  name: string;
+  n: number;
+  of: number;
+  amount: Paise;
+}
+
 export interface CycleSummary extends Cycle {
   purchases: Paise;
   refunds: Paise;
-  /** Computed (purchases - refunds) or the bank's actual figure when overridden. */
+  /** Card EMI instalments billed in this cycle (principal + interest + GST, fee on the first). */
+  emi: Paise;
+  emiLines: EmiLine[];
+  /** Computed (purchases - refunds + EMI instalments) or the bank's actual figure when overridden. */
   total: Paise;
   computedTotal: Paise;
   minDue: Paise;
@@ -62,6 +74,8 @@ export interface CardLedger {
   lastStatement: CycleSummary | null;
   /** Everything owed: unpaid statements + unbilled spend. */
   outstanding: Paise;
+  /** EMI principal not billed yet: the bank keeps it blocked against the limit. */
+  emiPrincipalLeft: Paise;
   utilisation: number | null;
   daysToDue: number | null;
 }
@@ -79,6 +93,8 @@ const isCardPayment = (t: Transaction, cardId: string) =>
  * - Refunds (income with method card) reduce the cycle they land in.
  * - Bill payments (transfer, linkType card) are NOT expenses; they are applied to
  *   statements oldest-first, so paying a bill never double-counts spending.
+ * - A purchase converted to EMI (a loan with this cardId) leaves its statement; each instalment
+ *   is billed in the cycle its date falls in. Its spending still counts in the month it was bought.
  */
 export function buildCardLedger(
   card: CreditCard,
@@ -86,15 +102,37 @@ export function buildCardLedger(
   overrides: CardStatementOverride[],
   today: YMD,
   trackingStart: YMD | null = card.createdAt ? card.createdAt.slice(0, 10) : null,
+  loans: Loan[] = [],
 ): CardLedger {
-  const byStatement = new Map<YMD, { purchases: Paise; refunds: Paise; ids: string[] }>();
+  type Bucket = { purchases: Paise; refunds: Paise; ids: string[]; emi: Paise; emiLines: EmiLine[] };
+  const empty = (): Bucket => ({ purchases: 0, refunds: 0, ids: [], emi: 0, emiLines: [] });
+  const byStatement = new Map<YMD, Bucket>();
   const currentCycle = cycleFor(today, card);
-  byStatement.set(currentCycle.statementDate, { purchases: 0, refunds: 0, ids: [] });
+  byStatement.set(currentCycle.statementDate, empty());
+
+  const plans = cardEmiPlans(loans, card.id);
+  const converted = new Set(plans.map((p) => p.sourceTxnId).filter(Boolean));
+  let emiPrincipalLeft = 0;
+  for (const plan of plans) {
+    // A closed plan stops billing after the day it was closed (foreclosed or cancelled).
+    const until = plan.closed ? plan.updatedAt.slice(0, 10) : null;
+    let left = plan.principal;
+    for (const i of instalments(plan)) {
+      const key = statementDateFor(i.date, card.statementDay);
+      if (key > currentCycle.statementDate || (until && i.date > until)) break;
+      const bucket = byStatement.get(key) ?? empty();
+      bucket.emi += i.amount;
+      bucket.emiLines.push({ loanId: plan.id, name: plan.name, n: i.n, of: i.of, amount: i.amount });
+      byStatement.set(key, bucket);
+      left = i.balance;
+    }
+    if (!plan.closed) emiPrincipalLeft += left;
+  }
 
   for (const t of transactions) {
-    if (!isCardCharge(t, card.id)) continue;
+    if (!isCardCharge(t, card.id) || converted.has(t.id)) continue;
     const key = statementDateFor(isoToYMD(t.occurredAt), card.statementDay);
-    const bucket = byStatement.get(key) ?? { purchases: 0, refunds: 0, ids: [] };
+    const bucket = byStatement.get(key) ?? empty();
     if (t.type === 'expense') bucket.purchases += t.amount;
     else bucket.refunds += t.amount;
     bucket.ids.push(t.id);
@@ -102,7 +140,7 @@ export function buildCardLedger(
   }
 
   const overrideFor = new Map(overrides.filter((o) => o.cardId === card.id && !o.deletedAt).map((o) => [o.statementDate, o]));
-  for (const o of overrideFor.values()) if (!byStatement.has(o.statementDate)) byStatement.set(o.statementDate, { purchases: 0, refunds: 0, ids: [] });
+  for (const o of overrideFor.values()) if (!byStatement.has(o.statementDate)) byStatement.set(o.statementDate, empty());
 
   let paymentPool = transactions.filter((t) => isCardPayment(t, card.id)).reduce((a, t) => a + t.amount, 0);
 
@@ -110,7 +148,7 @@ export function buildCardLedger(
   const cycles: CycleSummary[] = statementDates.map((statementDate) => {
     const b = byStatement.get(statementDate)!;
     const c = cycleFor(statementDate, card);
-    const computedTotal = b.purchases - b.refunds;
+    const computedTotal = b.purchases - b.refunds + b.emi;
     const override = overrideFor.get(statementDate);
     const total = override ? override.total : computedTotal;
     const billed = statementDate < today;
@@ -135,6 +173,8 @@ export function buildCardLedger(
       ...c,
       purchases: b.purchases,
       refunds: b.refunds,
+      emi: b.emi,
+      emiLines: b.emiLines,
       total,
       computedTotal,
       minDue: override?.minDue ?? estimateMinDue(total),
@@ -166,7 +206,8 @@ export function buildCardLedger(
     current,
     lastStatement,
     outstanding,
-    utilisation: card.creditLimit ? outstanding / card.creditLimit : null,
+    emiPrincipalLeft,
+    utilisation: card.creditLimit ? (outstanding + emiPrincipalLeft) / card.creditLimit : null,
     daysToDue: nextUnpaid ? diffDays(nextUnpaid.dueDate, today) : null,
   };
 }

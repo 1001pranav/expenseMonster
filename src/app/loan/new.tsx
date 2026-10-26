@@ -76,6 +76,9 @@ export default function LoanForm() {
       closed: 0 as const,
       upiId: upiId.trim() || null,
       note: null,
+      cardId: existing?.cardId ?? null,
+      sourceTxnId: existing?.sourceTxnId ?? null,
+      processingFee: existing?.processingFee ?? 0,
       scope,
     };
     try {

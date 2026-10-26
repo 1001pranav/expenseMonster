@@ -1,6 +1,6 @@
 import { autopayMissing, billerMeta, nextExpectedBillDate, prepaidStatus, predictNextLpg, viewBill } from './bills';
 import { buildCardLedger } from './creditCard';
-import { addDays, diffDays, type YMD } from './dates';
+import { addDays, diffDays, todayYMD, type YMD } from './dates';
 import { loanProgress, scheduleFor } from './emi';
 import { formatINR, type Paise } from './money';
 import type { Bill, Biller, CardStatementOverride, CreditCard, Loan, Policy, RecurringIncome, Transaction } from './types';
@@ -54,7 +54,9 @@ function stateFor(date: YMD, today: YMD, soonDays = 7): DueState {
   return diffDays(date, today) <= soonDays ? 'due' : 'upcoming';
 }
 
-export function loanEmisPaid(loan: Loan, transactions: Transaction[]): number {
+export function loanEmisPaid(loan: Loan, transactions: Transaction[], today: YMD = todayYMD()): number {
+  // A card EMI is paid through the card's bill: count the instalments already billed.
+  if (loan.cardId) return scheduleFor(loan).filter((r) => r.date <= today).length;
   if (loan.interestType === 'none' && loan.direction === 'lent') return 0;
   const paidAmount = linkedTotal(transactions, 'loan', loan.id);
   const byAmount = loan.emi > 0 ? Math.floor((paidAmount + 99) / loan.emi) : 0;
@@ -71,9 +73,10 @@ export function computeDues(input: DuesInput, today: YMD, horizonDays = 45): Due
   const items: DueItem[] = [];
 
   for (const loan of live(input.loans)) {
-    if (loan.closed) continue;
+    // Card EMIs are billed on the card, whose bill already has its own due date and reminder.
+    if (loan.closed || loan.cardId) continue;
     const schedule = scheduleFor(loan);
-    const progress = loanProgress(schedule, loanEmisPaid(loan, tx), today);
+    const progress = loanProgress(schedule, loanEmisPaid(loan, tx, today), today);
     const next = progress.nextDue;
     if (!next || next.date > horizon) continue;
     const borrowed = loan.direction === 'borrowed';
@@ -94,17 +97,18 @@ export function computeDues(input: DuesInput, today: YMD, horizonDays = 45): Due
   }
 
   for (const card of live(input.cards)) {
-    const ledger = buildCardLedger(card, tx, input.cardOverrides, today);
+    const ledger = buildCardLedger(card, tx, input.cardOverrides, today, undefined, live(input.loans));
     // One item per card: unpaid statements are summed (payments clear the oldest first anyway).
     const unpaid = ledger.cycles.filter((c) => c.status !== 'unbilled' && c.remaining > 0);
     if (unpaid.length) {
       const first = unpaid[0];
       const minDue = unpaid.reduce((a, c) => a + Math.min(c.minDue, c.remaining), 0);
+      const emi = unpaid.reduce((a, c) => a + c.emi, 0);
       items.push({
         key: `card:${card.id}:${first.statementDate}`,
         kind: 'card',
         title: `${card.name} bill`,
-        subtitle: unpaid.length > 1 ? `${unpaid.length} statements unpaid · min ${formatINR(minDue)}` : first.status === 'partly_paid' ? `Part paid · min ${formatINR(minDue)}` : `Min due ${formatINR(minDue)}`,
+        subtitle: `${unpaid.length > 1 ? `${unpaid.length} statements unpaid · min ${formatINR(minDue)}` : first.status === 'partly_paid' ? `Part paid · min ${formatINR(minDue)}` : `Min due ${formatINR(minDue)}`}${emi ? ` · includes EMI ${formatINR(emi)}` : ''}`,
         amount: unpaid.reduce((a, c) => a + c.remaining, 0),
         date: first.dueDate,
         state: stateFor(first.dueDate, today),

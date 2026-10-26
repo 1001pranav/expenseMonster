@@ -101,7 +101,7 @@ export interface Transaction extends BaseRow {
 }
 
 export type LoanDirection = 'borrowed' | 'lent';
-export type LoanKind = 'home' | 'car' | 'personal' | 'education' | 'gold' | 'business' | 'informal' | 'other';
+export type LoanKind = 'home' | 'car' | 'personal' | 'education' | 'gold' | 'business' | 'informal' | 'other' | 'card_emi';
 export type InterestType = 'reducing' | 'flat' | 'none';
 export interface Loan extends BaseRow {
   name: string;
@@ -122,6 +122,12 @@ export interface Loan extends BaseRow {
   closed: 0 | 1;
   upiId: string | null;
   note: string | null;
+  /** Card EMI: the card it's billed on (null for ordinary loans). */
+  cardId: string | null;
+  /** Card EMI: the purchase that was converted; it leaves its statement and is billed in instalments. */
+  sourceTxnId: string | null;
+  /** Card EMI: one-time processing fee, billed with the first instalment (GST added). */
+  processingFee: Paise;
 }
 
 export type BillerType =

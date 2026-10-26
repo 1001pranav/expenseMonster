@@ -41,6 +41,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   const bills = useTable('bills');
   const txns = useTable('transactions');
   const rules = useTable('rules');
+  const loans = useTable('loans');
   const members = useMembers();
   const selfId = useSelfId();
   const defaultScope = useStore((s) => s.settings.defaultTxnScope);
@@ -430,6 +431,8 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         ) : null}
       </Card>
 
+      {existing && !pending && type === 'expense' && method === 'card' && existing.cardId ? <EmiLink txnId={existing.id} plan={loans.find((l) => l.sourceTxnId === existing.id && !l.deletedAt)} /> : null}
+
       <Card padded={false} style={{ overflow: 'hidden' }}>
         <FormRow label="More" value={extras || 'Note, split with family, private'} empty={!extras} open={open === 'more' || more} onPress={() => { setMore(false); toggle('more'); }} />
         {open === 'more' || more ? (
@@ -457,6 +460,24 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
         </Txt>
       ) : null}
     </Screen>
+  );
+}
+
+/** A card purchase: offer to split it into EMIs, or show the plan it's already on. */
+function EmiLink({ txnId, plan }: { txnId: string; plan?: { id: string; tenureMonths: number; name: string } }) {
+  const { colors } = useTheme();
+  return (
+    <Card onPress={() => (plan ? router.push(`/loan/${plan.id}`) : router.push({ pathname: '/card-emi/new', params: { txn: txnId } }))} style={{ flexDirection: 'row', alignItems: 'center', gap: space(1.5) }}>
+      <View style={{ flex: 1 }}>
+        <Txt variant="bodyStrong">{plan ? `On ${plan.tenureMonths} monthly EMIs` : 'Pay this in EMIs'}</Txt>
+        <Txt variant="small" tone="muted">
+          {plan ? 'Billed on the card each month. Tap to see the plan.' : 'Converted with your bank? Spread it across your card bills.'}
+        </Txt>
+      </View>
+      <Txt variant="small" style={{ color: colors.primary, fontFamily: fonts.bold }}>
+        {plan ? 'Open' : 'Set up'}
+      </Txt>
+    </Card>
   );
 }
 

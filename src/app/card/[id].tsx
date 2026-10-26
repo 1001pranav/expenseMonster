@@ -24,6 +24,7 @@ export default function CardDetail() {
   const data = useCardLedger(id);
   const txns = useTable('transactions');
   const overrides = useTable('card_overrides');
+  const loans = useTable('loans');
   const cats = useCategoryMap();
   const today = useToday();
   const [selected, setSelected] = useState<string | null>(null);
@@ -39,6 +40,7 @@ export default function CardDetail() {
     );
   }
   const { card, ledger } = data;
+  const plans = loans.filter((l) => l.cardId === card.id && !l.deletedAt);
   const view = cycles.find((c) => c.statementDate === selected) ?? ledger.current;
   const viewTxns = txns.filter((t) => view.transactionIds.includes(t.id)).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   const payments = txns.filter((t) => t.cardId === card.id && t.type === 'transfer' && t.linkType === 'card' && t.status === 'confirmed');
@@ -144,8 +146,31 @@ export default function CardDetail() {
         }}
       >
         <Card padded={false} style={{ overflow: 'hidden' }}>
-          {viewTxns.length ? viewTxns.map((t) => <TxnRow key={t.id} t={t} cat={cats.get(t.categoryId ?? '')} card={card} />) : <EmptyState icon="card-outline" title="No purchases" body="Mark UPI/SMS payments as credit-card to bring them here." />}
+          {view.emiLines.map((e) => (
+            <ListRow key={`${e.loanId}-${e.n}`} icon="albums-outline" title={e.name} subtitle={`EMI ${e.n} of ${e.of}`} right={<Money value={e.amount} />} onPress={() => router.push(`/loan/${e.loanId}`)} />
+          ))}
+          {viewTxns.length ? viewTxns.map((t) => <TxnRow key={t.id} t={t} cat={cats.get(t.categoryId ?? '')} card={card} />) : view.emiLines.length ? null : <EmptyState icon="card-outline" title="No purchases" body="Mark UPI or SMS payments as paid by credit card to bring them here." />}
         </Card>
+      </Section>
+
+      <Section title="EMIs on this card" action="Add" onAction={() => router.push({ pathname: '/card-emi/new', params: { cardId: card.id } })}>
+        {plans.length ? (
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {plans.map((l) => {
+              const billed = Math.min(l.tenureMonths, ledger.cycles.reduce((a, c) => a + c.emiLines.filter((e) => e.loanId === l.id).length, 0));
+              return <ListRow key={l.id} icon="albums-outline" title={l.name} subtitle={l.closed ? 'Stopped early' : `${billed} of ${l.tenureMonths} billed`} right={<Money value={l.principal} tone="muted" />} chevron onPress={() => router.push(`/loan/${l.id}`)} />;
+            })}
+          </Card>
+        ) : (
+          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+            Bought something on EMI with this card? Add it so each month's bill comes out right.
+          </Txt>
+        )}
+        {ledger.emiPrincipalLeft ? (
+          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+            {formatINR(ledger.emiPrincipalLeft)} of EMIs still to be billed. The bank keeps it blocked against your limit.
+          </Txt>
+        ) : null}
       </Section>
 
       {payments.length ? (

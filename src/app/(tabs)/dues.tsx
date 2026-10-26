@@ -94,7 +94,7 @@ function Loans() {
     () =>
       loans.map((l) => {
         const schedule = scheduleFor(l);
-        return { loan: l, p: loanProgress(schedule, loanEmisPaid(l, txns), today), n: schedule.length };
+        return { loan: l, p: loanProgress(schedule, loanEmisPaid(l, txns, today), today), n: schedule.length };
       }),
     [loans, txns, today],
   );
@@ -161,12 +161,13 @@ function Cards() {
   const cards = useTable('cards');
   const txns = useTable('transactions');
   const overrides = useTable('card_overrides');
+  const loans = useTable('loans');
   const today = useToday();
   if (!cards.length) return <EmptyState icon="card-outline" title="No credit cards" body="Add a card with its statement day so every purchase lands in the right bill." action="Add card" onAction={() => router.push('/card/new')} />;
   return (
     <>
       {cards.map((c) => {
-        const l = buildCardLedger(c, txns, overrides, today);
+        const l = buildCardLedger(c, txns, overrides, today, undefined, loans);
         const due = l.cycles.find((x) => x.status !== 'unbilled' && x.remaining > 0);
         return (
           <View key={c.id} style={{ gap: 8 }}>

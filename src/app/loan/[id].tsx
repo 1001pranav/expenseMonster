@@ -29,7 +29,7 @@ export default function LoanDetail() {
   const [mode, setMode] = useState<'reduce_tenure' | 'reduce_emi'>('reduce_tenure');
 
   const schedule = useMemo(() => (loan ? scheduleFor(loan) : []), [loan]);
-  const p = useMemo(() => (loan ? loanProgress(schedule, loanEmisPaid(loan, txns), today) : null), [loan, schedule, txns, today]);
+  const p = useMemo(() => (loan ? loanProgress(schedule, loanEmisPaid(loan, txns, today), today) : null), [loan, schedule, txns, today]);
   const payments = useMemo(() => txns.filter((t) => t.linkType === 'loan' && t.linkId === id && t.status === 'confirmed'), [txns, id]);
   const yearly = useMemo(() => {
     const map = new Map<string, { principal: number; interest: number }>();
@@ -64,15 +64,15 @@ export default function LoanDetail() {
   return (
     <Screen
       title={loan.name}
-      subtitle={`${loan.lender ?? (loan.direction === 'lent' ? 'Lent' : 'Loan')} · ${loan.ratePa}% ${loan.interestType === 'flat' ? 'flat' : ''}`}
+      subtitle={loan.cardId ? `EMI on ${loan.lender ?? 'your card'}, billed with its statement` : `${loan.lender ?? (loan.direction === 'lent' ? 'Lent' : 'Loan')} · ${loan.ratePa}% ${loan.interestType === 'flat' ? 'flat' : ''}`}
       back
       right={
         <>
-          <IconButton name="create-outline" label="Edit loan" onPress={() => router.push({ pathname: '/loan/new', params: { id: loan.id } })} />
+          <IconButton name="create-outline" label="Edit loan" onPress={() => router.push({ pathname: loan.cardId ? '/card-emi/new' : '/loan/new', params: { id: loan.id } })} />
           <MoreMenu
             title={loan.name}
             actions={[
-              { label: loan.closed ? 'Reopen loan' : 'Mark loan closed', icon: loan.closed ? 'refresh-outline' : 'checkmark-done-outline', onPress: () => update('loans', loan.id, { closed: loan.closed ? 0 : 1 }) },
+              { label: loan.closed ? (loan.cardId ? 'Restart EMI plan' : 'Reopen loan') : loan.cardId ? 'Stop EMI plan (closed early)' : 'Mark loan closed', icon: loan.closed ? 'refresh-outline' : 'checkmark-done-outline', onPress: () => update('loans', loan.id, { closed: loan.closed ? 0 : 1 }) },
               { label: 'Delete loan', icon: 'trash-outline', onPress: onDelete, destructive: true },
             ]}
           />
@@ -113,7 +113,7 @@ export default function LoanDetail() {
         </Section>
       ) : null}
 
-      {loan.direction === 'borrowed' && loan.interestType === 'reducing' && p.emisLeft > 1 ? (
+      {!loan.cardId && loan.direction === 'borrowed' && loan.interestType === 'reducing' && p.emisLeft > 1 ? (
         <Section title="Prepayment simulator">
           <Card style={{ gap: space(1.5) }}>
             <AmountField label="Prepay a lump sum" value={prepay} onChange={setPrepay} placeholder="e.g. 200000" />

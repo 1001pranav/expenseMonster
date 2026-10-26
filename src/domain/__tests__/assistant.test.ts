@@ -24,6 +24,9 @@ const loan = (over: Partial<Loan> = {}): Loan => ({
   closed: 0,
   upiId: null,
   note: null,
+  cardId: null,
+  sourceTxnId: null,
+  processingFee: 0,
   ...over,
 });
 

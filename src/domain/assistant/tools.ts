@@ -144,7 +144,7 @@ export function financeTools(snap: FinanceSnapshot, today: YMD): Record<string, 
         return {
           loan_count: open.length,
           loans: open.map((l) => {
-            const p = loanProgress(scheduleFor(l), loanEmisPaid(l, live), today);
+            const p = loanProgress(scheduleFor(l), loanEmisPaid(l, live, today), today);
             return {
               name: clip(l.name),
               direction: l.direction === 'borrowed' ? 'you owe' : 'owed to you',
@@ -169,7 +169,7 @@ export function financeTools(snap: FinanceSnapshot, today: YMD): Record<string, 
         return {
           card_count: cards.length,
           cards: cards.map((c) => {
-            const ledger = buildCardLedger(c, live, snap.cardOverrides, today);
+            const ledger = buildCardLedger(c, live, snap.cardOverrides, today, undefined, snap.loans);
             return {
               name: clip(c.name),
               owed: money(Math.max(0, ledger.outstanding)),
