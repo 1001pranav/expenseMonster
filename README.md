@@ -102,7 +102,7 @@ Both are deep links on `expensemonster://`, so Expo Router opens the screen and 
 - App lock: biometrics and/or a 6-digit PIN. The PIN is stored as a salted PBKDF2 hash in the Keystore. Auto-lock timeout is configurable, and you can opt in to an erase after 10 wrong PINs.
 - `FLAG_SECURE` blocks screenshots and the recent-apps preview. You can turn it off.
 - Nothing is sent over the network unless you turn on cloud sync (end-to-end encrypted household rows) or cloud backup (everything, encrypted with your password). ML Kit's bundled model works offline.
-- Raw SMS text is never kept: imported messages sit in app-private files only until parsed, then are deleted. Only the parsed fields plus a hash. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
+- Raw SMS text is never kept: imported messages sit in app-private files only until parsed, then are deleted; only the parsed fields plus a hash are stored. Only the last 4 digits of cards and accounts are kept. Captured screenshots are deleted after approval by default.
 - Backups are encrypted with your passphrase (PBKDF2-SHA256 → AES-GCM). CSV export escapes formula characters.
 
 ## Build and run
