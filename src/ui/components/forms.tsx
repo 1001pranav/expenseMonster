@@ -156,7 +156,7 @@ export function Segmented<T extends string>({ options, value, onChange }: { opti
             onPress={() => onChange(o.value)}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            style={{ flex: 1, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? colors.surface : 'transparent' }}
+            style={{ flex: 1, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? colors.surface : 'transparent' }}
           >
             <Txt variant="small" tone={active ? 'default' : 'muted'} numberOfLines={1}>
               {o.label}
@@ -221,7 +221,7 @@ export function DateField({ label, value, onChange, quick = true, allowFuture = 
           onPress={() => setOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={`Pick date, currently ${formatDay(value, { year: true })}`}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
         >
           <Ionicons name="calendar-outline" size={16} color={colors.primary} />
           <Txt variant="small">{quick && (value === today || value === addDays(today, -1)) ? 'Other date' : `${formatDay(value, { year: true })} · ${relativeDay(value, today)}`}</Txt>

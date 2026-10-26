@@ -8,6 +8,7 @@ import { parseIds } from '@/domain/settle';
 import { categoryHistory, flagsOf, suggestCategory } from '@/domain/transactions';
 import type { PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { restore } from '@/db/repo';
+import { useStore } from '@/db/store';
 import { approveCapture, deleteTransaction, learnRule, rejectCapture, saveTransaction } from '@/data/actions';
 import { useMembers, useSelfId, useSortedCategories, useTable, useToday } from '@/data/hooks';
 import { Button, Card, Chip, Pill, Row, Txt, type IconName } from '../components/core';
@@ -42,6 +43,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   const rules = useTable('rules');
   const members = useMembers();
   const selfId = useSelfId();
+  const defaultScope = useStore((s) => s.settings.defaultTxnScope);
   const pending = existing?.status === 'pending';
   const flags = existing ? flagsOf(existing) : [];
 
@@ -55,7 +57,7 @@ export function TxnForm({ existing, initialType = 'expense', ocrText }: { existi
   const [date, setDate] = useState<YMD>(existing ? isoToYMD(existing.occurredAt) : today);
   const [payee, setPayee] = useState(existing?.payee ?? '');
   const [note, setNote] = useState(existing?.note ?? '');
-  const [scope, setScope] = useState<Scope>(existing?.scope ?? 'household');
+  const [scope, setScope] = useState<Scope>(existing?.scope ?? defaultScope);
   const [payer, setPayer] = useState<string | null>(existing?.memberId ?? (selfId || null));
   const [splitWith, setSplitWith] = useState<string[]>(parseIds(existing?.splitWith ?? null));
   const [link, setLink] = useState<{ type: Transaction['linkType']; id: string | null }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });

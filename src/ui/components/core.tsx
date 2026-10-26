@@ -28,10 +28,10 @@ const toneColor = (c: Colors, tone: Tone) =>
     muted: c.textMuted,
     faint: c.textFaint,
     primary: c.primary,
-    income: c.income,
-    expense: c.expense,
-    warn: c.warn,
-    info: c.info,
+    income: c.incomeText,
+    expense: c.expenseText,
+    warn: c.warnText,
+    info: c.infoText,
     inverse: c.primaryText,
   })[tone];
 
@@ -141,7 +141,7 @@ export function Button({
   haptic?: boolean;
 }) {
   const { colors } = useTheme();
-  const bg = { primary: colors.primary, secondary: colors.surfaceAlt, ghost: 'transparent', danger: colors.expense, success: colors.income }[variant];
+  const bg = { primary: colors.primary, secondary: colors.surfaceAlt, ghost: 'transparent', danger: colors.expenseText, success: colors.incomeText }[variant];
   const fg = { primary: colors.primaryText, secondary: colors.text, ghost: colors.primary, danger: '#fff', success: '#fff' }[variant];
   const h = { sm: 36, md: 48, lg: 56 }[size];
   return (
@@ -202,13 +202,14 @@ export function Chip({ label, selected, onPress, icon, color, compact }: { label
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      hitSlop={compact ? 4 : 2}
       style={({ pressed }) => [
         {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 6,
           paddingHorizontal: compact ? 10 : 14,
-          height: compact ? 32 : 38,
+          height: compact ? 40 : 44,
           borderRadius: radius.pill,
           backgroundColor: selected ? accent : colors.surface,
           borderWidth: 1,
@@ -229,11 +230,11 @@ export function Pill({ label, tone = 'muted' }: { label: string; tone?: 'muted' 
   const { colors } = useTheme();
   const map = {
     muted: [colors.surfaceAlt, colors.textMuted],
-    income: [colors.incomeSoft, colors.income],
-    expense: [colors.expenseSoft, colors.expense],
-    warn: [colors.warnSoft, colors.warn],
-    primary: [colors.primarySoft, colors.primary],
-    info: [colors.infoSoft, colors.info],
+    income: [colors.incomeSoft, colors.incomeText],
+    expense: [colors.expenseSoft, colors.expenseText],
+    warn: [colors.warnSoft, colors.warnText],
+    primary: [colors.primarySoft, colors.primaryOnSoft],
+    info: [colors.infoSoft, colors.infoText],
   }[tone];
   return (
     <View style={{ backgroundColor: map[0], paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, alignSelf: 'flex-start' }}>
