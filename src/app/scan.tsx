@@ -31,6 +31,8 @@ const REVEAL_MS = 450;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const amountText = (paise: number | null) => (paise ? (paise % 100 ? (paise / 100).toFixed(2) : String(paise / 100)) : '');
+/** An unsure "7750" may be "₹750" with the ₹ read as a 7: too risky to pre-fill either way. */
+const startsWith7 = (paise: number | null) => amountText(paise).startsWith('7');
 
 export default function Scan() {
   const { colors } = useTheme();
@@ -127,7 +129,7 @@ export default function Scan() {
             return setPhase('unreadable');
           }
           logInfo(`scan: asking for the amount (${r.payment.amount ? 'not sure' : 'not found'})`);
-          setAmountInput(amountText(r.payment.amount));
+          setAmountInput(startsWith7(r.payment.amount) ? '' : amountText(r.payment.amount));
           return setPhase('confirm');
         }
         setPhase('saving');
@@ -167,6 +169,7 @@ export default function Scan() {
   };
 
   const payment = read?.kind === 'payment' ? read.payment : null;
+  const leading7 = startsWith7(payment?.amount ?? null);
   const busy = phase === 'reading' || phase === 'saving';
 
   return (
@@ -218,18 +221,20 @@ export default function Scan() {
 
       {phase === 'confirm' && payment ? (
         <Card style={{ gap: space(1), borderWidth: 1.5, borderColor: colors.warn }}>
-          <Txt variant="bodyStrong">{payment.amount ? 'Is this the right amount?' : "Couldn't read the amount"}</Txt>
+          <Txt variant="bodyStrong">{leading7 ? 'Type the amount' : payment.amount ? 'Is this the right amount?' : "Couldn't read the amount"}</Txt>
           <Txt tone="muted">
-            {payment.amount
-              ? "The ₹ sign wasn't read clearly, so a digit may be off. Check it against the screenshot below."
-              : 'Type the amount shown on the screenshot. Everything else that was found is kept.'}
+            {leading7
+              ? `Read as ${amountText(payment.amount)}, but the first 7 may be the ₹ sign. Type the amount shown on the screenshot below.`
+              : payment.amount
+                ? "The ₹ sign wasn't read clearly, so a digit may be off. Check it against the screenshot below."
+                : 'Type the amount shown on the screenshot. Everything else that was found is kept.'}
           </Txt>
           {payment.payee || payment.date ? (
             <Txt variant="small" tone="muted">
               {[payment.payee ? `${payment.direction === 'credit' ? 'From' : 'To'} ${payment.payee}` : null, payment.date ? formatDay(payment.date, { year: true }) : null].filter(Boolean).join(' · ')}
             </Txt>
           ) : null}
-          <TextField label="Amount (₹)" value={amountInput} onChangeText={setAmountInput} keyboardType="decimal-pad" autoFocus={!payment.amount} placeholder="0.00" />
+          <TextField label="Amount (₹)" value={amountInput} onChangeText={setAmountInput} keyboardType="decimal-pad" autoFocus={!payment.amount || leading7} placeholder="0.00" />
           <Row gap={1}>
             <Button title="Continue" icon="checkmark" onPress={confirmAmount} style={{ flex: 1 }} disabled={!parseAmount(amountInput)} />
             <Button title="Cancel" variant="secondary" onPress={goBack} />

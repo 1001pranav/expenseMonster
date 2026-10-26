@@ -111,6 +111,30 @@ describe('payment screenshot OCR parser', () => {
     expect(parsePaymentScreenshot(bare, T)!.amountSure).toBe(false);
   });
 
+  describe('amounts that start with 7 (₹ is often read as a 7)', () => {
+    const screen = (amount: string) => ['To Ravi Kumar', amount, 'Completed', '12 Sep 2026, 7:45 pm', 'UPI transaction ID', '425612345678'].join('\n');
+    const read = (amount: string) => parsePaymentScreenshot(screen(amount), T, { prominent: [amount] })!;
+
+    it('a real 7 next to a ₹ is trusted', () => {
+      expect(read('₹750')).toMatchObject({ amount: 75000, amountSure: true });
+      expect(read('₹7,500')).toMatchObject({ amount: 750000, amountSure: true });
+    });
+
+    it('a 7 kept apart from the digits is the ₹', () => {
+      expect(read('7 750')).toMatchObject({ amount: 75000, amountSure: true });
+    });
+
+    it('a leading 7 that breaks Indian grouping is the ₹, but still asked', () => {
+      expect(read('712,500')).toMatchObject({ amount: 1250000, amountSure: false });
+      expect(read('775,000')).toMatchObject({ amount: 7500000, amountSure: false });
+    });
+
+    it('a bare number starting with 7 is kept as read and asked, never trusted', () => {
+      expect(read('7750')).toMatchObject({ amount: 775000, amountSure: false });
+      expect(read('77,500')).toMatchObject({ amount: 7750000, amountSure: false });
+    });
+  });
+
   describe('real BHIM screens (Oct 2026 layout)', () => {
     const SELF = { selfNames: ['Pranav R Nayak N'] };
     const footer = ['Process details'];
