@@ -7,7 +7,8 @@ import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domai
 import { applyFormat } from '@/domain/parsers/custom';
 import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
-import { categoryHistory, suggestCategory } from '@/domain/transactions';
+import { applyRules, isLearned, ruleTargets } from '@/domain/rules';
+import { categoryHistory } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
 import { addCapture, type TxnDraft } from '@/data/actions';
 import { insert } from '@/db/repo';
@@ -65,19 +66,28 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     }
   }
 
-  // What this payee was filed under before (across name spellings) wins over keyword rules; when
-  // they were filed two ways the most used is picked and the approval screen offers the other.
+  // The user's own rules win; then what this payee was filed under before (across name spellings);
+  // then learned rules. When they were filed two ways the most used is picked and the approval
+  // screen offers the other.
+  const input = { payee: p.payee, vpa: p.vpa, text: rawText, source };
+  const targets = ruleTargets(tables);
+  const mine = applyRules(tables.rules.filter((r) => !isLearned(r)), input, targets);
+  const learned = applyRules(tables.rules.filter(isLearned), input, targets);
   const past = type === 'transfer' ? [] : categoryHistory(p.payee, p.vpa, type, tables.transactions);
-  const categoryId = type === 'transfer' ? null : past[0]?.categoryId ?? suggestCategory(`${p.payee ?? ''} ${p.vpa ?? ''}`, tables.rules) ?? (p.isRefund ? 'cat_cashback' : null);
+  const categoryId = type === 'transfer' ? null : (mine.categoryId ?? past[0]?.categoryId ?? learned.categoryId ?? (p.isRefund ? 'cat_cashback' : null));
+  for (const id of mine.ruleIds) flags.push(`rule:${id}`);
+  const ruleCard = mine.method === 'card' ? mine.cardId : undefined;
+  // A rule naming the card answers "which card?", so the "card not saved" hint no longer applies.
+  const kept = ruleCard ? flags.filter((f) => !f.startsWith('card-hint:')) : flags;
 
   return {
     type,
     amount: p.amount,
     occurredAt: toISO(p.date ?? todayYMD(), p.time),
-    method: p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank',
-    cardId: card?.id ?? null,
-    accountId: account?.id ?? null,
-    payee: p.payee,
+    method: type === 'transfer' ? (p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank') : (mine.method ?? (p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank')),
+    cardId: ruleCard ?? card?.id ?? null,
+    accountId: mine.accountId ?? account?.id ?? null,
+    payee: mine.payee ?? p.payee,
     vpa: p.vpa,
     categoryId,
     linkType,
@@ -86,7 +96,7 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     sourceRef: p.ref,
     sourceHash: hash,
     confidence: p.confidence,
-    flags: flags.join(',') || null,
+    flags: kept.join(',') || null,
     attachment,
   };
 }

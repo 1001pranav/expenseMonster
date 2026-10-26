@@ -3,7 +3,7 @@ import { findDuplicate } from '../dedupe';
 import { computeDues, computeReminders } from '../dues';
 import { memberBalances, simplifyDebts } from '../settle';
 import { isClearCapture, monthTotals, ruleKey, suggestCategory } from '../transactions';
-import { at, base, bill, biller, card, txn } from './fixtures';
+import { at, base, bill, biller, card, rule, txn } from './fixtures';
 
 describe('dedupe', () => {
   const existing = [txn({ id: 'e1', amount: 250_00, occurredAt: '2026-09-12T10:00:00Z', sourceRef: '425612345678' })];
@@ -56,7 +56,7 @@ describe('totals', () => {
   it('learns categories from merchants', () => {
     expect(ruleKey('Swiggy', 'swiggy.stores@axb')).toBe('swiggy');
     expect(ruleKey(null, 'paytm-12345@paytm')).toBeNull();
-    const rules = [{ ...base(), pattern: 'swiggy', categoryId: 'food' }, { ...base(), pattern: 'swiggy instamart', categoryId: 'groceries' }];
+    const rules = [rule({ pattern: 'swiggy', categoryId: 'food' }), rule({ pattern: 'swiggy instamart', categoryId: 'groceries' })];
     expect(suggestCategory('SWIGGY INSTAMART', rules)).toBe('groceries');
     expect(suggestCategory('Swiggy order', rules)).toBe('food');
   });

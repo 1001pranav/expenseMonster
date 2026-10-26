@@ -1,10 +1,11 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import type { Category } from '@/domain/types';
 import { insert, remove, restore, update } from '@/db/repo';
 import { MEMBER_COLORS } from '@/db/seed';
-import { useCategoryMap, useTable } from '@/data/hooks';
-import { Button, Card, IconCircle, ListRow, Section, Txt, type IconName } from '@/ui/components/core';
+import { useTable } from '@/data/hooks';
+import { Button, Card, IconCircle, ListRow, Section, type IconName } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { Field, Segmented, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
@@ -16,7 +17,6 @@ export default function Categories() {
   const { colors } = useTheme();
   const cats = useTable('categories');
   const rules = useTable('rules');
-  const catMap = useCategoryMap();
   const [editing, setEditing] = useState<Partial<Category> | null>(null);
 
   const save = async () => {
@@ -45,18 +45,9 @@ export default function Categories() {
           {list('income')}
         </Card>
       </Section>
-      <Section title={`Learned rules · ${rules.length}`}>
-        <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
-          Created when you categorise a payee. Tap to forget one.
-        </Txt>
-        {rules.length ? (
-          <Card padded={false} style={{ overflow: 'hidden' }}>
-            {rules.map((r) => (
-              <ListRow key={r.id} icon="flash-outline" iconColor={colors.textMuted} title={r.pattern} subtitle={`→ ${catMap.get(r.categoryId)?.name ?? '?'}`} right={<Txt tone="primary">Forget</Txt>} onPress={() => remove('rules', r.id)} />
-            ))}
-          </Card>
-        ) : null}
-      </Section>
+      <Card padded={false} style={{ overflow: 'hidden' }}>
+        <ListRow icon="flash-outline" title="Rules" subtitle={`${rules.length} · file payees and cards automatically`} chevron onPress={() => router.push('/rules')} />
+      </Card>
 
       <Sheet visible={Boolean(editing)} onClose={() => setEditing(null)} title={editing?.id ? 'Edit category' : 'New category'}>
         <Segmented

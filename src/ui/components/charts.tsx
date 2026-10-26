@@ -295,7 +295,7 @@ export function LineChart({ points, labels, height = 150, color, format = (v: nu
         {min < 0 ? <Line x1={0} x2={width} y1={y(0)} y2={y(0)} stroke={colors.border} strokeDasharray="4 4" /> : null}
         <Path d={area} fill="url(#area)" />
         <Path d={d} stroke={stroke} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        <Circle cx={x(shown)} cy={y(points[shown])} r={5} fill={colors.surface} stroke={stroke} strokeWidth={2.5} />
+        <Circle cx={x(shown)} cy={y(points[shown])} r={5} fill={colors.elevated} stroke={stroke} strokeWidth={2.5} />
         {points.map((_, i) => (
           <Rect key={i} x={x(i) - width / points.length / 2} y={0} width={width / points.length} height={height} fill="transparent" onPress={() => setActive(i)} />
         ))}

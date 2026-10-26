@@ -118,12 +118,25 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   },
   incomes: { name: TN, amount: IN0, frequency: TN, nextDate: TN, accountId: T, categoryId: T, active: 'INTEGER NOT NULL DEFAULT 1' },
   budgets: { categoryId: TN, month: TN, amount: IN0 },
-  rules: { pattern: TN, categoryId: TN },
+  rules: {
+    pattern: TN,
+    categoryId: TN,
+    field: "TEXT NOT NULL DEFAULT 'payee'",
+    source: "TEXT NOT NULL DEFAULT 'any'",
+    method: T,
+    cardId: T,
+    accountId: T,
+    rename: T,
+    learned: 'INTEGER NOT NULL DEFAULT 1',
+  },
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
 };
 
 /** Columns added by a later migration: the v1 CREATE must not include them, or ALTER TABLE would fail on new installs. */
-const ADDED_LATER: Partial<Record<TableName, string[]>> = { loans: ['cardId', 'sourceTxnId', 'processingFee'] };
+const ADDED_LATER: Partial<Record<TableName, string[]>> = {
+  loans: ['cardId', 'sourceTxnId', 'processingFee'],
+  rules: ['field', 'source', 'method', 'cardId', 'accountId', 'rename', 'learned'],
+};
 
 export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table])];
 
@@ -158,4 +171,6 @@ export const MIGRATIONS: string[] = [
   ].join('\n'),
   // v4: credit card EMIs. Existing loans get NULL / 0 and behave exactly as before.
   ['ALTER TABLE loans ADD COLUMN "cardId" TEXT;', 'ALTER TABLE loans ADD COLUMN "sourceTxnId" TEXT;', 'ALTER TABLE loans ADD COLUMN "processingFee" INTEGER NOT NULL DEFAULT 0;'].join('\n'),
+  // v5: rules with conditions and actions. Existing rules were all learned from filing: learned = 1.
+  ['field', 'source', 'method', 'cardId', 'accountId', 'rename', 'learned'].map((c) => `ALTER TABLE rules ADD COLUMN "${c}" ${TABLES.rules[c]};`).join('\n'),
 ];

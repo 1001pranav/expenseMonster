@@ -13,6 +13,7 @@ import { TxnRow, groupByDay } from '@/ui/components/rows';
 import { Header, TAB_BAR_SPACE } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
 import { fonts, space, useTheme } from '@/ui/theme';
+import { Backdrop } from '@/ui/components/Aurora';
 
 type Period = 'month' | 'last30' | 'all';
 type Kind = 'all' | 'card' | 'upi' | 'income' | 'pending' | 'shared';
@@ -94,6 +95,7 @@ export default function Spending() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
+      <Backdrop />
       <Header title="Spending" large />
       <View style={{ paddingHorizontal: space(2), gap: space(1.5), paddingBottom: space(1) }}>
         <Row gap={1}>

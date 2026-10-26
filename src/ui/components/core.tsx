@@ -86,7 +86,7 @@ export function Money({
 export function Card({ children, style, onPress, padded = true, tone }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; padded?: boolean; tone?: 'primary' | 'alt' }) {
   const { colors, dark } = useTheme();
   const hero = tone === 'primary';
-  const bg = hero ? colors.heroBase : tone === 'alt' ? colors.surfaceAlt : colors.surface;
+  const bg = hero ? colors.heroBase : tone === 'alt' ? colors.surfaceAlt : colors.glass;
   const body = [
     { backgroundColor: bg, borderRadius: 20, padding: padded ? space(2) : 0 },
     hero ? { overflow: 'hidden' as const, padding: padded ? space(2.5) : 0 } : tone ? null : shadow(dark),

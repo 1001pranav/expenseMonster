@@ -79,7 +79,7 @@ export function monthlySeries(transactions: Transaction[], month: string, count:
 export function suggestCategory(text: string, rules: CategoryRule[]): string | null {
   const t = text.toLowerCase();
   const hit = rules
-    .filter((r) => !r.deletedAt && r.pattern && t.includes(r.pattern))
+    .filter((r) => !r.deletedAt && r.pattern && r.categoryId && t.includes(r.pattern))
     .sort((a, b) => b.pattern.length - a.pattern.length)[0];
   return hit?.categoryId ?? null;
 }

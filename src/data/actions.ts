@@ -4,6 +4,7 @@ import { findDuplicate } from '@/domain/dedupe';
 import type { DueItem } from '@/domain/dues';
 import type { Paise } from '@/domain/money';
 import { advance } from '@/domain/recurrence';
+import { isLearned } from '@/domain/rules';
 import { isClearCapture, ruleKey } from '@/domain/transactions';
 import type { Bill, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { findById, insert, insertMany, remove, update, type NewRow } from '@/db/repo';
@@ -48,15 +49,20 @@ export async function saveTransaction(draft: TxnDraft, id?: string): Promise<Tra
   return row;
 }
 
-/** Remember "merchant → category" after the user confirms or corrects one. */
+/**
+ * Remember "merchant → category" after the user confirms or corrects one. Only learned rules change
+ * this way: a rule the user wrote (or edited) for the same words is left as they set it.
+ */
 export async function learnRule(t: Pick<Transaction, 'payee' | 'vpa' | 'categoryId'>) {
   if (!t.categoryId) return;
   const key = ruleKey(t.payee, t.vpa);
   if (!key) return;
-  const existing = getState().tables.rules.find((r) => r.pattern === key);
+  const same = getState().tables.rules.filter((r) => r.pattern === key);
+  if (same.some((r) => !isLearned(r))) return;
+  const existing = same[0];
   if (existing?.categoryId === t.categoryId) return;
   if (existing) await update('rules', existing.id, { categoryId: t.categoryId });
-  else await insert('rules', { pattern: key, categoryId: t.categoryId, scope: 'household' });
+  else await insert('rules', { pattern: key, categoryId: t.categoryId, field: 'payee', source: 'any', method: null, cardId: null, accountId: null, rename: null, learned: 1, scope: 'household' });
 }
 
 export async function approveCapture(id: string, patch: Partial<Transaction> = {}) {

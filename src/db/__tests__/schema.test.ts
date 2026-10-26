@@ -10,7 +10,14 @@ describe('schema migrations', () => {
     }
   });
 
+  it('adds rule conditions in v5, with existing rules marked learned', () => {
+    const v1Rules = MIGRATIONS[0].split('\n').find((l) => l.startsWith('CREATE TABLE IF NOT EXISTS "rules"'))!;
+    expect(v1Rules).not.toContain('"learned"');
+    expect(MIGRATIONS[4]).toContain('ALTER TABLE rules ADD COLUMN "learned" INTEGER NOT NULL DEFAULT 1;');
+    expect(MIGRATIONS[4]).toContain(`ADD COLUMN "field" TEXT NOT NULL DEFAULT 'payee';`);
+  });
+
   it('only ever appends migrations', () => {
-    expect(MIGRATIONS).toHaveLength(4);
+    expect(MIGRATIONS).toHaveLength(5);
   });
 });

@@ -83,6 +83,7 @@ export default function Hub() {
           <ListRow icon="business-outline" title="Accounts and wallets" subtitle={accounts.length ? `${accounts.length} added` : 'Optional: helps match bank SMS'} chevron onPress={() => router.push('/accounts')} />
           <ListRow icon="pie-chart-outline" title="Budgets" chevron onPress={() => router.push('/budgets')} />
           <ListRow icon="pricetags-outline" title="Categories" chevron onPress={() => router.push('/categories')} />
+          <ListRow icon="flash-outline" title="Rules" subtitle="e.g. screenshots with “credit card” go on your HDFC card" chevron onPress={() => router.push('/rules')} />
           <ListRow icon="wallet-outline" title="Regular income" subtitle={incomes.length ? `${incomes.length} added` : 'Salary, or rent you receive'} chevron onPress={() => router.push('/income')} />
           <ListRow icon="receipt-outline" title="Tax saver" subtitle="Deductions this year, old regime" chevron onPress={() => router.push('/tax')} />
         </Group>

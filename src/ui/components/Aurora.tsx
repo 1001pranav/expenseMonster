@@ -1,17 +1,63 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useId, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme, type GradientName } from '../theme';
 import type { IconName } from './core';
 
 /**
- * The hero surface (lock screen, onboarding, hero cards): one flat forest fill. The glowing
- * "Aurora" was retired in the redesign; the name stays so callers don't change. Fills its parent.
+ * The hero surface (lock screen, onboarding, hero cards): forest with an emerald glow at the top
+ * and cobalt at the bottom, so white text sits on a deep, even middle. Fills its parent.
  */
-export function Aurora(_: { variant?: 'default' | 'calm' }) {
+export function Aurora({ variant = 'default' }: { variant?: 'default' | 'calm' }) {
   const { colors } = useTheme();
-  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.heroBase }]} />;
+  const id = useId().replace(/:/g, '');
+  const strength = variant === 'calm' ? 0.35 : 0.6;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.heroBase }]}>
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={`${id}a`} cx="15%" cy="0%" r="75%">
+            <Stop offset="0" stopColor={colors.heroGlowA} stopOpacity={strength} />
+            <Stop offset="1" stopColor={colors.heroGlowA} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}b`} cx="100%" cy="100%" r="80%">
+            <Stop offset="0" stopColor={colors.heroGlowB} stopOpacity={strength} />
+            <Stop offset="1" stopColor={colors.heroGlowB} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}a)`} />
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}b)`} />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * The page behind every screen: the page colour with a green glow top-left and a blue one on the
+ * right, which is what makes the translucent cards read as glass. Drawn once per screen, static.
+ */
+export function Backdrop() {
+  const { colors } = useTheme();
+  const id = useId().replace(/:/g, '');
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}>
+      <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+        <Defs>
+          <RadialGradient id={`${id}a`} cx="0%" cy="0%" r="70%">
+            <Stop offset="0" stopColor={colors.glowA} stopOpacity={colors.glowOpacity} />
+            <Stop offset="1" stopColor={colors.glowA} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`${id}b`} cx="100%" cy="45%" r="65%">
+            <Stop offset="0" stopColor={colors.glowB} stopOpacity={colors.glowOpacity * 0.85} />
+            <Stop offset="1" stopColor={colors.glowB} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}a)`} />
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id}b)`} />
+      </Svg>
+    </View>
+  );
 }
 
 /** A diagonal two-colour fill for any rounded shape. Fills its parent. */
