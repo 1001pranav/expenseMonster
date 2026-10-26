@@ -310,7 +310,8 @@ function SavedPanel({ t }: { t: Transaction }) {
   }, [held]);
   const card = cards.find((c) => c.id === t.cardId);
   const account = accounts.find((a) => a.id === t.accountId);
-  const paidBy = t.method === 'card' ? (card?.name ?? 'Credit card') : `${t.method === 'upi' ? 'UPI' : t.method === 'bank' ? 'Bank' : t.method}${account ? ` from ${account.name}` : ''}`;
+  const byRule = (t.flags ?? '').split(',').some((f) => f.startsWith('rule:'));
+  const paidBy = t.method === 'card' ? `${card?.name ?? 'Credit card'}${card?.last4 ? ` ••${card.last4}` : ''}${byRule ? ', from your rule' : ''}` : `${t.method === 'upi' ? 'UPI' : t.method === 'bank' ? 'Bank' : t.method}${account ? ` from ${account.name}` : ''}`;
   const lines: [string, string][] = [
     ['Category', cats.get(t.categoryId ?? '')?.name ?? 'None'],
     ['Paid by', paidBy],

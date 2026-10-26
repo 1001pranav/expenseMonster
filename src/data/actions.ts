@@ -103,8 +103,9 @@ export async function answerCardHint(id: string, cardId: string) {
   const card = findById('cards', cardId);
   const hint = (t?.flags ?? '').split(',').find((f) => f.startsWith('card-hint:'))?.split(':')[1];
   if (!t || !card) return;
-  if (hint && !card.last4) await update('cards', cardId, { last4: hint });
-  else if (hint && card.last4 !== hint) await rememberCard(hint, t.source === 'ocr' ? 'ocr' : 'sms', cardId);
+  // A full number becomes the card's own; two masked digits ("XXXXXX06") are remembered as a rule.
+  if (hint?.length === 4 && !card.last4) await update('cards', cardId, { last4: hint });
+  else if (hint && !card.last4?.endsWith(hint)) await rememberCard(hint.length === 4 ? hint : `xx${hint}`, t.source === 'ocr' ? 'ocr' : 'sms', cardId);
   await update('transactions', id, { method: 'card', cardId, accountId: null, flags: stripFlag(t.flags, 'card-hint') });
 }
 

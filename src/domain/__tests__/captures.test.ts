@@ -1,4 +1,5 @@
 import { appOf, cardHintOf, duplicateOf, recentRepeats, splitCaptures, suggestAmountFix } from '../captures';
+import { cardEndingIn, maskedCardDigits } from '../parsers/common';
 import { txn } from './fixtures';
 
 describe('check captures', () => {
@@ -61,5 +62,23 @@ describe('recent repeats', () => {
     ];
     expect(recentRepeats(list, 'expense', today)).toEqual([]);
     expect(recentRepeats(list, 'income', today)).toHaveLength(1);
+  });
+});
+
+describe('masked card numbers', () => {
+  const bhim = 'Debited account HDFC BANK RUPAY CREDIT CARD XXXXXX06 Payment initiated by PRANAV';
+
+  it('reads the visible digits of a masked credit card', () => {
+    expect(maskedCardDigits(bhim)).toBe('06');
+    expect(maskedCardDigits('ICICI Credit Card ****4417')).toBe('4417');
+    expect(maskedCardDigits('HDFC Bank A/c XXXXXX06')).toBeNull();
+  });
+
+  it('matches a saved card only when exactly one ends in those digits', () => {
+    const hdfc = { id: 'hdfc', last4: '9906' };
+    const sbi = { id: 'sbi', last4: '1234' };
+    expect(cardEndingIn([hdfc, sbi], '06')).toBe(hdfc);
+    expect(cardEndingIn([hdfc, sbi, { id: 'axis', last4: '5506' }], '06')).toBeUndefined();
+    expect(cardEndingIn([hdfc, { id: 'new', last4: null }], null)).toBeUndefined();
   });
 });

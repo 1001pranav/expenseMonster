@@ -152,5 +152,8 @@ describe('isClearCapture', () => {
     expect(isClearCapture({ ...clear, flags: 'payment-pending' })).toBe(false);
     expect(isClearCapture({ ...clear, flags: 'card-hint:1234' })).toBe(false);
     expect(isClearCapture({ ...clear, status: 'confirmed' })).toBe(false);
+    // "Paid with a credit card" but not which one: ask, don't guess.
+    expect(isClearCapture({ ...clear, method: 'card', cardId: null })).toBe(false);
+    expect(isClearCapture({ ...clear, method: 'card', cardId: 'card-1' })).toBe(true);
   });
 });
