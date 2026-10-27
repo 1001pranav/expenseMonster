@@ -3,7 +3,7 @@ import { uuidv7 } from '@/domain/ids';
 import { newKey } from '@/domain/sync/crypto';
 import { openDatabase } from '@/db/client';
 import { adoptForwardData, getMeta, insertMany, pruneHistory, loadIdentity, loadSettings, loadTables, saveIdentity, setMeta } from '@/db/repo';
-import { SEED_CATEGORIES } from '@/db/seed';
+import { SEEDED_LATER, SEED_CATEGORIES } from '@/db/seed';
 import { getState } from '@/db/store';
 import { generateFixedBills } from '@/data/actions';
 import { CLOCK_META } from './cloud';
@@ -37,22 +37,24 @@ export async function bootstrap(): Promise<void> {
   const tables = await loadTables();
   getState().setAll(tables, identity, settings);
 
-  if ((await getMeta('seeded')) !== '1') {
-    const existing = new Set(tables.categories.map((c) => c.id));
-    await insertMany(
-      'categories',
-      SEED_CATEGORIES.filter((c) => !existing.has(c.id)).map((c, i) => ({
-        ...c,
-        parentId: null,
-        sortOrder: i,
-        scope: 'household' as const,
-        // A fixed timestamp so seeded rows never "win" over a renamed category from another phone.
-        createdAt: '2000-01-01T00:00:00.000Z',
-        updatedAt: '2000-01-01T00:00:00.000Z',
-        deviceId: 'seed',
-      })),
-    );
+  // Default categories: all of them on first run; ones added in later versions once, on update.
+  // A fixed timestamp so seeded rows never "win" over a renamed or deleted category from another phone.
+  const seedRow = (c: (typeof SEED_CATEGORIES)[number], i: number) => ({
+    ...c,
+    parentId: null,
+    sortOrder: i,
+    scope: 'household' as const,
+    createdAt: '2000-01-01T00:00:00.000Z',
+    updatedAt: '2000-01-01T00:00:00.000Z',
+    deviceId: 'seed',
+  });
+  const existing = new Set(tables.categories.map((c) => c.id));
+  const seeded = (await getMeta('seeded')) === '1';
+  if (!seeded || (await getMeta('seededLater')) !== String(SEEDED_LATER.length)) {
+    const wanted = SEED_CATEGORIES.map(seedRow).filter((c) => !existing.has(c.id) && (!seeded || SEEDED_LATER.includes(c.id)));
+    if (wanted.length) await insertMany('categories', wanted);
     await setMeta('seeded', '1');
+    await setMeta('seededLater', String(SEEDED_LATER.length));
   }
 
   await generateFixedBills();

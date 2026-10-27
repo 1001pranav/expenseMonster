@@ -33,8 +33,12 @@ export const SEED_CATEGORIES: SeedCategory[] = [
   { id: 'cat_interest', name: 'Interest & dividends', icon: 'cash', color: '#0284C7', kind: 'income' },
   { id: 'cat_cashback', name: 'Refunds & cashback', icon: 'refresh-circle', color: '#4F46E5', kind: 'income' },
   { id: 'cat_gift_in', name: 'Gifts received', icon: 'gift', color: '#C026D3', kind: 'income' },
+  { id: 'cat_family_in', name: 'From family', icon: 'people', color: '#0F766E', kind: 'income' },
   { id: 'cat_other_in', name: 'Other income', icon: 'add-circle', color: '#475569', kind: 'income' },
 ];
+
+/** Seeded categories added after the first release: existing installs get them once, on update. */
+export const SEEDED_LATER = ['cat_family_in'];
 
 /** Default category per biller / obligation type, used when "Mark paid" creates a transaction. */
 export const CATEGORY_FOR = {

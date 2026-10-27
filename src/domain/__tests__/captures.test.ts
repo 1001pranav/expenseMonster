@@ -1,5 +1,6 @@
-import { appOf, cardHintOf, duplicateOf, recentRepeats, splitCaptures, suggestAmountFix } from '../captures';
-import { cardEndingIn, maskedCardDigits } from '../parsers/common';
+import { appOf, cardHintOf, duplicateOf, fillFromSms, recentRepeats, splitCaptures, suggestAmountFix } from '../captures';
+import { cardEndingIn, maskedCardDigits, type ParsedTxn } from '../parsers/common';
+import { parseSms } from '../parsers/sms';
 import { txn } from './fixtures';
 
 describe('check captures', () => {
@@ -80,5 +81,32 @@ describe('masked card numbers', () => {
     expect(cardEndingIn([hdfc, sbi], '06')).toBe(hdfc);
     expect(cardEndingIn([hdfc, sbi, { id: 'axis', last4: '5506' }], '06')).toBeUndefined();
     expect(cardEndingIn([hdfc, { id: 'new', last4: null }], null)).toBeUndefined();
+  });
+});
+
+describe('filling the form from a pasted bank SMS', () => {
+  const cards = [{ id: 'icici', last4: '9876' }, { id: 'hdfc', last4: '5678' }];
+  const accounts = [{ id: 'hdfc-sb', last4: '1234' }];
+  const fill = (sms: string) => fillFromSms(parseSms(sms, '2026-09-12') as ParsedTxn, sms, cards, accounts);
+
+  it('a UPI payment: amount, payee, account, date and reference', () => {
+    expect(fill('Sent Rs.250.00\nFrom HDFC Bank A/C *1234\nTo SWIGGY\nOn 12/09/26\nRef 425612345678')).toMatchObject({
+      type: 'expense',
+      amount: 250_00,
+      payee: 'Swiggy',
+      method: 'upi',
+      accountId: 'hdfc-sb',
+      cardId: null,
+      date: '2026-09-12',
+      sourceRef: '425612345678',
+    });
+  });
+
+  it('a credit card spend picks the saved card by its number', () => {
+    expect(fill('INR 2,499.00 spent using ICICI Bank Card XX9876 on 12-Sep-26 on AMAZON. Avl Limit: INR 1,23,456.00.')).toMatchObject({ type: 'expense', method: 'card', cardId: 'icici', accountId: null });
+  });
+
+  it('money received is income', () => {
+    expect(fill('Rs.85000.00 credited to HDFC Bank A/c XX1234 on 12-09-26 by NEFT from ACME PVT LTD').type).toBe('income');
   });
 });
