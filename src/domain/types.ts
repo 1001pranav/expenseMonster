@@ -265,6 +265,19 @@ export interface SmsFormat extends BaseRow {
   active: 0 | 1;
 }
 
+/**
+ * A sender the user has marked: 'bank' (read its SMS, including from a plain phone number, and
+ * file them under the linked account / card when the message doesn't say which) or 'blocked'.
+ */
+export interface SmsSender extends BaseRow {
+  /** Normalised with domain/smsSender.ts: "HDFCBK" for "VM-HDFCBK-S", last 10 digits for a phone number. */
+  sender: string;
+  name: string | null;
+  kind: 'bank' | 'blocked';
+  accountId: string | null;
+  cardId: string | null;
+}
+
 export type AssetClass = 'gold' | 'silver' | 'equity' | 'mf' | 'bond' | 'fixed' | 'other';
 export type QuantityUnit = 'g' | 'share' | 'unit' | 'bond' | 'none';
 export type FundType = 'equity' | 'debt' | 'hybrid' | 'gold' | 'international';
@@ -392,6 +405,7 @@ export interface TableMap {
   budgets: Budget;
   rules: CategoryRule;
   sms_formats: SmsFormat;
+  sms_senders: SmsSender;
   devices: Device;
   household: HouseholdInfo;
   sync_holds: SyncHold;
@@ -421,5 +435,6 @@ export const SYNC_TABLES: TableName[] = [
   'budgets',
   'rules',
   'sms_formats',
+  'sms_senders',
   'transactions',
 ];

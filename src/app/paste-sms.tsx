@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import { Keyboard, View } from 'react-native';
 import { formatDay, relativeDay, todayYMD } from '@/domain/dates';
 import { formatINR } from '@/domain/money';
+import { findSender } from '@/domain/smsSender';
 import { approveCapture, deleteTransaction } from '@/data/actions';
+import { useTable } from '@/data/hooks';
 import { captureText, readSms } from '@/services/capture';
 import { Button, Card, IconCircle, Row, Txt } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
@@ -19,14 +21,20 @@ import { space, useTheme } from '@/ui/theme';
 export default function PasteSms() {
   const { colors } = useTheme();
   const [text, setText] = useState('');
+  const [sender, setSender] = useState('');
   const [busy, setBusy] = useState(false);
-  const parsed = useMemo(() => readSms(text), [text]);
+  const marked = findSender(useTable('sms_senders'), sender);
+  const blocked = marked?.kind === 'blocked';
+  // Re-read when formats change: coming back from teaching one must show the new read.
+  const formats = useTable('sms_formats');
+  const parsed = useMemo(() => (blocked ? null : readSms(text, sender, formats)), [text, sender, blocked, formats]);
   const payment = parsed?.kind === 'transaction' ? parsed : null;
-  const unrecognised = text.trim().length > 20 && !parsed;
+  const unrecognised = text.trim().length > 20 && !parsed && !blocked;
+  const teach = () => router.push({ pathname: '/settings/sms-format', params: { text, sender } });
 
   /** Capture it; returns the new entry's id, or null when it was already recorded or wasn't a payment. */
   const capture = async (): Promise<string | null> => {
-    const r = await captureText(text);
+    const r = await captureText(text, sender);
     if (r.addedIds[0]) return r.addedIds[0];
     if (r.bills) {
       toast('Bill detected — check it in Check captures', { tone: 'success' });
@@ -97,6 +105,20 @@ export default function PasteSms() {
     >
       <Button title="Paste from clipboard" icon="clipboard-outline" variant="secondary" onPress={paste} />
       <TextField label="Message" value={text} onChangeText={setText} multiline placeholder="Sent Rs.250.00 From HDFC Bank A/C *1234 To SWIGGY On 12/09/26 Ref 425612345678" />
+      <TextField
+        label="From (optional)"
+        value={sender}
+        onChangeText={setSender}
+        placeholder="VM-HDFCBK or the bank's number"
+        autoCapitalize="characters"
+        hint={
+          blocked
+            ? 'You blocked this sender, so its messages are not recorded'
+            : marked
+              ? `Your bank${marked.name ? `: ${marked.name}` : ''}`
+              : 'Lets your sender marks and formats apply to this message'
+        }
+      />
 
       {payment ? (
         <Card style={{ gap: space(1.5) }}>
@@ -131,9 +153,20 @@ export default function PasteSms() {
           <Txt variant="small" tone="muted">
             Teach it once by tapping the amount, payee and date. After that, every message like this is read automatically.
           </Txt>
-          <Button title="Teach this format" icon="school-outline" variant="secondary" onPress={() => router.push({ pathname: '/settings/sms-format', params: { text } })} />
+          <Button title="Teach this format" icon="school-outline" variant="secondary" onPress={teach} />
           {unrecognised ? <Button title="Add it manually instead" variant="ghost" onPress={() => router.replace('/txn/new')} /> : null}
         </Card>
+      ) : payment ? (
+        <Button title="Read wrong? Teach the right way" icon="school-outline" variant="ghost" size="sm" onPress={teach} />
+      ) : null}
+      {sender.trim() && !marked && (payment || unrecognised) ? (
+        <Button
+          title="Mark this sender as my bank"
+          icon="business-outline"
+          variant="ghost"
+          size="sm"
+          onPress={() => router.push({ pathname: '/settings/sms-sender', params: { sender } })}
+        />
       ) : null}
     </Screen>
   );

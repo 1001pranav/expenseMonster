@@ -71,9 +71,50 @@ function compile(pattern: string): RegExp | null {
 
 const last4 = (s: string | undefined) => s?.replace(/\D/g, '').slice(-4) || null;
 
+export interface FormatStep {
+  role: TokenRole;
+  /** The fixed words just before the value, e.g. "Txn" for "Txn Rs.300.00"; null at the start. */
+  after: string | null;
+  /** Changing words (numbers) between `after` and the value. */
+  skip: number;
+}
+
+/**
+ * What a format looks for, in words: "after “Txn” → Amount". Read back from the saved pattern, so it
+ * works for formats taught on another phone too.
+ */
+export function describeFormat(pattern: string, roles: string | TokenRole[]): FormatStep[] {
+  let list: TokenRole[];
+  try {
+    list = typeof roles === 'string' ? JSON.parse(roles) : roles;
+  } catch {
+    return [];
+  }
+  const steps: FormatStep[] = [];
+  const words: string[] = [];
+  let skip = 0;
+  let group = 0;
+  for (const part of pattern.split('\\s+')) {
+    if (part.startsWith('(')) {
+      const role = list[group++];
+      if (role) steps.push({ role, after: words.length ? words.slice(-2).join(' ') : null, skip });
+      words.length = 0;
+      skip = 0;
+    } else if (part === '\\S+') {
+      skip++;
+    } else {
+      if (skip) words.length = 0;
+      skip = 0;
+      words.push(part.replace(/\\(.)/g, '$1'));
+    }
+  }
+  return steps;
+}
+
 export function applyFormat(format: Pick<SmsFormat, 'pattern' | 'roles' | 'direction' | 'isCard' | 'sender' | 'active'>, sender: string, body: string, received: YMD): ParsedTxn | null {
   if (!format.active) return null;
-  if (format.sender && !sender.toLowerCase().includes(format.sender.toLowerCase())) return null;
+  // A pasted SMS has no sender: the pattern alone decides.
+  if (format.sender && sender && !sender.toLowerCase().includes(format.sender.toLowerCase())) return null;
   const re = compile(format.pattern);
   if (!re) return null;
   const text = body.replace(/\s+/g, ' ').trim();

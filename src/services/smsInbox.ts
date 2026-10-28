@@ -4,6 +4,7 @@ import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { autoSaveCapture } from '@/data/actions';
 import { saveSettings } from '@/db/repo';
 import { getState } from '@/db/store';
+import { allowedSenders } from '@/domain/smsSender';
 import { captureText } from './capture';
 import { logFailure, logInfo } from './diagnostics';
 
@@ -60,6 +61,7 @@ export async function importBankSms(since: number, timeoutMs = 60_000): Promise<
   await Linking.sendIntent(`${pkg}.IMPORT_SMS`, [
     { key: 'since', value: since },
     { key: 'token', value: token },
+    { key: 'allow', value: allowedSenders(getState().tables.sms_senders).join(',') },
   ]);
   for (let t = 0; !done.exists && t < timeoutMs; t += 300) await wait(300);
   if (done.exists) done.delete();
