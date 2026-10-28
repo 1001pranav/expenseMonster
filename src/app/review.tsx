@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { cardHintOf, duplicateOf, splitCaptures } from '@/domain/captures';
-import { formatDay, isoToYMD, relativeDay } from '@/domain/dates';
+import { formatDay, isoToYMD, relativeDay, toYMD } from '@/domain/dates';
 import { formatINR } from '@/domain/money';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
@@ -15,7 +15,7 @@ import { Button, Card, Chip, EmptyState, IconCircle, Money, Pill, Row, Section, 
 import { toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
-import { space, useTheme } from '@/ui/theme';
+import { fonts, space, useTheme } from '@/ui/theme';
 
 export default function Review() {
   const { colors } = useTheme();
@@ -60,7 +60,11 @@ export default function Review() {
   return (
     <Screen
       title="Check captures"
-      subtitle="Nothing is saved until you approve it"
+      subtitle={
+        transactions.length
+          ? [`${transactions.length} to check`, importedTo ? `SMS read ${relativeDay(toYMD(new Date(importedTo)), today).replace(/^(Today|Yesterday)$/, (w) => w.toLowerCase())}` : null].filter(Boolean).join(' · ')
+          : 'Nothing is saved until you approve it'
+      }
       back
       right={smsCaptureAvailable ? <Button title="Import" icon="download-outline" variant="ghost" size="sm" loading={importing} onPress={importSms} /> : undefined}
       footer={ready.length ? <Button title={ready.length === 1 ? 'Approve the one read clearly' : `Approve ${ready.length} that were read clearly`} icon="checkmark-done" variant="success" size="lg" onPress={approveReady} /> : undefined}
@@ -70,10 +74,8 @@ export default function Review() {
       ) : null}
 
       {ready.length ? (
-        <Section title={`Ready · ${ready.length}`}>
-          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
-            Read clearly, from payees you know. Tap one to change it.
-          </Txt>
+        <Section>
+          <SectionHead title={`Ready · ${ready.length}`} note="Read clearly, known payee" />
           <Card padded={false} style={{ overflow: 'hidden' }}>
             {ready.map((t, i) => (
               <View key={t.id}>
@@ -88,10 +90,8 @@ export default function Review() {
       ) : null}
 
       {needsYou.length ? (
-        <Section title={`Needs you · ${needsYou.length}`}>
-          <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
-            Answer the question on each, or tap it to change anything. Swipe for Approve and Reject.
-          </Txt>
+        <Section>
+          <SectionHead title={`Needs you · ${needsYou.length}`} note="One question each" />
           <View style={{ gap: space(1.25) }}>
             {needsYou.map((t) => (
               <Card key={t.id} padded={false} style={{ overflow: 'hidden' }}>
@@ -136,6 +136,20 @@ export default function Review() {
         </Section>
       ) : null}
     </Screen>
+  );
+}
+
+/** Section title with a short muted note on the right (the design's "Ready · 3   Read clearly"). */
+function SectionHead({ title, note }: { title: string; note: string }) {
+  return (
+    <Row style={{ justifyContent: 'space-between', paddingHorizontal: 4 }}>
+      <Txt variant="h3" style={{ fontFamily: fonts.displaySemi, fontSize: 17 }}>
+        {title}
+      </Txt>
+      <Txt variant="small" tone="muted">
+        {note}
+      </Txt>
+    </Row>
   );
 }
 

@@ -68,7 +68,7 @@ export async function learnRule(t: Pick<Transaction, 'payee' | 'vpa' | 'category
 export async function approveCapture(id: string, patch: Partial<Transaction> = {}) {
   const row = await update('transactions', id, { ...patch, status: 'confirmed', flags: stripFlag(patch.flags ?? findById('transactions', id)?.flags ?? null, 'duplicate') });
   await learnRule(row);
-  if (getState().settings.deleteCapturesAfterApproval && row.attachment) {
+  if (getState().settings.deleteScreenshots && row.attachment) {
     const { deleteAttachment } = await import('@/services/files');
     deleteAttachment(row.attachment);
     await update('transactions', id, { attachment: null });
@@ -103,8 +103,9 @@ export async function answerCardHint(id: string, cardId: string) {
   const card = findById('cards', cardId);
   const hint = (t?.flags ?? '').split(',').find((f) => f.startsWith('card-hint:'))?.split(':')[1];
   if (!t || !card) return;
-  if (hint && !card.last4) await update('cards', cardId, { last4: hint });
-  else if (hint && card.last4 !== hint) await rememberCard(hint, t.source === 'ocr' ? 'ocr' : 'sms', cardId);
+  // A full number becomes the card's own; two masked digits ("XXXXXX06") are remembered as a rule.
+  if (hint?.length === 4 && !card.last4) await update('cards', cardId, { last4: hint });
+  else if (hint && !card.last4?.endsWith(hint)) await rememberCard(hint.length === 4 ? hint : `xx${hint}`, t.source === 'ocr' ? 'ocr' : 'sms', cardId);
   await update('transactions', id, { method: 'card', cardId, accountId: null, flags: stripFlag(t.flags, 'card-hint') });
 }
 

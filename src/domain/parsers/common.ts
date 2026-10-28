@@ -88,6 +88,22 @@ export function findLast4(text: string, label: RegExp): string | null {
   return m ? m[1].slice(-4) : null;
 }
 
+/**
+ * The visible digits of a masked credit card ("HDFC BANK RUPAY CREDIT CARD XXXXXX06" → "06"):
+ * payment apps often show only the last two. Null when no masked card number is shown.
+ */
+export function maskedCardDigits(text: string): string | null {
+  const m = text.match(/credit\s*card[\s\S]{0,40}?[xX*•]{2,}\s?(\d{2,4})\b/i);
+  return m ? m[1] : null;
+}
+
+/** The one saved card whose number ends in these digits (2–4 of them), if exactly one does. */
+export function cardEndingIn<T extends { last4: string | null }>(cards: T[], digits: string | null): T | undefined {
+  if (!digits) return undefined;
+  const hits = cards.filter((c) => c.last4?.endsWith(digits));
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
 export function findVpa(text: string): string | null {
   const m = text.match(/\b([a-z0-9][a-z0-9.\-_]{1,63}@[a-z][a-z0-9]{1,30})\b/i);
   if (!m) return null;

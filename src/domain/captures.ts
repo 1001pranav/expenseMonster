@@ -1,5 +1,6 @@
 import { addDays, isoToYMD, type YMD } from './dates';
 import type { Paise } from './money';
+import { cardEndingIn, maskedCardDigits, type ParsedTxn } from './parsers/common';
 import { flagsOf, isClearCapture } from './transactions';
 import type { PayMethod, Transaction, TxnType } from './types';
 
@@ -69,4 +70,38 @@ export function recentRepeats(txns: Transaction[], type: TxnType, today: YMD, li
     .sort((a, b) => b.count - a.count || b.last.localeCompare(a.last))
     .slice(0, limit)
     .map(({ last: _last, ...r }) => r);
+}
+
+/** What a bank SMS fills in on the new-entry form (the keypad's "Paste bank SMS"). */
+export interface SmsFill {
+  type: TxnType;
+  amount: Paise;
+  payee: string | null;
+  vpa: string | null;
+  method: PayMethod;
+  cardId: string | null;
+  accountId: string | null;
+  date: YMD | null;
+  /** UPI reference, kept so the same SMS imported or pasted later is seen as already recorded. */
+  sourceRef: string | null;
+  /** A "payment received" on a credit card: a card bill paid, so a transfer to that card. */
+  paysCardId: string | null;
+}
+
+export function fillFromSms(p: ParsedTxn, text: string, cards: { id: string; last4: string | null }[], accounts: { id: string; last4: string | null }[]): SmsFill {
+  const card = p.isCreditCard ? cardEndingIn(cards, p.cardLast4 ?? maskedCardDigits(text)) : undefined;
+  const account = p.isCreditCard ? undefined : cardEndingIn(accounts, p.accountLast4);
+  const cardBill = p.isCreditCard && p.direction === 'credit' && !p.isRefund && /payment/i.test(text);
+  return {
+    type: cardBill ? 'transfer' : p.direction === 'debit' ? 'expense' : 'income',
+    amount: p.amount,
+    payee: cardBill ? null : (p.payee ?? null),
+    vpa: p.vpa,
+    method: cardBill ? 'bank' : p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank',
+    cardId: cardBill ? null : (card?.id ?? null),
+    accountId: account?.id ?? null,
+    date: p.date,
+    sourceRef: p.ref,
+    paysCardId: cardBill ? (card?.id ?? null) : null,
+  };
 }
