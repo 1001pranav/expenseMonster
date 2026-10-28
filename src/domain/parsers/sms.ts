@@ -24,7 +24,7 @@ const IGNORE = [
   /^(?!.*\bcredited\b).*\b(?:failed|declined|unsuccessful)\b/is,
 ];
 
-const DEBIT = /\b(debited|spent|sent|paid|withdrawn|purchase|txn of|transferred|deducted|charged|used for)\b/i;
+const DEBIT = /\b(debited|spent|sent|paid|withdrawn|purchase|txn of|txn(?=\s*(?:₹|rs\b|inr\b))|transferred|deducted|charged|used for)\b/i;
 const CREDIT = /\b(credited|received|deposited|refund(?:ed)?|reversed|added)\b/i;
 
 function direction(text: string): 'debit' | 'credit' | null {

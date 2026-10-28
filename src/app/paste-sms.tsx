@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { Keyboard, View } from 'react-native';
 import { formatDay, relativeDay, todayYMD } from '@/domain/dates';
 import { formatINR } from '@/domain/money';
 import { approveCapture, deleteTransaction } from '@/data/actions';
@@ -58,6 +58,17 @@ export default function PasteSms() {
     }
   };
 
+  /**
+   * Close the keyboard first: nothing is left to type, and keeping it open while the read card and
+   * the Save footer appear squeezes the screen into the space above the keyboard.
+   */
+  const paste = async () => {
+    Keyboard.dismiss();
+    const clip = (await Clipboard.getStringAsync()).trim();
+    if (clip) setText(clip);
+    else toast('Clipboard is empty — copy the SMS first');
+  };
+
   const today = todayYMD();
   const rows: [string, string, string][] = payment
     ? [
@@ -84,7 +95,7 @@ export default function PasteSms() {
         ) : undefined
       }
     >
-      <Button title="Paste from clipboard" icon="clipboard-outline" variant="secondary" onPress={async () => setText(await Clipboard.getStringAsync())} />
+      <Button title="Paste from clipboard" icon="clipboard-outline" variant="secondary" onPress={paste} />
       <TextField label="Message" value={text} onChangeText={setText} multiline placeholder="Sent Rs.250.00 From HDFC Bank A/C *1234 To SWIGGY On 12/09/26 Ref 425612345678" />
 
       {payment ? (

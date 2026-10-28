@@ -140,6 +140,15 @@ export function parseLooseDate(text: string, ref: YMD): YMD | null {
   return null;
 }
 
+/**
+ * A year-less numeric "27-10" / "27/10" at the very start of `text`. Only safe right
+ * after a date label ("On 27-10"); anywhere else "n-n" is too ambiguous to be a date.
+ */
+export function parseDayMonth(text: string, ref: YMD): YMD | null {
+  const m = text.match(/^\s*(\d{1,2})[-/](\d{1,2})(?![-/.]?\d)/);
+  return m ? withOptionalYear(Number(m[1]), Number(m[2]), undefined, ref) : null;
+}
+
 function valid(y: number, m: number, d: number): YMD | null {
   if (m < 1 || m > 12 || d < 1 || d > daysInMonth(y, m)) return null;
   return fromParts(y, m, d);

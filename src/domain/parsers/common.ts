@@ -1,4 +1,4 @@
-import { parseLooseDate, parseTime, type YMD } from '../dates';
+import { parseDayMonth, parseLooseDate, parseTime, type YMD } from '../dates';
 import type { Paise } from '../money';
 
 export type Direction = 'debit' | 'credit';
@@ -114,7 +114,8 @@ export function findRef(text: string): string | null {
 export function findDate(text: string, ref: YMD): YMD | null {
   const noAmounts = text.replace(new RegExp(AMOUNT, 'gi'), ' ');
   for (const m of noAmounts.matchAll(/\b(?:on|dt|date|dated)\b[:\s]*(?:date\s*)?/gi)) {
-    const d = parseLooseDate(noAmounts.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 24), ref);
+    const after = noAmounts.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 24);
+    const d = parseLooseDate(after, ref) ?? parseDayMonth(after, ref);
     if (d) return d;
   }
   return parseLooseDate(noAmounts, ref);
