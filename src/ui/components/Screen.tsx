@@ -45,6 +45,7 @@ export function Screen({
   scroll = true,
   refreshing,
   onRefresh,
+  onScrollBeginDrag,
   tabBar,
   footer,
   contentStyle,
@@ -59,6 +60,8 @@ export function Screen({
   scroll?: boolean;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** The user started scrolling (the entry form closes its keypad then). */
+  onScrollBeginDrag?: () => void;
   /** Leave room for the floating tab bar. */
   tabBar?: boolean;
   /** Sticky bottom area (e.g. Save button). */
@@ -81,6 +84,7 @@ export function Screen({
       {header}
       {scroll ? (
         <ScrollView
+          onScrollBeginDrag={onScrollBeginDrag}
           contentContainerStyle={content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

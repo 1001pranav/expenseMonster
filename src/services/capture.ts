@@ -3,7 +3,7 @@ import { statementDateFor } from '@/domain/creditCard';
 import { addDays, addMonths, toISO, toYMD, todayYMD, type YMD } from '@/domain/dates';
 import { textHash } from '@/domain/ids';
 import type { Paise } from '@/domain/money';
-import type { Parsed, ParsedBill, ParsedCardStatement, ParsedTxn } from '@/domain/parsers/common';
+import { cardEndingIn, maskedCardDigits, type Parsed, type ParsedBill, type ParsedCardStatement, type ParsedTxn } from '@/domain/parsers/common';
 import { applyFormat } from '@/domain/parsers/custom';
 import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
@@ -38,8 +38,10 @@ const emptySummary = (): CaptureSummary => ({ added: 0, duplicates: 0, bills: 0,
  */
 function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawText: string, attachment: string | null, bySender?: SmsSender): TxnDraft {
   const { tables, identity } = getState();
+  // Payment apps often mask all but two digits ("XXXXXX06"): match those against saved cards too.
+  const cardDigits = p.cardLast4 ?? (p.isCreditCard ? maskedCardDigits(rawText) : null);
   const named = {
-    card: p.cardLast4 ? tables.cards.find((c) => c.last4 === p.cardLast4) : undefined,
+    card: cardEndingIn(tables.cards, cardDigits),
     account: p.accountLast4 ? tables.accounts.find((a) => a.last4 === p.accountLast4) : undefined,
   };
   // The sender's card only when the SMS doesn't name an account, and either says "card" or the
@@ -50,7 +52,7 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
   const account = named.account ?? senderAccount;
   const viaCard = p.isCreditCard || Boolean(card);
   const flags: string[] = [];
-  if (p.isCreditCard && !card && p.cardLast4) flags.push(`card-hint:${p.cardLast4}`);
+  if (p.isCreditCard && !card && cardDigits) flags.push(`card-hint:${cardDigits}`);
   if (p.isRefund) flags.push('refund');
   if (p.app) flags.push(`app:${p.app}`);
 

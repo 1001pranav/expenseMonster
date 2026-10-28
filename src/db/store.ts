@@ -9,7 +9,8 @@ export interface Settings {
   reviewNudge: boolean;
   hideAmounts: boolean;
   wipeAfterFailures: boolean;
-  deleteCapturesAfterApproval: boolean;
+  /** Delete a capture's screenshot once it's approved. Off: it stays viewable on the entry. */
+  deleteScreenshots: boolean;
   defaultTxnScope: Scope;
   theme: 'system' | 'light' | 'dark';
   syncConflictPolicy: ConflictPolicy;
@@ -35,7 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reviewNudge: true,
   hideAmounts: false,
   wipeAfterFailures: false,
-  deleteCapturesAfterApproval: false,
+  deleteScreenshots: false,
   defaultTxnScope: 'household',
   theme: 'system',
   syncConflictPolicy: 'ask',

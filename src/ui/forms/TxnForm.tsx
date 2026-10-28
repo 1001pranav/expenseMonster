@@ -1,5 +1,6 @@
+import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Alert, Pressable, TextInput, View } from "react-native";
 import {
@@ -11,7 +12,8 @@ import {
   type Selection,
 } from "@/domain/amountInput";
 import { billerMeta, viewBill } from "@/domain/bills";
-import { recentRepeats, suggestAmountFix, type Repeat } from "@/domain/captures";
+import { appOf, fillFromSms, recentRepeats, suggestAmountFix, type Repeat } from "@/domain/captures";
+import { textHash } from "@/domain/ids";
 import { formatDay, isoToYMD, toISO, type YMD } from "@/domain/dates";
 import { formatINR, type Paise } from "@/domain/money";
 import { LEGACY_INVEST_CATEGORY } from "@/domain/investments";
@@ -52,7 +54,8 @@ import {
   Txt,
   type IconName,
 } from "../components/core";
-import { Keypad, toast } from "../components/feedback";
+import { toast } from "../components/feedback";
+import { AmountPad } from "../components/AmountPad";
 import {
   ChipSelect,
   DateField,
@@ -66,6 +69,7 @@ import { ScreenshotThumb } from "../components/Screenshot";
 import { Tile, TileGrid, TileRow } from "../components/tiles";
 import { fonts, space, useTheme } from "../theme";
 import { deleteAttachment } from "@/services/files";
+import { readSms } from "@/services/capture";
 
 function amountText(paise: Paise | null) {
   if (!paise) return "";
@@ -168,6 +172,18 @@ export function TxnForm({
   /** "Always use this card when a screenshot says credit card" (saved as one of your rules). */
   const [rememberCredit, setRememberCredit] = useState(true);
   const queue = usePending().transactions;
+  const [viewShot, setViewShot] = useState(false);
+  /** The clipboard has text, so the keypad offers "Paste bank SMS". */
+  const [clipHasText, setClipHasText] = useState(false);
+  /** Where the form was filled from a pasted bank SMS: kept so the same SMS isn't recorded twice. */
+  const [fromSms, setFromSms] = useState<{ ref: string | null; vpa: string | null; hash: string } | null>(null);
+  useEffect(() => {
+    if (!keypad || existing) return;
+    // Only asks whether there is text; the text itself is read when the pill is tapped.
+    Clipboard.hasStringAsync()
+      .then(setClipHasText)
+      .catch(() => setClipHasText(false));
+  }, [keypad, existing]);
 
   const catKind = type === "income" ? "income" : "expense";
   const categories = useSortedCategories(catKind);
@@ -279,6 +295,12 @@ export function TxnForm({
       queue.find((t) => t.id !== existing?.id))
     : undefined;
   const amountFix = pending && existing ? suggestAmountFix(existing.amount, flags) : null;
+  const warned = flags.some(
+    (f) =>
+      f.startsWith("duplicate") ||
+      f === "amount-unsure" ||
+      f === "payment-pending",
+  );
   const repeats = useMemo(
     () => (existing ? [] : recentRepeats(txns, type, today)),
     [existing, txns, type, today],
@@ -292,6 +314,12 @@ export function TxnForm({
     method === "card" &&
     Boolean(cardId) &&
     /credit\s*card/i.test(ocrText ?? "credit card");
+  // A card payment that isn't sure of its card asks, in a highlighted "Paid with" (designs 1b, 2a).
+  const askCard =
+    pending &&
+    type === "expense" &&
+    (Boolean(cardHint) ||
+      (method === "card" && (!cardId || offerCardRule)));
 
   // "Which bill?" — open bills, newest due first, for bill-type categories or when the capture matched a biller.
   const openBills = useMemo(
@@ -322,6 +350,13 @@ export function TxnForm({
 
   const save = async (approve = false) => {
     if (!amount) return toast("Enter an amount", { tone: "error" });
+    const sameSms = fromSms?.ref
+      ? txns.find((t) => t.sourceRef === fromSms.ref && t.status !== "rejected")
+      : undefined;
+    if (sameSms) {
+      toast("This SMS is already recorded — here it is");
+      return router.replace(`/txn/${sameSms.id}`);
+    }
     if (method === "card" && type === "expense" && !cardId && cards.length)
       return toast("Pick which credit card", { tone: "error" });
     if (isFamily && (!payer || !toMember || payer === toMember))
@@ -357,6 +392,14 @@ export function TxnForm({
             : null,
         linkType: link.id && !isFamily ? link.type : null,
         linkId: isFamily ? null : link.id,
+        ...(fromSms && !existing
+          ? {
+              source: "sms" as const,
+              sourceRef: fromSms.ref,
+              sourceHash: fromSms.hash,
+              vpa: fromSms.vpa,
+            }
+          : {}),
       } satisfies Partial<Transaction>;
       if (existing && (pending || approve)) {
         // Answer "which card ends in …" once, so the next message naming it is matched by itself.
@@ -466,6 +509,42 @@ export function TxnForm({
     setCategoryId(id);
     setAutoCat(false);
   };
+  // The keypad's "Paste bank SMS": read the clipboard and fill what the message says.
+  const pasteSms = async () => {
+    const text = await Clipboard.getStringAsync().catch(() => "");
+    const parsed = readSms(text);
+    if (parsed?.kind !== "transaction") {
+      return toast("The clipboard doesn't look like a bank payment SMS", {
+        actionLabel: "Paste SMS screen",
+        onAction: () => router.push("/paste-sms"),
+      });
+    }
+    const f = fillFromSms(parsed, text, cards, accounts);
+    setKeypad(false);
+    setType(f.type);
+    setFamily(false);
+    const raw = amountText(f.amount);
+    setAmountStr(raw);
+    setAmountSel({ start: raw.length, end: raw.length });
+    setMethod(f.method);
+    setAutoPay(false);
+    if (f.cardId) setCardId(f.cardId);
+    if (f.accountId) setAccountId(f.accountId);
+    if (f.date) setDate(f.date);
+    if (f.paysCardId) {
+      setCardId(f.paysCardId);
+      setLink({ type: "card", id: f.paysCardId });
+    }
+    setFromSms({ ref: f.sourceRef, vpa: f.vpa, hash: textHash(`|${text}`) });
+    if (f.payee) onPayee(f.payee);
+    toast(
+      f.method === "card" && !f.cardId && f.type === "expense"
+        ? "Filled from the SMS. Pick which card, then save."
+        : "Filled from the SMS. Check it and save.",
+      { tone: "success" },
+    );
+  };
+
   // "Again?": the same payee, amount, category and way of paying as the last time.
   const fillRepeat = (r: Repeat) => {
     setKeypad(false);
@@ -485,6 +564,8 @@ export function TxnForm({
   return (
     <Screen
       title={title}
+      // Scrolling means the user is looking past the amount: put the keypad away.
+      onScrollBeginDrag={keypad ? () => setKeypad(false) : undefined}
       subtitle={
         pending
           ? [
@@ -494,7 +575,7 @@ export function TxnForm({
               existing?.source === "sms"
                 ? "from a bank SMS"
                 : existing?.source === "ocr"
-                  ? "from a screenshot"
+                  ? `from a ${appOf(existing) ? `${appOf(existing)} ` : ""}screenshot`
                   : null,
             ]
               .filter(Boolean)
@@ -521,7 +602,13 @@ export function TxnForm({
       }
       footer={
         <View style={{ gap: space(1) }}>
-          {keypad ? <Keypad onKey={onKey} /> : null}
+          {keypad ? (
+            <AmountPad
+              onKey={onKey}
+              onDone={() => setKeypad(false)}
+              onPaste={!existing && clipHasText ? pasteSms : undefined}
+            />
+          ) : null}
           <Button
             title={
               pending
@@ -541,7 +628,7 @@ export function TxnForm({
         </View>
       }
     >
-      {pending ? (
+      {pending && (existing?.attachment || warned) ? (
         <Card tone="alt" style={{ gap: 6, flexDirection: "row" }}>
           {existing?.attachment ? (
             <ScreenshotThumb uri={existing.attachment} />
@@ -623,7 +710,7 @@ export function TxnForm({
         </Card>
       ) : existing?.attachment ? (
         <Card style={{ flexDirection: "row", gap: space(1.75), padding: space(1.5) }}>
-          <ScreenshotThumb uri={existing.attachment} width={92} height={150} />
+          <ScreenshotThumb uri={existing.attachment} width={92} height={150} open={viewShot} onOpenChange={setViewShot} />
           <View style={{ flex: 1, gap: 4 }}>
             <Txt variant="bodyStrong">Payment screenshot</Txt>
             <Txt variant="small" tone="muted">
@@ -631,6 +718,14 @@ export function TxnForm({
               Kept on this phone. Tap it to see it full screen.
             </Txt>
             <View style={{ flex: 1 }} />
+            <Button
+              title="View full screen"
+              icon="expand-outline"
+              variant="secondary"
+              size="sm"
+              style={{ alignSelf: "flex-start" }}
+              onPress={() => setViewShot(true)}
+            />
             <Button
               title="Delete screenshot only"
               icon="trash-outline"
@@ -926,6 +1021,40 @@ export function TxnForm({
         </Field>
       )}
 
+      {type === "income" &&
+      categoryId === "cat_family_in" &&
+      members.length > 1 ? (
+        <Card tone="alt" style={{ gap: space(1) }}>
+          <Txt variant="small" tone="muted">
+            Sent by someone in your household? Their money is already counted
+            here, so record it as money moved from them instead. From family
+            elsewhere (say, parents in another city), keep it as income.
+          </Txt>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {members
+              .filter((m) => m.id !== selfId)
+              .map((m) => (
+                <Chip
+                  key={m.id}
+                  compact
+                  icon="swap-horizontal"
+                  label={`From ${m.name}`}
+                  onPress={() => {
+                    setType("transfer");
+                    setFamily(true);
+                    setPayer(m.id);
+                    setToMember(selfId || null);
+                    setCategoryId(null);
+                    setAutoCat(false);
+                    setLink({ type: null, id: null });
+                    setScope("household");
+                  }}
+                />
+              ))}
+          </View>
+        </Card>
+      ) : null}
+
       {isFamily ? (
         <>
           <ChipSelect
@@ -1015,7 +1144,7 @@ export function TxnForm({
 
       <View
         style={
-          cardHint && type === "expense"
+          askCard
             ? {
                 backgroundColor: colors.warnSoft,
                 borderRadius: 20,
@@ -1028,8 +1157,10 @@ export function TxnForm({
       >
       <Field
         label={
-          cardHint && type === "expense"
-            ? `Which card ends in ${cardHint}?`
+          askCard
+            ? cardHint
+              ? `Which card ends in ${cardHint}?`
+              : "Which credit card paid this?"
             : type === "transfer"
               ? "From"
               : type === "income"
@@ -1094,7 +1225,14 @@ export function TxnForm({
         ) : null}
       </View>
 
-      <DateField label="Date" value={date} onChange={setDate} />
+      <DateField
+        label="Date"
+        value={date}
+        onChange={(d) => {
+          setKeypad(false);
+          setDate(d);
+        }}
+      />
 
       {existing &&
       !pending &&
