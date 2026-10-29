@@ -47,7 +47,7 @@ export default function RuleEdit() {
     learned: 0,
   };
   const sentence = describeRule(draft, { category: (id) => catMap.get(id)?.name, card: (id) => cards.find((c) => c.id === id)?.name, account: (id) => accounts.find((a) => a.id === id)?.name });
-  // Past entries it would have matched. Screenshot and SMS text isn't kept, so only the payee can be checked.
+  // Past entries it would have matched. Screenshot and SMS text isn't kept once an entry is saved, so only the payee can be checked.
   const matches = useMemo(() => (draft.pattern ? txns.filter((t) => t.status === 'confirmed' && ruleMatches({ ...draft, field: 'payee' }, { payee: t.payee, vpa: t.vpa, source: t.source })).length : 0), [txns, draft.pattern, source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const payOptions: { key: string; icon: IconName; label: string; sub?: string; method: PayMethod | null; cardId?: string }[] = [

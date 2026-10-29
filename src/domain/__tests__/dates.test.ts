@@ -1,4 +1,4 @@
-import { addMonths, clampedDate, parseLooseDate, parseTime, relativeDay } from '../dates';
+import { addMonths, clampedDate, formatTime, parseLooseDate, parseTime, relativeDay } from '../dates';
 
 describe('dates', () => {
   it('clamps day 31 in short months and keeps anchor', () => {
@@ -34,5 +34,12 @@ describe('dates', () => {
     expect(relativeDay('2026-09-21', '2026-09-20')).toBe('Tomorrow');
     expect(relativeDay('2026-09-25', '2026-09-20')).toBe('in 5 days');
     expect(relativeDay('2026-09-17', '2026-09-20')).toBe('3 days ago');
+  });
+  it('formats a time of day in 12-hour form', () => {
+    const at = (h: number, m: number) => new Date(2026, 9, 29, h, m).toISOString();
+    expect(formatTime(at(0, 5))).toBe('12:05 am');
+    expect(formatTime(at(9, 30))).toBe('9:30 am');
+    expect(formatTime(at(12, 0))).toBe('12:00 pm');
+    expect(formatTime(at(22, 7))).toBe('10:07 pm');
   });
 });

@@ -3,9 +3,9 @@ import { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import { budgetUsage } from '@/domain/budget';
 import { splitCaptures } from '@/domain/captures';
-import { addMonths, daysInMonth, diffDays, monthKey, parts } from '@/domain/dates';
+import { addDays, addMonths, daysInMonth, diffDays, monthKey, parts } from '@/domain/dates';
 import type { DueItem } from '@/domain/dues';
-import { comparableChange, monthTotals } from '@/domain/transactions';
+import { comparableChange, dayTotals, monthTotals } from '@/domain/transactions';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { useCategoryMap, useConfirmed, useDues, useMembers, usePending, useSelfId, useTable, useToday } from '@/data/hooks';
@@ -43,6 +43,8 @@ export default function Home() {
   const prevKey = monthKey(addMonths(today, -1));
   const prevName = MONTH_NAMES[parts(`${prevKey}-01`).m - 1];
   const totals = useMemo(() => monthTotals(confirmed, month), [confirmed, month]);
+  const todays = useMemo(() => dayTotals(confirmed, today), [confirmed, today]);
+  const yesterdays = useMemo(() => dayTotals(confirmed, addDays(today, -1)).expense, [confirmed, today]);
   // Same days of last month, so the 5th of October isn't compared with all of September.
   const prevSoFar = useMemo(() => monthTotals(confirmed, prevKey, dayOfMonth).expense, [confirmed, prevKey, dayOfMonth]);
   const change = comparableChange(totals.expense, prevSoFar);
@@ -96,11 +98,24 @@ export default function Home() {
         </Row>
       }
     >
-      <View style={{ gap: space(1.25), paddingHorizontal: 4 }}>
-        <Txt variant="small" tone="muted">
-          Spent this month
+      {/* Today first: what you spent is the number you open the app for. The month sits under it. */}
+      <Card onPress={() => router.push('/activity')} style={{ gap: space(0.5), paddingVertical: space(2.25) }}>
+        <Txt variant="bodyStrong" tone="muted">
+          Spent today
         </Txt>
-        <Money value={totals.expense} variant="display" decimals="never" fit="narrow" />
+        <Money value={Math.max(0, todays.expense)} variant="display" decimals="never" fit="narrow" />
+        <Txt variant="small" tone="muted">
+          {todays.payments ? (todays.payments === 1 ? '1 payment' : `${todays.payments} payments`) : 'Nothing spent yet today'}
+          {yesterdays > 0 ? ` · ${money(yesterdays, { decimals: 'never' })} yesterday` : ''}
+        </Txt>
+      </Card>
+
+      <View style={{ gap: space(1.25) }}>
+        <Row gap={1} style={{ alignItems: 'stretch' }}>
+          <Tile label={`Spent in ${monthName}`} value={totals.expense} />
+          <Tile label="Money in" value={totals.income} tone="income" />
+          {totals.income ? <Tile label={totals.net < 0 ? 'Overspent' : 'Kept'} value={Math.abs(totals.net)} tone={totals.net < 0 ? 'expense' : 'default'} /> : null}
+        </Row>
         {budgetTotal ? (
           <>
             <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.good} height={6} />
@@ -127,12 +142,16 @@ export default function Home() {
             {Math.min(999, Math.abs(Math.round(change * 100)))}% {change > 0 ? 'more' : 'less'} than the same days of {prevName}
           </Txt>
         ) : null}
-        <Row gap={2.75} style={{ marginTop: space(0.5) }}>
-          <Stat label="Money in" value={totals.income} tone="income" />
-          {totals.income ? <Stat label={totals.net < 0 ? 'Overspent' : 'Kept'} value={Math.abs(totals.net)} tone={totals.net < 0 ? 'expense' : 'default'} /> : null}
-          {/* Three figures fit a narrow phone: in a month with investments, what went in replaces card bills. */}
-          {totals.invested ? <Stat label={totals.invested < 0 ? 'Taken out' : 'Invested'} value={Math.abs(totals.invested)} /> : cardBills ? <Stat label="Card bills" value={cardBills} /> : null}
-        </Row>
+        {totals.invested || cardBills ? (
+          <Txt variant="small" tone="muted">
+            {[
+              totals.invested ? `${money(Math.abs(totals.invested), { decimals: 'never' })} ${totals.invested < 0 ? 'taken out of' : 'put into'} investments` : null,
+              cardBills ? `${money(cardBills, { decimals: 'never' })} in card bills due` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Txt>
+        ) : null}
       </View>
 
       {late.length || reviewCount || showSetup || offerSms ? (
@@ -222,14 +241,15 @@ export default function Home() {
   );
 }
 
-function Stat({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'income' | 'expense' }) {
+/** One of the month's figures under "Spent today": big enough to read at a glance. */
+function Tile({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'income' | 'expense' }) {
   return (
-    <View style={{ gap: 2 }}>
-      <Txt variant="small" tone="muted">
+    <Card style={{ flex: 1, gap: 4, paddingHorizontal: space(1.5), paddingVertical: space(1.5) }}>
+      <Txt variant="small" tone="muted" numberOfLines={1}>
         {label}
       </Txt>
-      <Money value={value} variant="bodyStrong" tone={tone} decimals="never" />
-    </View>
+      <Money value={value} variant="h2" tone={tone} decimals="never" fit="tight" />
+    </Card>
   );
 }
 

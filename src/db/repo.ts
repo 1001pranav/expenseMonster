@@ -135,6 +135,36 @@ export async function pruneHistory(days: number): Promise<void> {
   await getDb().runAsync('DELETE FROM row_history WHERE savedAt < ?', [new Date(Date.now() - days * 86_400_000).toISOString()]);
 }
 
+// ── capture texts (this phone only, never synced or backed up) ────────────────
+
+export interface CaptureText {
+  txnId: string;
+  sender: string | null;
+  body: string;
+  /** ISO time the phone received the SMS; null for a pasted one. */
+  receivedAt: string | null;
+}
+
+export async function saveCaptureText(t: CaptureText): Promise<void> {
+  await getDb().runAsync('INSERT OR REPLACE INTO capture_texts (txnId, sender, body, receivedAt) VALUES (?, ?, ?, ?)', [t.txnId, t.sender, t.body, t.receivedAt]);
+}
+
+export const getCaptureText = (txnId: string) => getDb().getFirstAsync<CaptureText>('SELECT * FROM capture_texts WHERE txnId = ?', [txnId]);
+
+/**
+ * Delete the texts of captures no longer waiting in Review. Run at start-up rather than on approve /
+ * reject, so Undo (back to pending) in the same session still has its message.
+ */
+export async function pruneCaptureTexts(pendingIds: string[]): Promise<void> {
+  const rows = await getDb().getAllAsync<{ txnId: string }>('SELECT txnId FROM capture_texts');
+  const keep = new Set(pendingIds);
+  const drop = rows.map((r) => r.txnId).filter((id) => !keep.has(id));
+  for (let i = 0; i < drop.length; i += 500) {
+    const ids = drop.slice(i, i + 500);
+    await getDb().runAsync(`DELETE FROM capture_texts WHERE txnId IN (${ids.map(() => '?').join(', ')})`, ids);
+  }
+}
+
 /**
  * Show this version of a row on this phone only: written as is (its updatedAt kept), and recorded
  * as what every cloud space last synced, so it is not uploaded as an edit.

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="hw_today_label">Spent today</string>
+  <string name="hw_today_description">How much you spent today. Shows amounts on your home screen (masked when Hide amounts is on).</string>
+  <string name="hw_month_label">This month</string>
+  <string name="hw_month_description">Today, this month\'s spending, money in and your budget. Shows amounts on your home screen (masked when Hide amounts is on).</string>
+  <string name="hw_dues_label">Due soon</string>
+  <string name="hw_dues_description">Your next three bills, EMIs and card payments.</string>
+  <string name="hw_open_app">Open ExpenseMonster to show this</string>
+  <string name="hw_spent_today">Spent today</string>
+  <string name="hw_placeholder_amount">₹ —</string>
+</resources>

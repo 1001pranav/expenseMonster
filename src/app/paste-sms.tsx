@@ -144,7 +144,7 @@ export default function PasteSms() {
           </View>
         </Card>
       ) : !text.trim() ? (
-        <Txt tone="muted">In your Messages app, long-press the bank SMS, tap Copy, then paste it here. It's read on this phone and the message isn't kept.</Txt>
+        <Txt tone="muted">In your Messages app, long-press the bank SMS, tap Copy, then paste it here. It's read on this phone, and the message is kept here only until you approve or reject it.</Txt>
       ) : null}
 
       {unrecognised || (payment && !payment.payee && !payment.vpa) ? (

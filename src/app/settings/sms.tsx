@@ -22,7 +22,7 @@ const PERIODS = [
 const PROMISES: { icon: IconName; state?: 'good'; title: string; body: string }[] = [
   { icon: 'checkmark', state: 'good', title: 'Read', body: 'Bank, card and bill messages only' },
   { icon: 'close', title: 'Skipped', body: 'Personal chats, OTPs, offers, failed payments' },
-  { icon: 'lock-closed-outline', title: 'Stays on this phone', body: 'The message text is never kept or uploaded' },
+  { icon: 'lock-closed-outline', title: 'Stays on this phone', body: 'Shown in Check captures until you decide, then deleted. Never uploaded' },
 ];
 
 /**
@@ -150,7 +150,7 @@ export default function SmsSettings() {
       ) : smsCaptureAvailable ? (
         <Card style={{ gap: space(1.5) }}>
           <Txt tone="muted">
-            ExpenseMonster reads only bank and payment messages that look like a payment, never OTPs or personal messages, and doesn't keep their text.
+            ExpenseMonster reads only bank and payment messages that look like a payment, never OTPs or personal messages. A message's text stays on this phone only until you approve or reject it.
           </Txt>
           {importedTo && !pickPeriod ? (
             <>

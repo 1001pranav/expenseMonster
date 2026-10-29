@@ -37,14 +37,25 @@ export interface MonthTotals {
  * and a sale's proceeds as taken out, never as income.
  */
 export function monthTotals(transactions: Transaction[], month: string, uptoDay = 31): MonthTotals {
+  const { income, expense, net, cardSpend, invested } = totalsWhere(transactions, (d) => monthKey(d) === month && Number(d.slice(8)) <= uptoDay);
+  return { income, expense, net, cardSpend, invested };
+}
+
+/** The same totals for one day (the Home "Spent today"), plus how many payments made it up. */
+export function dayTotals(transactions: Transaction[], day: YMD): MonthTotals & { payments: number } {
+  return totalsWhere(transactions, (d) => d === day);
+}
+
+function totalsWhere(transactions: Transaction[], within: (day: YMD) => boolean): MonthTotals & { payments: number } {
   let income = 0;
   let expense = 0;
   let cardSpend = 0;
   let invested = 0;
+  let payments = 0;
   for (const t of transactions) {
-    const d = isoToYMD(t.occurredAt);
-    if (!isLive(t) || monthKey(d) !== month || Number(d.slice(8)) > uptoDay) continue;
+    if (!isLive(t) || !within(isoToYMD(t.occurredAt))) continue;
     if (t.type === 'expense') {
+      payments++;
       expense += t.amount;
       if (t.method === 'card') cardSpend += t.amount;
     } else if (t.type === 'income') {
@@ -54,7 +65,7 @@ export function monthTotals(transactions: Transaction[], month: string, uptoDay 
       invested += flagsOf(t).includes('sale') ? -t.amount : t.amount;
     }
   }
-  return { income, expense, net: income - expense, cardSpend, invested };
+  return { income, expense, net: income - expense, cardSpend, invested, payments };
 }
 
 /** Expense per day for the last `days` days ending `today` (oldest first). */

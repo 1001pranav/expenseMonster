@@ -92,7 +92,7 @@ export interface Transaction extends BaseRow {
   source: TxnSource;
   /** UPI ref / UTR for de-duplication. */
   sourceRef: string | null;
-  /** Hash of the raw SMS/OCR text (raw text is never stored). */
+  /** Hash of the raw SMS/OCR text. The text itself is never synced (a pending SMS capture's is kept on this phone in capture_texts). */
   sourceHash: string | null;
   /** Parser confidence 0–1 for captured drafts. */
   confidence: number | null;

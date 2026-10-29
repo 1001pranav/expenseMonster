@@ -101,7 +101,8 @@ async function drain(): Promise<SmsImport> {
     } catch (e) {
       logFailure('sms: could not read a copied message', e, 'warn');
     } finally {
-      // The raw text never stays: whatever happened, the file goes.
+      // The copied file never stays: whatever happened, it goes. (A captured message's text is kept,
+      // in the encrypted database on this phone only, until it is approved or rejected in Review.)
       if (f.exists) f.delete();
     }
   }
