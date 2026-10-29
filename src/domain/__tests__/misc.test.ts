@@ -2,7 +2,7 @@ import { budgetUsage } from '../budget';
 import { findDuplicate } from '../dedupe';
 import { computeDues, computeReminders } from '../dues';
 import { isFamilyTransfer, memberBalances, memberForVpa, simplifyDebts } from '../settle';
-import { isClearCapture, monthTotals, ruleKey, suggestCategory } from '../transactions';
+import { dayTotals, isClearCapture, monthTotals, ruleKey, suggestCategory } from '../transactions';
 import { at, base, bill, biller, card, rule, txn } from './fixtures';
 
 describe('dedupe', () => {
@@ -76,6 +76,11 @@ describe('totals', () => {
       txn({ amount: 999_00, status: 'pending', occurredAt: at('2026-09-20') }),
     ];
     expect(monthTotals(t, '2026-09')).toEqual({ income: 50_000_00, expense: 1_300_00, net: 48_700_00, cardSpend: 1_000_00, invested: 0 });
+    // One day, by the same rules: the pending ₹999 and the card bill payment on the 20th don't count.
+    expect(dayTotals(t, '2026-09-20')).toMatchObject({ expense: 0, payments: 0 });
+    expect(dayTotals(t, '2026-09-05')).toMatchObject({ expense: 1_000_00, income: 0, payments: 1 });
+    expect(dayTotals([...t, txn({ amount: 250_00, occurredAt: at('2026-09-05') })], '2026-09-05')).toMatchObject({ expense: 1_250_00, payments: 2 });
+    expect(dayTotals(t, '2026-09-07')).toMatchObject({ expense: -200_00, income: 0, payments: 0 });
   });
 
   it('can total a month only up to a given day (for fair comparisons)', () => {
