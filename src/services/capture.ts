@@ -7,10 +7,11 @@ import { cardEndingIn, maskedCardDigits, type Parsed, type ParsedBill, type Pars
 import { applyFormat } from '@/domain/parsers/custom';
 import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
+import { findSender } from '@/domain/smsSender';
 import { applyRules, isLearned, ruleTargets } from '@/domain/rules';
 import { memberForVpa } from '@/domain/settle';
 import { categoryHistory } from '@/domain/transactions';
-import type { Transaction } from '@/domain/types';
+import type { SmsFormat, SmsSender, Transaction } from '@/domain/types';
 import { addCapture, type TxnDraft } from '@/data/actions';
 import { insert } from '@/db/repo';
 import { getState } from '@/db/store';
@@ -31,12 +32,25 @@ export interface CaptureSummary {
 
 const emptySummary = (): CaptureSummary => ({ added: 0, duplicates: 0, bills: 0, statements: 0, skipped: 0, unknownBillers: [], addedIds: [] });
 
-function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawText: string, attachment: string | null): TxnDraft {
+/**
+ * `bySender`: the account / card the user linked to the SMS sender. Only used when the message
+ * doesn't name one that is saved: one bank sender often sends both savings and card messages.
+ */
+function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawText: string, attachment: string | null, bySender?: SmsSender): TxnDraft {
   const { tables, identity } = getState();
   // Payment apps often mask all but two digits ("XXXXXX06"): match those against saved cards too.
   const cardDigits = p.cardLast4 ?? (p.isCreditCard ? maskedCardDigits(rawText) : null);
-  const card = cardEndingIn(tables.cards, cardDigits);
-  const account = p.accountLast4 ? tables.accounts.find((a) => a.last4 === p.accountLast4) : undefined;
+  const named = {
+    card: cardEndingIn(tables.cards, cardDigits),
+    account: p.accountLast4 ? tables.accounts.find((a) => a.last4 === p.accountLast4) : undefined,
+  };
+  // The sender's card only when the SMS doesn't name an account, and either says "card" or the
+  // sender has no account linked; its account only when the SMS isn't about a card.
+  const senderCard = bySender?.cardId && !p.accountLast4 && (p.isCreditCard || !bySender.accountId) ? tables.cards.find((c) => c.id === bySender.cardId) : undefined;
+  const card = named.card ?? (named.account ? undefined : senderCard);
+  const senderAccount = bySender?.accountId && !p.isCreditCard && !card ? tables.accounts.find((a) => a.id === bySender.accountId) : undefined;
+  const account = named.account ?? senderAccount;
+  const viaCard = p.isCreditCard || Boolean(card);
   const flags: string[] = [];
   if (p.isCreditCard && !card && cardDigits) flags.push(`card-hint:${cardDigits}`);
   if (p.isRefund) flags.push('refund');
@@ -49,13 +63,13 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
   let toMemberId: string | null = null;
   // UPI to or from a family member moves money inside the household: a transfer, so it isn't
   // counted as spending here and again when they spend it.
-  const member = !p.isCreditCard ? memberForVpa(p.vpa, tables.members, identity.selfMemberId) : undefined;
+  const member = !viaCard ? memberForVpa(p.vpa, tables.members, identity.selfMemberId) : undefined;
   if (member && identity.selfMemberId) {
     type = 'transfer';
     [memberId, toMemberId] = p.direction === 'debit' ? [identity.selfMemberId, member.id] : [member.id, identity.selfMemberId];
   }
   // "Payment received on your credit card" → bill payment, which is a transfer, not income.
-  if (p.isCreditCard && p.direction === 'credit' && !p.isRefund && /payment/i.test(rawText)) {
+  if (viaCard && p.direction === 'credit' && !p.isRefund && /payment/i.test(rawText)) {
     type = 'transfer';
     linkType = 'card';
     linkId = card?.id ?? null;
@@ -96,7 +110,7 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     type,
     amount: p.amount,
     occurredAt: toISO(p.date ?? todayYMD(), p.time),
-    method: type === 'transfer' ? (p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank') : (mine.method ?? (p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank')),
+    method: type === 'transfer' ? (viaCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank') : (mine.method ?? (viaCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank')),
     cardId: ruleCard ?? card?.id ?? null,
     accountId: mine.accountId ?? account?.id ?? null,
     payee: mine.payee ?? p.payee,
@@ -169,21 +183,21 @@ async function saveStatement(p: ParsedCardStatement, received: YMD, summary: Cap
 }
 
 /** User-taught formats win over the built-in parser (they exist because the built-in one failed). */
-function parseMessage(sender: string, body: string, received: YMD): Parsed | null {
-  for (const f of getState().tables.sms_formats) {
+function parseMessage(sender: string, body: string, received: YMD, formats: SmsFormat[] = getState().tables.sms_formats): Parsed | null {
+  for (const f of formats) {
     const p = applyFormat(f, sender, body, received);
     if (p) return p;
   }
   return parseSms(body, received);
 }
 
-/** What a pasted message says, read without saving anything (Paste SMS shows it live). */
-export const readSms = (text: string, sender = ''): Parsed | null => (text.trim() ? parseMessage(sender, text, todayYMD()) : null);
+/** What a pasted message says, read without saving anything (Paste SMS shows it live, passing `formats` so it re-reads when one is taught). */
+export const readSms = (text: string, sender = '', formats?: SmsFormat[]): Parsed | null => (text.trim() ? parseMessage(sender, text, todayYMD(), formats) : null);
 
-async function captureParsed(parsed: Parsed, raw: string, hash: string, received: YMD, source: 'sms', summary: CaptureSummary, fallbackISO: string | null) {
+async function captureParsed(parsed: Parsed, raw: string, hash: string, received: YMD, source: 'sms', summary: CaptureSummary, fallbackISO: string | null, bySender?: SmsSender) {
   if (parsed.kind === 'bill') return saveDraftBill(parsed, raw, hash, received, null, summary);
   if (parsed.kind === 'card_statement') return saveStatement(parsed, received, summary);
-  const draft = toDraft(parsed, source, hash, raw, null);
+  const draft = toDraft(parsed, source, hash, raw, null, bySender);
   if (!parsed.time && fallbackISO) draft.occurredAt = fallbackISO;
   const { row, duplicate } = await addCapture(draft);
   if (row) {
@@ -196,14 +210,16 @@ async function captureParsed(parsed: Parsed, raw: string, hash: string, received
 /**
  * A bank SMS (pasted, or picked up automatically when that's switched on) goes through the parsers
  * into Review. The text itself is not stored. `receivedAt` is when the phone got the message, for
- * SMS read from the phone; pasted ones count as received now.
+ * SMS read from the phone; pasted ones count as received now. Senders the user blocked are skipped.
  */
 export async function captureText(text: string, sender = '', receivedAt?: Date): Promise<CaptureSummary & { recognised: boolean }> {
   const summary = emptySummary();
+  const marked = findSender(getState().tables.sms_senders, sender);
+  if (marked?.kind === 'blocked') return { ...summary, skipped: 1, recognised: false };
   const received = receivedAt ? toYMD(receivedAt) : todayYMD();
   const parsed = parseMessage(sender, text, received);
   if (!parsed) return { ...summary, recognised: false };
-  await captureParsed(parsed, text, textHash(`${sender}|${text}`), received, 'sms', summary, receivedAt ? receivedAt.toISOString() : null);
+  await captureParsed(parsed, text, textHash(`${sender}|${text}`), received, 'sms', summary, receivedAt ? receivedAt.toISOString() : null, marked);
   return { ...summary, recognised: true };
 }
 

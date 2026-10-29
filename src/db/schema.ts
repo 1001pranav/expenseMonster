@@ -131,6 +131,7 @@ export const TABLES: Record<TableName, Record<string, string>> = {
     learned: 'INTEGER NOT NULL DEFAULT 1',
   },
   sms_formats: { name: TN, sender: T, pattern: TN, roles: TN, direction: TN, isCard: IN0, active: 'INTEGER NOT NULL DEFAULT 1' },
+  sms_senders: { sender: TN, name: T, kind: TN, accountId: T, cardId: T },
   devices: { name: TN, publicKey: T },
   household: { headDeviceId: T, keyId: T, removed: T },
   sync_holds: { holdDevice: T, since: T, until: T, tbl: T, recordId: T, decision: TN, note: T },
@@ -140,7 +141,7 @@ export const TABLES: Record<TableName, Record<string, string>> = {
 };
 
 /** Tables created after v1, by the migration that created them (older migrations must skip them). */
-const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5, key_grants: 6, holdings: 7, trades: 7 };
+const CREATED_IN: Partial<Record<TableName, number>> = { sms_formats: 2, devices: 5, household: 5, sync_holds: 5, key_grants: 6, holdings: 7, trades: 7, sms_senders: 14 };
 /** Columns added to an existing table, by the migration that added them (with ALTER TABLE). */
 const ADDED_IN: Partial<Record<TableName, Record<string, number>>> = {
   devices: { publicKey: 6 },
@@ -233,4 +234,6 @@ export const MIGRATIONS: string[] = [
   ['ALTER TABLE "loans" ADD COLUMN "cardId" TEXT;', 'ALTER TABLE "loans" ADD COLUMN "sourceTxnId" TEXT;', 'ALTER TABLE "loans" ADD COLUMN "processingFee" INTEGER NOT NULL DEFAULT 0;'].join('\n'),
   // v13: rules with conditions and actions. Existing rules were all learned from filing: learned = 1.
   ['field', 'source', 'method', 'cardId', 'accountId', 'rename', 'learned'].map((c) => `ALTER TABLE "rules" ADD COLUMN "${c}" ${TABLES.rules[c]};`).join('\n'),
+  // v14: SMS senders marked as a bank (optionally linked to an account / card) or blocked.
+  createTable('sms_senders', 14),
 ];

@@ -1,4 +1,4 @@
-import { applyFormat, buildPattern, isSafePattern, tokenize, type TokenRole } from '../parsers/custom';
+import { applyFormat, buildPattern, describeFormat, isSafePattern, tokenize, type TokenRole } from '../parsers/custom';
 
 const R = '2026-09-12';
 
@@ -35,6 +35,27 @@ describe('user-taught SMS formats', () => {
     expect(applyFormat(format, 'VM-HDFCBK', sample, R)).toBeNull();
     expect(applyFormat(format, 'VM-MYCOOP', 'MyCoop: your OTP is 123456', R)).toBeNull();
     expect(applyFormat({ ...format, active: 0 }, 'VM-MYCOOP', sample, R)).toBeNull();
+  });
+
+  it('reads a pasted message, which has no sender, by its pattern alone', () => {
+    expect(applyFormat(format, '', sample, R)).toMatchObject({ amount: 125000, accountLast4: '4321' });
+  });
+
+  it('says in words what it looks for', () => {
+    expect(describeFormat(pattern, roles)).toEqual([
+      { role: 'amount', after: 'MyCoop:', skip: 0 },
+      { role: 'account', after: 'from SB', skip: 0 },
+      { role: 'payee', after: 'towards', skip: 0 },
+      { role: 'date', after: 'on', skip: 0 },
+      { role: 'ref', after: 'Txn', skip: 0 },
+    ]);
+    const hdfc = teach('Txn Rs.300.00 On HDFC Bank Card 6306 At *5905@pty', { 'Rs.300.00': 'amount', '*5905@pty': 'payee' });
+    expect(describeFormat(hdfc.pattern, JSON.stringify(hdfc.roles))).toEqual([
+      { role: 'amount', after: 'Txn', skip: 0 },
+      { role: 'payee', after: 'At', skip: 0 },
+    ]);
+    expect(describeFormat('Rs\\s+\\S+\\s+(\\S+)', ['amount'])).toEqual([{ role: 'amount', after: 'Rs', skip: 1 }]);
+    expect(describeFormat('x', 'not json')).toEqual([]);
   });
 
   it('rejects patterns outside the generated grammar', () => {

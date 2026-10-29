@@ -4,8 +4,9 @@
  * Nothing listens for incoming SMS: there is no receiver and no RECEIVE_SMS. The inbox is read only
  * when the user taps "Import bank SMS" (Settings → Bank SMS), which starts SmsImportActivity (no UI).
  * It reads messages newer than the time the app passes in and keeps only those from business sender
- * IDs (Indian DLT "VM-HDFCBK", "AD-SBIUPI-S"; phone numbers never match) that mention an amount and a
- * payment word and are not OTPs. Kept messages go to files/sms-inbox/ in the app's private storage;
+ * IDs (Indian DLT "VM-HDFCBK", "AD-SBIUPI-S"), or senders the user marked as a bank (the app passes
+ * them as "allow": a co-op bank texting from a phone number), that mention an amount and a payment
+ * word and are not OTPs. Kept messages go to files/sms-inbox/ in the app's private storage;
  * the app (src/services/smsInbox.ts) parses them and deletes each file straight away. Nothing is sent
  * anywhere. Other apps can't start the import: it needs a signature permission only this app holds.
  *
@@ -33,11 +34,18 @@ object SmsInbox {
 
   fun dir(context: Context): File = File(context.filesDir, "sms-inbox")
 
-  fun wanted(sender: String, body: String): Boolean =
-    SENDER.matches(sender.trim()) && MONEY.containsMatchIn(body) && PAYMENT.containsMatchIn(body) && !OTP.containsMatchIn(body)
+  /** Same as normalizeSender in src/domain/smsSender.ts: last 10 digits of a number, else the bare DLT id. */
+  fun normalize(sender: String): String {
+    val s = sender.trim().uppercase()
+    if (Regex("^[+0-9][0-9\\\\s()-]{5,}$").matches(s)) return s.replace(Regex("[^0-9]"), "").takeLast(10)
+    return s.replace(Regex("^[A-Z]{2}-(?=[A-Z0-9]{4})"), "").replace(Regex("-[A-Z]$"), "").replace(Regex("[^A-Z0-9]"), "")
+  }
 
-  fun offer(context: Context, sender: String, body: String, at: Long) {
-    if (!wanted(sender, body)) return
+  fun wanted(sender: String, body: String, allow: Set<String>): Boolean =
+    (SENDER.matches(sender.trim()) || normalize(sender) in allow) && MONEY.containsMatchIn(body) && PAYMENT.containsMatchIn(body) && !OTP.containsMatchIn(body)
+
+  fun offer(context: Context, sender: String, body: String, at: Long, allow: Set<String>) {
+    if (!wanted(sender, body, allow)) return
     val folder = dir(context)
     folder.mkdirs()
     val json = JSONObject()
@@ -70,6 +78,8 @@ class SmsImportActivity : Activity() {
     @Suppress("DEPRECATION")
     val since = (intent.extras?.get("since") as? Number)?.toLong() ?: (System.currentTimeMillis() - 90 * 86_400_000L)
     val token = intent.getStringExtra("token")?.takeIf { Regex("^[A-Za-z0-9-]{1,64}$").matches(it) } ?: "import"
+    // Senders the user marked as a bank, already normalised: "9876543210,MYCOOP".
+    val allow = (intent.getStringExtra("allow") ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     val app = applicationContext
     val done = { SmsInbox.dir(app).mkdirs(); File(SmsInbox.dir(app), "$token.done").writeText("") }
     if (checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
@@ -84,7 +94,7 @@ class SmsImportActivity : Activity() {
           while (c.moveToNext()) {
             val sender = c.getString(0)
             val body = c.getString(1)
-            if (sender != null && body != null) SmsInbox.offer(app, sender, body, c.getLong(2))
+            if (sender != null && body != null) SmsInbox.offer(app, sender, body, c.getLong(2), allow)
           }
         }
       } catch (e: Exception) {

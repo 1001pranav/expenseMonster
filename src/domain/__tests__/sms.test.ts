@@ -30,6 +30,11 @@ describe('bank SMS parser', () => {
     expect(p).toMatchObject({ amount: 149900, cardLast4: '5678', isCreditCard: true, payee: 'Flipkart', balance: 9850100, time: 10 * 60 + 32 });
   });
 
+  it('HDFC credit card UPI txn with a year-less date', () => {
+    const p = tx('Txn Rs.300.00\nOn HDFC Bank Card 6306\nAt *5905@pty \nby UPI 194222255166\nOn 27-10\nNot You?\nCall 18002586161/SMS BLOCK CC 6306 to 7308080808');
+    expect(p).toMatchObject({ kind: 'transaction', direction: 'debit', amount: 30000, cardLast4: '6306', isCreditCard: true, ref: '194222255166', date: '2026-10-27', bank: 'HDFC Bank' });
+  });
+
   it('Axis UPI P2M multi-line', () => {
     const p = tx('INR 350.00 debited\nA/c no. XX4321\n12-09-26, 10:32:45\nUPI/P2M/425612345678/ZOMATO\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank');
     expect(p).toMatchObject({ amount: 35000, accountLast4: '4321', ref: '425612345678', payee: 'Zomato', bank: 'Axis Bank' });

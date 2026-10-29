@@ -16,6 +16,7 @@ export const TABLE_LABEL: Record<string, string> = {
   budgets: 'Budget',
   rules: 'Auto-category rule',
   sms_formats: 'SMS format',
+  sms_senders: 'SMS sender',
   card_overrides: 'Card statement',
   devices: 'Phone',
   household: 'Household head',

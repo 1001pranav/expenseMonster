@@ -18,6 +18,6 @@ describe('schema migrations', () => {
   });
 
   it('only ever appends migrations', () => {
-    expect(MIGRATIONS).toHaveLength(13);
+    expect(MIGRATIONS).toHaveLength(14);
   });
 });

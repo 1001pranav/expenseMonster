@@ -75,6 +75,7 @@ export const EMPTY_TABLES: Tables = {
   budgets: [],
   rules: [],
   sms_formats: [],
+  sms_senders: [],
   devices: [],
   household: [],
   sync_holds: [],
