@@ -13,7 +13,7 @@ import { memberForVpa } from '@/domain/settle';
 import { categoryHistory } from '@/domain/transactions';
 import type { SmsFormat, SmsSender, Transaction } from '@/domain/types';
 import { addCapture, type TxnDraft } from '@/data/actions';
-import { insert } from '@/db/repo';
+import { insert, saveCaptureText } from '@/db/repo';
 import { getState } from '@/db/store';
 import { saveAttachment } from './files';
 import { recognizeText } from './ocr';
@@ -194,7 +194,7 @@ function parseMessage(sender: string, body: string, received: YMD, formats: SmsF
 /** What a pasted message says, read without saving anything (Paste SMS shows it live, passing `formats` so it re-reads when one is taught). */
 export const readSms = (text: string, sender = '', formats?: SmsFormat[]): Parsed | null => (text.trim() ? parseMessage(sender, text, todayYMD(), formats) : null);
 
-async function captureParsed(parsed: Parsed, raw: string, hash: string, received: YMD, source: 'sms', summary: CaptureSummary, fallbackISO: string | null, bySender?: SmsSender) {
+async function captureParsed(parsed: Parsed, raw: string, sender: string, hash: string, received: YMD, source: 'sms', summary: CaptureSummary, fallbackISO: string | null, bySender?: SmsSender) {
   if (parsed.kind === 'bill') return saveDraftBill(parsed, raw, hash, received, null, summary);
   if (parsed.kind === 'card_statement') return saveStatement(parsed, received, summary);
   const draft = toDraft(parsed, source, hash, raw, null, bySender);
@@ -203,13 +203,15 @@ async function captureParsed(parsed: Parsed, raw: string, hash: string, received
   if (row) {
     summary.added++;
     summary.addedIds.push(row.id);
+    // Shown in Review so you can tell what it was; on this phone only, gone once it's decided.
+    await saveCaptureText({ txnId: row.id, sender: sender.trim() || null, body: raw, receivedAt: fallbackISO }).catch((e) => logFailure('capture: could not keep the SMS for Review', e, 'warn'));
   }
   if (duplicate && !row) summary.duplicates++;
 }
 
 /**
  * A bank SMS (pasted, or picked up automatically when that's switched on) goes through the parsers
- * into Review. The text itself is not stored. `receivedAt` is when the phone got the message, for
+ * into Review. The text is kept on this phone only while the capture waits in Review. `receivedAt` is when the phone got the message, for
  * SMS read from the phone; pasted ones count as received now. Senders the user blocked are skipped.
  */
 export async function captureText(text: string, sender = '', receivedAt?: Date): Promise<CaptureSummary & { recognised: boolean }> {
@@ -219,7 +221,7 @@ export async function captureText(text: string, sender = '', receivedAt?: Date):
   const received = receivedAt ? toYMD(receivedAt) : todayYMD();
   const parsed = parseMessage(sender, text, received);
   if (!parsed) return { ...summary, recognised: false };
-  await captureParsed(parsed, text, textHash(`${sender}|${text}`), received, 'sms', summary, receivedAt ? receivedAt.toISOString() : null, marked);
+  await captureParsed(parsed, text, sender, textHash(`${sender}|${text}`), received, 'sms', summary, receivedAt ? receivedAt.toISOString() : null, marked);
   return { ...summary, recognised: true };
 }
 

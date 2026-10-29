@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, EMPTY_TABLES, getState } from '@/db/store';
 import type { Account, CreditCard, SmsSender } from '@/domain/types';
 
 let mockN = 0;
+const mockTexts: Record<string, unknown>[] = [];
 jest.mock('@/db/repo', () => {
   const { getState: state } = jest.requireActual('@/db/store');
   const put = (table: string, row: Record<string, unknown>) => {
@@ -18,6 +19,7 @@ jest.mock('@/db/repo', () => {
     update: async () => undefined,
     findById: (table: string, id: string) => (state().tables[table] as { id: string }[]).find((r) => r.id === id),
     insertMany: async () => [],
+    saveCaptureText: async (t: Record<string, unknown>) => void mockTexts.push(t),
   };
 });
 jest.mock('../files', () => ({ saveAttachment: async () => null }));
@@ -35,6 +37,7 @@ const card = { ...base, id: 'card-coop', name: 'Coop card', last4: '6306', state
 const mark = (p: Partial<SmsSender>): SmsSender => ({ ...base, id: 's1', sender: '9876543210', name: null, kind: 'bank', accountId: null, cardId: null, ...p });
 
 function setup(senders: SmsSender[]) {
+  mockTexts.length = 0;
   getState().setAll(
     { ...EMPTY_TABLES, accounts: [savings, other], cards: [card], sms_senders: senders },
     { deviceId: 'me', deviceName: 'Me', householdId: 'h', householdName: 'Home', selfMemberId: '', onboarded: true },
@@ -50,6 +53,14 @@ describe('SMS sender marks', () => {
     setup([mark({ kind: 'blocked' })]);
     const r = await captureText(bare, '+91 98765 43210');
     expect(r).toMatchObject({ recognised: false, skipped: 1, added: 0 });
+    expect(mockTexts).toEqual([]);
+  });
+
+  it('keeps the SMS and its sender to show in Review', async () => {
+    setup([]);
+    const at = new Date('2026-10-12T09:30:00Z');
+    const r = await captureText(bare, 'VM-HDFCBK', at);
+    expect(mockTexts).toEqual([{ txnId: r.addedIds[0], sender: 'VM-HDFCBK', body: bare, receivedAt: at.toISOString() }]);
   });
 
   it('files a message without an account under the sender’s account', async () => {

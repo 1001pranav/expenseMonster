@@ -2,11 +2,12 @@ import { setClockOffset } from '@/domain/clock';
 import { uuidv7 } from '@/domain/ids';
 import { newKey } from '@/domain/sync/crypto';
 import { openDatabase } from '@/db/client';
-import { adoptForwardData, getMeta, insertMany, pruneHistory, loadIdentity, loadSettings, loadTables, saveIdentity, setMeta } from '@/db/repo';
+import { adoptForwardData, getMeta, insertMany, pruneCaptureTexts, pruneHistory, loadIdentity, loadSettings, loadTables, saveIdentity, setMeta } from '@/db/repo';
 import { SEEDED_LATER, SEED_CATEGORIES } from '@/db/seed';
 import { getState } from '@/db/store';
 import { generateFixedBills } from '@/data/actions';
 import { CLOCK_META } from './cloud';
+import { logFailure } from './diagnostics';
 import { getHouseholdKey, setHouseholdKey } from './secure';
 
 /** Open the encrypted DB, create this device's identity on first run, seed categories, load everything into memory. */
@@ -36,6 +37,8 @@ export async function bootstrap(): Promise<void> {
   const settings = await loadSettings();
   const tables = await loadTables();
   getState().setAll(tables, identity, settings);
+  // SMS kept to show in Review: only while the capture is still waiting there.
+  await pruneCaptureTexts(tables.transactions.filter((t) => t.status === 'pending').map((t) => t.id)).catch((e) => logFailure('capture texts: could not prune', e, 'warn'));
 
   // Default categories: all of them on first run; ones added in later versions once, on update.
   // A fixed timestamp so seeded rows never "win" over a renamed or deleted category from another phone.

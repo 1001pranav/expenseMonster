@@ -166,6 +166,13 @@ function withOptionalYear(d: number, m: number, year: string | undefined, ref: Y
   );
 }
 
+/** "9:05 am" in the phone's time zone, from an ISO timestamp. */
+export function formatTime(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
 /** Parse "10:32 pm" / "22:05" into minutes since midnight. */
 export function parseTime(text: string): number | null {
   const iso = text.match(/\d{4}-\d{2}-\d{2}[:T ](\d{2}):(\d{2})/);
