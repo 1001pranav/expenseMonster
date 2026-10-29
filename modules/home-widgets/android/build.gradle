@@ -1,0 +1,18 @@
+// Local Expo module: the home-screen widgets that show amounts (Spent today, This month, Due soon).
+// The action-only "Quick add" widget is separate (plugins/withAndroidWidget.js).
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+
+android {
+  namespace "expo.modules.homewidgets"
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+}

@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Home-screen widgets that show amounts. Drawn from the last snapshot the app stored. -->
+    <receiver android:name="expo.modules.homewidgets.TodayWidget" android:exported="false" android:label="@string/hw_today_label">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_today_info" />
+    </receiver>
+    <receiver android:name="expo.modules.homewidgets.MonthWidget" android:exported="false" android:label="@string/hw_month_label">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_month_info" />
+    </receiver>
+    <receiver android:name="expo.modules.homewidgets.DuesWidget" android:exported="false" android:label="@string/hw_dues_label">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/hw_dues_info" />
+    </receiver>
+  </application>
+</manifest>

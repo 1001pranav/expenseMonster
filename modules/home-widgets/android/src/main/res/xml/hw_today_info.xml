@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- updatePeriodMillis: redrawn every 30 minutes (the minimum) from the stored snapshot, so "today" turns over at midnight without the app. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:minWidth="110dp"
+  android:minHeight="40dp"
+  android:minResizeWidth="110dp"
+  android:minResizeHeight="40dp"
+  android:targetCellWidth="2"
+  android:targetCellHeight="1"
+  android:resizeMode="horizontal|vertical"
+  android:updatePeriodMillis="1800000"
+  android:initialLayout="@layout/hw_today"
+  android:previewLayout="@layout/hw_today"
+  android:description="@string/hw_today_description"
+  android:widgetCategory="home_screen" />

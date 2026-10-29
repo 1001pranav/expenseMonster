@@ -31,6 +31,7 @@ import { usePendingShare } from '@/services/pendingShare';
 import { installErrorCapture, logError, logFailure, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
 import { checkNewBankSms, drainSmsInbox, smsCaptureAvailable } from '@/services/smsInbox';
+import { startHomeWidgets } from '@/services/homeWidgets';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
 import { ToastHost, toast } from '@/ui/components/feedback';
@@ -191,6 +192,12 @@ function App() {
     rescheduleAll().catch((e) => logFailure('reminders: reschedule failed', e));
     // Only on unlock / first ready.
   }, [ready, locked, identity.onboarded]);
+
+  // Home-screen widgets (Spent today, This month, Due soon) follow the data while the app runs.
+  useEffect(() => {
+    if (!ready || !identity.onboarded) return;
+    return startHomeWidgets();
+  }, [ready, identity.onboarded]);
 
   // On unlock: read bank SMS that arrived since the last import (when the user allowed it and left
   // "check when I open the app" on), and finish any import cut short by the app closing.

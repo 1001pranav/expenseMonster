@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/hw_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:gravity="center_vertical"
+  android:paddingStart="16dp"
+  android:paddingEnd="16dp"
+  android:paddingTop="10dp"
+  android:paddingBottom="10dp"
+  android:background="@drawable/hw_background">
+
+  <TextView
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="@string/hw_spent_today"
+    android:textColor="#CCFFFFFF"
+    android:textSize="12sp"
+    android:maxLines="1" />
+
+  <TextView
+    android:id="@+id/hw_amount"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="@string/hw_placeholder_amount"
+    android:textColor="#FFFFFF"
+    android:textSize="26sp"
+    android:textStyle="bold"
+    android:maxLines="1"
+    android:ellipsize="end" />
+
+  <TextView
+    android:id="@+id/hw_sub"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:textColor="#CCFFFFFF"
+    android:textSize="12sp"
+    android:maxLines="1"
+    android:ellipsize="end" />
+</LinearLayout>
