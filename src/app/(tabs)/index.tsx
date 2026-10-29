@@ -99,7 +99,7 @@ export default function Home() {
       }
     >
       {/* Today first: what you spent is the number you open the app for. The month sits under it. */}
-      <Card onPress={() => router.push('/activity')} style={{ gap: space(0.5), paddingVertical: space(2.25) }}>
+      <Card onPress={() => router.push({ pathname: '/activity', params: { day: today } })} style={{ gap: space(0.5), paddingVertical: space(2.25) }}>
         <Txt variant="bodyStrong" tone="muted">
           Spent today
         </Txt>
