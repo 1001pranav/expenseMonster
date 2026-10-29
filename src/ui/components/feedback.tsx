@@ -88,7 +88,8 @@ export function ToastHost() {
  * Bottom sheet: drag it down, tap ✕ or tap the backdrop to close. Lifts above the keyboard
  * (edge-to-edge Android no longer resizes the window for it).
  */
-export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+/** `footer` stays pinned under the scrolling content (e.g. the sheet's main button). */
+export function Sheet({ visible, onClose, title, children, footer }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const drag = useSharedValue(0);
@@ -129,6 +130,7 @@ export function Sheet({ visible, onClose, title, children }: { visible: boolean;
             <ScrollView contentContainerStyle={{ paddingHorizontal: space(2.5), paddingBottom: space(1), gap: space(2) }} keyboardShouldPersistTaps="handled">
               {children}
             </ScrollView>
+            {footer ? <View style={{ paddingHorizontal: space(2.5), paddingTop: space(1.5), borderTopWidth: 1, borderTopColor: colors.border }}>{footer}</View> : null}
           </Animated.View>
         </KeyboardAvoidingView>
       </GestureHandlerRootView>
