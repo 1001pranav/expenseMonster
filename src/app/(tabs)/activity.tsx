@@ -3,26 +3,30 @@ import { useCallback, useMemo, useState } from 'react';
 import { SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { filterActivity, type Flow, type Kind, type Period } from '@/domain/activityFilter';
+import { pickedRange, type DatePick } from '@/domain/datePick';
 import { addDays, addMonths, formatDay, formatMonth, monthKey, relativeDay, type YMD } from '@/domain/dates';
 import { deleteTransaction, restoreTransaction } from '@/data/actions';
 import { useCategoryMap, useTable, useToday } from '@/data/hooks';
 import { Button, Chip, EmptyState, IconButton, Money, Row, Txt, useMoneyText } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
-import { DateField, Segmented, TextField } from '@/ui/components/forms';
+import { Segmented, TextField } from '@/ui/components/forms';
+import { RangeCalendar } from '@/ui/components/RangeCalendar';
 import { TxnRow, groupByDay } from '@/ui/components/rows';
 import { Header, TAB_BAR_SPACE } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
 import { fonts, space, useTheme } from '@/ui/theme';
 import { Backdrop } from '@/ui/components/Aurora';
 
-type PeriodKind = Period['kind'];
+/** "pick": a day or a range picked on one calendar (domain/datePick.ts). */
+type PeriodKind = 'month' | 'pick' | 'last30' | 'all';
 const PERIODS: { key: PeriodKind; label: string }[] = [
   { key: 'month', label: 'One month' },
-  { key: 'day', label: 'One day' },
-  { key: 'range', label: 'Date range' },
+  { key: 'pick', label: 'Pick dates' },
   { key: 'last30', label: 'Last 30 days' },
   { key: 'all', label: 'All time' },
 ];
+/** Categories shown before "Show all": the most used, plus any already picked. */
+const FEW_CATEGORIES = 12;
 const FLOWS: { value: Flow; label: string }[] = [
   { value: 'all', label: 'Everything' },
   { value: 'expense', label: 'Spending' },
@@ -36,10 +40,10 @@ const KINDS: { key: Kind; label: string }[] = [
   { key: 'shared', label: 'Shared with family' },
 ];
 
-function toPeriod(kind: PeriodKind, month: string, day: YMD, from: YMD, to: YMD): Period {
+function toPeriod(kind: PeriodKind, month: string, from: YMD, to: YMD): Period {
   if (kind === 'month') return { kind, month };
-  if (kind === 'day') return { kind, day };
-  if (kind === 'range') return { kind, from, to };
+  // The same date tapped twice (or only once so far) is one day; two dates are a range.
+  if (kind === 'pick') return from === to ? { kind: 'day', day: from } : { kind: 'range', from, to };
   return { kind };
 }
 
@@ -60,9 +64,10 @@ export default function Spending() {
   const [filters, setFilters] = useState(false);
   const [query, setQuery] = useState('');
   const [monthOffset, setMonthOffset] = useState(0);
-  const [day, setDay] = useState<YMD>(today);
-  const [from, setFrom] = useState<YMD>(`${monthKey(today)}-01`);
-  const [to, setTo] = useState<YMD>(today);
+  const [pick, setPick] = useState<DatePick>({ start: today, end: today });
+  const [allCats, setAllCats] = useState(false);
+  const { from, to } = pickedRange(pick);
+  const single = from === to;
   const shownMonth = monthKey(addMonths(today, -monthOffset));
 
   // Opened from Insights (a category) or Home's "Spent today" (a day): apply it, then drop the link's
@@ -76,16 +81,16 @@ export default function Spending() {
         setMonthOffset(0);
       }
       if (params.day && /^\d{4}-\d{2}-\d{2}$/.test(params.day)) {
-        setDay(params.day);
-        setPeriodKind('day');
+        setPick({ start: params.day, end: params.day });
+        setPeriodKind('pick');
       }
       router.setParams({ category: undefined, day: undefined });
     }, [params.category, params.day]),
   );
   const cardFilter = params.card ? cards.find((c) => c.id === params.card) : undefined;
   const filtered = useMemo(
-    () => filterActivity(txns, { period: toPeriod(periodKind, shownMonth, day, from, to), flow, kind, categoryIds, cardId: params.card, query }, allCategories, today),
-    [txns, periodKind, shownMonth, day, from, to, flow, kind, categoryIds, params.card, query, allCategories, today],
+    () => filterActivity(txns, { period: toPeriod(periodKind, shownMonth, from, to), flow, kind, categoryIds, cardId: params.card, query }, allCategories, today),
+    [txns, periodKind, shownMonth, from, to, flow, kind, categoryIds, params.card, query, allCategories, today],
   );
   // Categories offered in the filter: the kind being shown, top-level first with their sub-categories after.
   const pickable = useMemo(() => {
@@ -93,6 +98,15 @@ export default function Spending() {
     const live = allCategories.filter((c) => kinds.includes(c.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
     return live.filter((c) => !c.parentId).flatMap((p) => [p, ...live.filter((c) => c.parentId === p.id)]);
   }, [allCategories, flow]);
+  // Until "Show all": the most used ones plus any already picked (so none hides), in their usual
+  // order so chips don't jump around while tapping.
+  const fewCategories = useMemo(() => {
+    const uses = new Map<string, number>();
+    for (const t of txns) if (t.categoryId) uses.set(t.categoryId, (uses.get(t.categoryId) ?? 0) + 1);
+    const top = [...pickable].sort((x, y) => (uses.get(y.id) ?? 0) - (uses.get(x.id) ?? 0)).slice(0, FEW_CATEGORIES);
+    return pickable.filter((c) => top.includes(c) || categoryIds.includes(c.id));
+  }, [pickable, txns, categoryIds]);
+  const shownCategories = allCats ? pickable : fewCategories;
   const toggleCategory = (id: string) => setCategoryIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
   const sections = useMemo(
@@ -108,14 +122,13 @@ export default function Spending() {
   const totalOut = sections.reduce((a, s) => a + s.out, 0);
   const totalIn = sections.reduce((a, s) => a + s.in, 0);
   const activeFilters = (periodKind !== 'month' ? 1 : 0) + (flow !== 'all' ? 1 : 0) + (kind !== 'all' ? 1 : 0) + categoryIds.length;
-  const [a, b] = from <= to ? [from, to] : [to, from];
   const periodText =
     periodKind === 'month'
       ? `in ${formatMonth(shownMonth)}`
-      : periodKind === 'day'
-        ? `on ${formatDay(day, { year: day.slice(0, 4) !== today.slice(0, 4) })}`
-        : periodKind === 'range'
-          ? `from ${formatDay(a, { year: a.slice(0, 4) !== b.slice(0, 4) })} to ${formatDay(b, { year: b.slice(0, 4) !== today.slice(0, 4) })}`
+      : periodKind === 'pick' && single
+        ? `on ${formatDay(from, { year: from.slice(0, 4) !== today.slice(0, 4) })}`
+        : periodKind === 'pick'
+          ? `from ${formatDay(from, { year: from.slice(0, 4) !== to.slice(0, 4) })} to ${formatDay(to, { year: to.slice(0, 4) !== today.slice(0, 4) })}`
           : periodKind === 'last30'
             ? 'in the last 30 days'
             : 'in all';
@@ -128,11 +141,16 @@ export default function Spending() {
     setKind('all');
     setCategoryIds([]);
   };
-  // The arrows step through months, or through days on "One day" (never past today).
-  const step = periodKind === 'month' || periodKind === 'day';
-  const back = () => (periodKind === 'month' ? setMonthOffset((o) => o + 1) : setDay((d) => addDays(d, -1)));
-  const forward = () => (periodKind === 'month' ? setMonthOffset((o) => Math.max(0, o - 1)) : setDay((d) => (d < today ? addDays(d, 1) : d)));
-  const atLatest = periodKind === 'month' ? monthOffset === 0 : day >= today;
+  // The arrows step through months, or day by day while one day is picked (never past today).
+  const byDay = periodKind === 'pick' && single;
+  const step = periodKind === 'month' || byDay;
+  const moveDay = (n: number) => {
+    const d = addDays(from, n);
+    if (d <= today) setPick({ start: d, end: d });
+  };
+  const back = () => (periodKind === 'month' ? setMonthOffset((o) => o + 1) : moveDay(-1));
+  const forward = () => (periodKind === 'month' ? setMonthOffset((o) => Math.max(0, o - 1)) : moveDay(1));
+  const atLatest = periodKind === 'month' ? monthOffset === 0 : from >= today;
 
   const onDelete = async (id: string) => {
     await deleteTransaction(id);
@@ -162,7 +180,7 @@ export default function Spending() {
           </Row>
         ) : null}
         <Row style={{ justifyContent: 'space-between' }}>
-          {step ? <IconButton name="chevron-back" label={periodKind === 'day' ? 'Previous day' : 'Previous month'} onPress={back} /> : <View style={{ width: 44 }} />}
+          {step ? <IconButton name="chevron-back" label={byDay ? 'Previous day' : 'Previous month'} onPress={back} /> : <View style={{ width: 44 }} />}
           <View style={{ alignItems: 'center', flex: 1 }}>
             <Money value={headline} variant="h1" tone={flow === 'income' ? 'income' : undefined} decimals="never" fit="narrow" />
             <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
@@ -170,7 +188,7 @@ export default function Spending() {
               {flow === 'all' && totalIn ? `, ${money(totalIn, { decimals: 'never' })} came in` : ''}
             </Txt>
           </View>
-          {step ? <IconButton name="chevron-forward" label={periodKind === 'day' ? 'Next day' : 'Next month'} disabled={atLatest} onPress={forward} /> : <View style={{ width: 44 }} />}
+          {step ? <IconButton name="chevron-forward" label={byDay ? 'Next day' : 'Next month'} disabled={atLatest} onPress={forward} /> : <View style={{ width: 44 }} />}
         </Row>
       </View>
       <SectionList
@@ -223,7 +241,18 @@ export default function Spending() {
           />
         }
       />
-      <Sheet visible={filters} onClose={() => setFilters(false)} title="Filter">
+      <Sheet
+        visible={filters}
+        onClose={() => setFilters(false)}
+        title="Filter"
+        footer={
+          // Pinned under the scrolling filters, so it's always in reach however many are open.
+          <Row gap={1}>
+            {activeFilters ? <Button title="Clear all" variant="secondary" onPress={clearFilters} style={{ flex: 1 }} /> : null}
+            <Button title={`Show ${filtered.length === 1 ? '1 entry' : `${filtered.length} entries`}`} onPress={() => setFilters(false)} style={{ flex: 1.5 }} />
+          </Row>
+        }
+      >
         <View style={{ gap: space(1) }}>
           <Txt variant="small" tone="muted">
             Time
@@ -233,13 +262,7 @@ export default function Spending() {
               <Chip key={p.key} label={p.label} selected={periodKind === p.key} onPress={() => (setPeriodKind(p.key), setMonthOffset(0))} />
             ))}
           </Row>
-          {periodKind === 'day' ? <DateField value={day} onChange={setDay} allowFuture={false} /> : null}
-          {periodKind === 'range' ? (
-            <>
-              <DateField label="From" value={from} onChange={setFrom} quick={false} allowFuture={false} />
-              <DateField label="To" value={to} onChange={setTo} allowFuture={false} />
-            </>
-          ) : null}
+          {periodKind === 'pick' ? <RangeCalendar value={pick} onChange={setPick} max={today} /> : null}
         </View>
         <View style={{ gap: space(1) }}>
           <Txt variant="small" tone="muted">
@@ -273,15 +296,21 @@ export default function Spending() {
             {categoryIds.length ? <Button title="Clear" variant="ghost" size="sm" onPress={() => setCategoryIds([])} /> : null}
           </Row>
           <Row gap={1} wrap>
-            {pickable.map((c) => (
+            {shownCategories.map((c) => (
               <Chip key={c.id} compact label={c.parentId ? `· ${c.name}` : c.name} selected={categoryIds.includes(c.id)} onPress={() => toggleCategory(c.id)} />
             ))}
           </Row>
+          {pickable.length > fewCategories.length ? (
+            <Button
+              title={allCats ? 'Show fewer' : `Show all categories (${pickable.length})`}
+              icon={allCats ? 'chevron-up' : 'chevron-down'}
+              variant="ghost"
+              size="sm"
+              onPress={() => setAllCats((v) => !v)}
+              style={{ alignSelf: 'flex-start' }}
+            />
+          ) : null}
         </View>
-        <Row gap={1}>
-          {activeFilters ? <Button title="Clear all" variant="secondary" onPress={clearFilters} style={{ flex: 1 }} /> : null}
-          <Button title={`Show ${filtered.length === 1 ? '1 entry' : `${filtered.length} entries`}`} onPress={() => setFilters(false)} style={{ flex: 1.5 }} />
-        </Row>
       </Sheet>
     </View>
   );
