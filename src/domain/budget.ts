@@ -43,3 +43,51 @@ export function budgetUsage(budgets: Budget[], transactions: Transaction[], mont
     })
     .sort((a, b) => b.ratio - a.ratio);
 }
+
+export interface SafeToSpend {
+  /** What today may cost, fixed for the day: (budget − spent before today − committed) ÷ days left. */
+  allowance: Paise;
+  left: Paise;
+  /** close: at least 85% of today's allowance used. over: past it, or nothing is left this month. */
+  state: 'ok' | 'close' | 'over';
+  /** Tomorrow's allowance if today ends as it is now; null on the last day of the month. */
+  tomorrow: Paise | null;
+}
+
+/**
+ * "Am I okay today?" The allowance doesn't move as you spend during the day (a target that runs
+ * away from you isn't one); spending today only uses it up. `daysLeft` counts today.
+ */
+export function safeToSpend({
+  budget,
+  spentBeforeToday,
+  spentToday,
+  committed,
+  daysLeft,
+}: {
+  budget: Paise;
+  spentBeforeToday: Paise;
+  spentToday: Paise;
+  committed: Paise;
+  daysLeft: number;
+}): SafeToSpend {
+  const days = Math.max(1, daysLeft);
+  const pool = budget - spentBeforeToday - committed;
+  const allowance = Math.max(0, Math.floor(pool / days));
+  const left = allowance - spentToday;
+  const state = allowance === 0 || left < 0 ? 'over' : spentToday >= allowance * 0.85 ? 'close' : 'ok';
+  const tomorrow = days > 1 ? Math.max(0, Math.floor((pool - spentToday) / (days - 1))) : null;
+  return { allowance, left, state, tomorrow };
+}
+
+/**
+ * Money already promised for the rest of this month: EMIs, bills and premiums due by `monthEnd`,
+ * overdue ones included. They become expenses when paid, so the budget has to make room for them.
+ * Card bills are left out: the spending on the card was counted when it happened, and paying the
+ * bill is a transfer. Dues with no amount yet (a bill still to be entered) can't be counted.
+ */
+export function committedDues(dues: readonly { kind: string; amount: Paise | null; date: string; incoming: boolean }[], monthEnd: string): Paise {
+  let sum = 0;
+  for (const d of dues) if (!d.incoming && d.kind !== 'card' && d.amount && d.date <= monthEnd) sum += d.amount;
+  return sum;
+}
