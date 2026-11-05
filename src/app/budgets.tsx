@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { cycleUsage, spendInRange } from '@/domain/budget';
+import { OVERALL_BUDGET, budgetLimit, cycleUsage, spendInRange } from '@/domain/budget';
 import { cycleLabel, shiftCycle } from '@/domain/cycle';
 import { diffDays } from '@/domain/dates';
 import type { Paise } from '@/domain/money';
@@ -34,10 +34,13 @@ export function BudgetsBody() {
   // Suggest limits from what was actually spent, rounded up to the next ₹500.
   const history = useMemo(() => [1, 2, 3].map((i) => shiftCycle(today, payday, -i)).map((c) => spendInRange(txns, c.start, c.end)), [txns, today, payday]);
   const roundUp = (p: Paise) => Math.ceil(p / 500_00) * 500_00;
-  const lastMonth = editing ? (history[0].get(editing) ?? 0) : 0;
-  const avg3 = editing ? Math.round(history.reduce((a, h) => a + (h.get(editing) ?? 0), 0) / 3) : 0;
-  const total = [...usage.values()].reduce((a, u) => a + u.limit, 0);
-  const spent = [...usage.values()].reduce((a, u) => a + u.spent, 0);
+  // The whole-month budget is measured against all spending, so its history is the total.
+  const spentIn = (h: Map<string, Paise>, id: string) => (id === OVERALL_BUDGET ? [...h.values()].reduce((a, v) => a + v, 0) : (h.get(id) ?? 0));
+  const lastMonth = editing ? spentIn(history[0], editing) : 0;
+  const avg3 = editing ? Math.round(history.reduce((a, h) => a + spentIn(h, editing), 0) / 3) : 0;
+  const overall = usage.get(OVERALL_BUDGET);
+  const total = budgetLimit([...usage.values()]);
+  const spent = overall ? overall.spent : [...usage.values()].reduce((a, u) => a + u.spent, 0);
   const over = [...usage.values()].filter((u) => u.level === 'over').length;
   const daysLeft = diffDays(cycle.end, today) + 1;
   const ratio = total ? spent / total : 0;
@@ -57,7 +60,7 @@ export function BudgetsBody() {
         <Card style={{ gap: space(1.25) }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="caption" tone="muted">
-              {cycleLabel(cycle)}, budgeted categories
+              {cycleLabel(cycle)}{overall ? '' : ', budgeted categories'}
             </Txt>
             <Txt variant="caption" tone={over ? 'expense' : 'muted'}>
               {over ? `${over} over budget` : `${daysLeft} days left`}
@@ -82,6 +85,18 @@ export function BudgetsBody() {
       )}
       <ListRow icon="calendar-outline" title="Budget period" subtitle={paydayText(mode, payday)} chevron onPress={() => setPaydaySheet(true)} />
       <PaydaySheet visible={paydaySheet} onClose={() => setPaydaySheet(false)} />
+      <Card padded={false} style={{ overflow: 'hidden' }}>
+        <ListRow
+          icon="wallet-outline"
+          title="Whole month"
+          subtitle={overall ? `${money(overall.spent, { compact: true })} of ${money(overall.limit, { compact: true })}, all spending` : 'One number for all spending (sets safe-to-spend on Home)'}
+          onPress={() => {
+            setEditing(OVERALL_BUDGET);
+            setAmount(overall?.limit ?? null);
+          }}
+          chevron
+        />
+      </Card>
       <Card padded={false} style={{ overflow: 'hidden' }}>
         {cats.map((c) => {
           const u = usage.get(c.id);
@@ -111,7 +126,7 @@ export function BudgetsBody() {
           );
         })}
       </Card>
-      <Sheet visible={Boolean(editing)} onClose={() => setEditing(null)} title={`Budget · ${cats.find((c) => c.id === editing)?.name ?? ''}`}>
+      <Sheet visible={Boolean(editing)} onClose={() => setEditing(null)} title={`Budget · ${editing === OVERALL_BUDGET ? 'Whole month' : (cats.find((c) => c.id === editing)?.name ?? '')}`}>
         <AmountField key={`${editing}-${amountKey}`} label="Per month" value={amount} onChange={setAmount} autoFocus />
         {lastMonth || avg3 ? (
           <Row gap={1} wrap>

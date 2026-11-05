@@ -1,4 +1,6 @@
-import { committedDues, safeToSpend } from '../budget';
+import { OVERALL_BUDGET, budgetLimit, committedDues, cycleUsage, safeToSpend } from '../budget';
+import { cycleFor } from '../cycle';
+import type { Budget, Transaction } from '../types';
 
 describe('safeToSpend', () => {
   const base = { budget: 45_000_00, spentBeforeToday: 30_000_00, committed: 5_000_00, daysLeft: 10 };
@@ -45,5 +47,23 @@ describe('committedDues', () => {
       { kind: 'policy', amount: 9_000_00, date: '2026-12-02', incoming: false },
     ];
     expect(committedDues(dues, '2026-11-30')).toBe(15_260_00);
+  });
+});
+
+describe('whole-month budget', () => {
+  const t = (categoryId: string, amount: number) =>
+    ({ id: categoryId + amount, type: 'expense', status: 'confirmed', deletedAt: null, categoryId, amount, splits: null, occurredAt: '2026-11-03T12:00:00', method: 'upi' }) as Transaction;
+  const b = (categoryId: string, amount: number) => ({ categoryId, month: '*', amount, deletedAt: null }) as Budget;
+  const cycle = cycleFor('2026-11-05', 1);
+  const txns = [t('food', 300), t('fuel', 200)];
+
+  it('is measured against all spending and wins over the categories sum', () => {
+    const usage = cycleUsage([b(OVERALL_BUDGET, 1000), b('food', 400)], txns, cycle);
+    expect(usage.find((u) => u.categoryId === OVERALL_BUDGET)?.spent).toBe(500);
+    expect(budgetLimit(usage)).toBe(1000);
+  });
+
+  it('falls back to the sum of category budgets', () => {
+    expect(budgetLimit(cycleUsage([b('food', 400), b('fuel', 300)], txns, cycle))).toBe(700);
   });
 });

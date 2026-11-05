@@ -52,10 +52,24 @@ export function cycleUsage(budgets: Budget[], transactions: Transaction[], cycle
   return usageOf(budgetsFor(budgets, cycle.key), spendInRange(transactions, cycle.start, cycle.end));
 }
 
+/**
+ * The whole-month budget ("How much do you want to spend in a month?" in onboarding): stored as a
+ * budget row with this reserved category id, measured against all spending.
+ */
+export const OVERALL_BUDGET = 'overall';
+
+/** The limit Home and the widget measure against: the whole-month budget, else the categories' sum. */
+export function budgetLimit(usage: readonly BudgetUsage[]): Paise {
+  const overall = usage.find((u) => u.categoryId === OVERALL_BUDGET);
+  return overall ? overall.limit : usage.reduce((a, u) => a + u.limit, 0);
+}
+
 function usageOf(limits: Budget[], spend: Map<string, Paise>): BudgetUsage[] {
+  let all = 0;
+  for (const v of spend.values()) all += v;
   return limits
     .map((b) => {
-      const spent = spend.get(b.categoryId) ?? 0;
+      const spent = b.categoryId === OVERALL_BUDGET ? all : (spend.get(b.categoryId) ?? 0);
       const ratio = b.amount > 0 ? spent / b.amount : 0;
       return { categoryId: b.categoryId, limit: b.amount, spent, ratio, level: ratio >= 1 ? 'over' : ratio >= 0.8 ? 'warn' : 'ok' } as BudgetUsage;
     })

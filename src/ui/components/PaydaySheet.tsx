@@ -20,8 +20,38 @@ export const paydayText = (mode: BudgetPeriod, payday: number) => (mode === 'pay
  * How budgets are measured: calendar months, or from pay day to the day before the next one. The
  * preview shows the period holding today before anything is saved, so the effect is visible first.
  */
-export function PaydaySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+/** The 1–28 day picker, shared by this sheet and onboarding. */
+export function DayGrid({ value, onChange }: { value: number; onChange: (day: number) => void }) {
   const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup">
+      {DAYS.map((n) => {
+        const on = n === value;
+        return (
+          <Pressable
+            key={n}
+            onPress={() => onChange(n)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            accessibilityLabel={ordinal(n)}
+            style={({ pressed }) => ({
+              width: '12.9%',
+              height: 44,
+              borderRadius: radius.sm,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: on ? colors.primary : pressed ? colors.border : colors.surfaceAlt,
+            })}
+          >
+            <Txt style={{ fontWeight: on ? fonts.bold : fonts.regular, color: on ? colors.primaryText : colors.text, fontVariant: ['tabular-nums'] }}>{n}</Txt>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function PaydaySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const today = useToday();
   const incomes = useTable('incomes');
   const settings = useStore((s) => s.settings);
@@ -60,30 +90,7 @@ export function PaydaySheet({ visible, onClose }: { visible: boolean; onClose: (
           {suggestion && suggestion.day !== day ? (
             <Chip compact icon="sparkles-outline" label={`${suggestion.name} comes on the ${ordinal(suggestion.day)}: use it`} onPress={() => setDay(suggestion.day)} />
           ) : null}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup">
-            {DAYS.map((n) => {
-              const on = n === day;
-              return (
-                <Pressable
-                  key={n}
-                  onPress={() => setDay(n)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={ordinal(n)}
-                  style={({ pressed }) => ({
-                    width: '12.9%',
-                    height: 44,
-                    borderRadius: radius.sm,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: on ? colors.primary : pressed ? colors.border : colors.surfaceAlt,
-                  })}
-                >
-                  <Txt style={{ fontWeight: on ? fonts.bold : fonts.regular, color: on ? colors.primaryText : colors.text, fontVariant: ['tabular-nums'] }}>{n}</Txt>
-                </Pressable>
-              );
-            })}
-          </View>
+          <DayGrid value={day} onChange={setDay} />
           <Txt variant="small" tone="muted">
             {day === 1 ? 'The 1st is the same as a calendar month. Pick the day your salary lands.' : 'Paid on the 29th, 30th or 31st? Pick 28: that day exists in every month.'}
           </Txt>

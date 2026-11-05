@@ -1,4 +1,4 @@
-import { cycleUsage } from './budget';
+import { budgetLimit, cycleUsage } from './budget';
 import { cycleFor } from './cycle';
 import { type YMD } from './dates';
 import type { DueItem } from './dues';
@@ -48,7 +48,7 @@ export function widgetSnapshot({ transactions, budgets, dues, today, hideAmounts
   const confirmed = transactions.filter((t) => t.status === 'confirmed');
   const day = dayTotals(confirmed, today);
   const totals = rangeTotals(confirmed, cycle.start, cycle.end);
-  const limit = cycleUsage(budgets, confirmed, cycle).reduce((a, b) => a + b.limit, 0);
+  const limit = budgetLimit(cycleUsage(budgets, confirmed, cycle));
   const inr = (p: Paise) => (hideAmounts ? HIDDEN : formatINR(p, { decimals: 'never' }));
   return {
     v: 1,

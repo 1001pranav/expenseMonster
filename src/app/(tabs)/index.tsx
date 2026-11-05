@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
-import { committedDues, cycleUsage, safeToSpend } from '@/domain/budget';
+import { budgetLimit, committedDues, cycleUsage, safeToSpend } from '@/domain/budget';
 import { cycleLabel } from '@/domain/cycle';
 import { splitCaptures } from '@/domain/captures';
 import { addDays, diffDays, parts, type YMD } from '@/domain/dates';
@@ -47,7 +47,7 @@ export default function Home() {
   const periodName = calendar ? monthName : cycleLabel(cycle);
   const totals = useMemo(() => rangeTotals(confirmed, cycle.start, cycle.end), [confirmed, cycle]);
   const todays = useMemo(() => dayTotals(confirmed, today), [confirmed, today]);
-  const budgetTotal = useMemo(() => cycleUsage(budgets, confirmed, cycle).reduce((a, b) => a + b.limit, 0), [budgets, confirmed, cycle]);
+  const budgetTotal = useMemo(() => budgetLimit(cycleUsage(budgets, confirmed, cycle)), [budgets, confirmed, cycle]);
   const recent = useMemo(() => all.filter((t) => t.status !== 'rejected').slice(0, 3), [all]);
   const week = useMemo(() => weekSoFar(confirmed, today), [confirmed, today]);
   const reviewCount = pending.transactions.length + pending.bills.length;

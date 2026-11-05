@@ -1,4 +1,4 @@
-import { cycleUsage, spendByCategory } from '../budget';
+import { OVERALL_BUDGET, cycleUsage, spendByCategory } from '../budget';
 import { cycleFor, cycleForMonth } from '../cycle';
 import { buildCardLedger } from '../creditCard';
 import { addMonths, isoToYMD, monthKey, type YMD } from '../dates';
@@ -50,7 +50,7 @@ const MONTH_PARAM = { type: 'string', description: 'Month as YYYY-MM. Omit for t
 
 export function financeTools(snap: FinanceSnapshot, today: YMD): Record<string, FinanceTool> {
   const catName = new Map(snap.categories.map((c) => [c.id, c.name]));
-  const nameOf = (id: string | null) => (id ? (catName.get(id) ?? 'Uncategorised') : 'Uncategorised');
+  const nameOf = (id: string | null) => (id === OVERALL_BUDGET ? 'All spending' : id ? (catName.get(id) ?? 'Uncategorised') : 'Uncategorised');
   const live = snap.transactions.filter(isLive);
 
   return {

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -33,6 +33,8 @@ export default function QuickAdd() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const today = useToday();
+  /** Opened straight after onboarding: nothing logged yet, so say what to do. */
+  const { first } = useLocalSearchParams<{ first?: string }>();
   const txns = useTable('transactions');
   const cards = useTable('cards');
   const accounts = useTable('accounts');
@@ -172,7 +174,7 @@ export default function QuickAdd() {
               {raw ? groupAmount(raw) : '0'}
             </Txt>
             <Txt variant="small" tone="muted" numberOfLines={1}>
-              {catName ? (picked ? catName : `Suggested: ${catName}`) : 'Pick a category, or save without one'}
+              {catName ? (picked ? catName : `Suggested: ${catName}`) : first && !raw ? 'Log the last thing you paid for' : 'Pick a category, or save without one'}
             </Txt>
           </View>
 
