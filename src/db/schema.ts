@@ -21,7 +21,7 @@ export const TABLES: Record<TableName, Record<string, string>> = {
   accounts: { name: TN, type: TN, last4: T, openingBalance: IN0 },
   cards: { name: TN, last4: T, statementDay: I, dueDay: I, creditLimit: I, color: T },
   card_overrides: { cardId: TN, statementDate: TN, total: IN0, minDue: I },
-  categories: { name: TN, icon: TN, color: TN, kind: TN, parentId: T, sortOrder: IN0 },
+  categories: { name: TN, icon: TN, color: TN, kind: TN, parentId: T, sortOrder: IN0, hidden: IN0 },
   members: { name: TN, upiId: T, phone: T, color: TN },
   transactions: {
     type: TN,
@@ -150,12 +150,25 @@ const ADDED_IN: Partial<Record<TableName, Record<string, number>>> = {
   trades: { amountUnknown: 11 },
   loans: { cardId: 12, sourceTxnId: 12, processingFee: 12 },
   rules: { field: 13, source: 13, method: 13, cardId: 13, accountId: 13, rename: 13, learned: 13 },
+  categories: { hidden: 16 },
 };
 const EXTRA_ADDED_IN = 4;
 const tablesAt = (version: number) => (Object.keys(TABLES) as TableName[]).filter((t) => (CREATED_IN[t] ?? 1) <= version);
 
 /** Column → SQL type, as checked on rows from other phones (domain/sync/validate.ts). */
 export const columnDefsOf = (table: TableName): Record<string, string> => ({ ...COMMON, ...TABLES[table] });
+
+/**
+ * The value a column takes when a row doesn't have it: its SQL DEFAULT, or null. A row from a phone
+ * on an older app version lacks columns added since (e.g. categories.hidden); writing null into a
+ * NOT NULL column would make the whole write fail.
+ */
+export function defaultOf(table: TableName, column: string): string | number | null {
+  const def = columnDefsOf(table)[column] ?? '';
+  const m = /DEFAULT\s+('(?:[^']|'')*'|-?\d+(?:\.\d+)?)/.exec(def);
+  if (!m) return null;
+  return m[1].startsWith("'") ? m[1].slice(1, -1).replace(/''/g, "'") : Number(m[1]);
+}
 
 /** Every column, including `extra`: fields from a newer app version (domain/sync/forward.ts). */
 export const columnsOf = (table: TableName) => [...Object.keys(COMMON), ...Object.keys(TABLES[table]), EXTRA];
@@ -239,4 +252,7 @@ export const MIGRATIONS: string[] = [
   // v15: the SMS behind a capture still waiting in Review, so it can be shown there. This phone only
   // (not a synced table, not in backups); deleted once the capture is approved or rejected.
   'CREATE TABLE IF NOT EXISTS capture_texts (txnId TEXT PRIMARY KEY NOT NULL, sender TEXT, body TEXT NOT NULL, receivedAt TEXT);',
+  // v16: categories can be hidden: kept for the entries filed under them, left out of pickers.
+  // Existing categories get 0 (shown). Older app versions keep the field in `extra` when syncing.
+  'ALTER TABLE "categories" ADD COLUMN "hidden" INTEGER NOT NULL DEFAULT 0;',
 ];
