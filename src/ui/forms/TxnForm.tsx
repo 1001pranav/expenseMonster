@@ -544,39 +544,48 @@ export function TxnForm({
         ...categories.slice(CAT_LIMIT).filter((c) => c.id === categoryId),
       ];
 
-  // How it was paid, one box per choice: each saved card is its own box, so picking a card is one tap.
+  // How it was paid, one box per choice. All credit cards share one "Credit card" box; picking it lists
+  // your cards underneath, so the row stays short however many cards you have.
   const payOptions: {
     key: string;
     icon: IconName;
     label: string;
     sub?: string;
     method: PayMethod;
-    cardId?: string;
   }[] = [
     { key: "upi", icon: "qr-code", label: "UPI", method: "upi" },
-    ...(type === "transfer"
+    ...(type === "transfer" || !cards.length
       ? []
-      : cards.map((c) => ({
-          key: `card:${c.id}`,
-          icon: "card" as IconName,
-          label: type === "income" ? `Refund to ${c.name}` : c.name,
-          sub: c.last4 ? `••${c.last4}` : "Credit card",
-          method: "card" as PayMethod,
-          cardId: c.id,
-        }))),
+      : [
+          {
+            key: "card",
+            icon: "card" as IconName,
+            label: type === "income" ? "Refund to card" : "Credit card",
+            sub:
+              method === "card" && card
+                ? `${card.name}${card.last4 ? ` ••${card.last4}` : ""}`
+                : `${cards.length} card${cards.length === 1 ? "" : "s"}`,
+            method: "card" as PayMethod,
+          },
+        ]),
     { key: "cash", icon: "cash", label: "Cash", method: "cash" },
     { key: "bank", icon: "business", label: "Bank", method: "bank" },
     { key: "wallet", icon: "wallet", label: "Wallet", method: "wallet" },
   ];
+  const pickCard = (id: string) => {
+    setKeypad(false);
+    setMethod("card");
+    setAutoPay(false);
+    setCardId(id);
+    const c = cards.find((x) => x.id === id);
+    if (c && !existing) setScope(c.scope);
+  };
   const pickPay = (o: (typeof payOptions)[number]) => {
+    // With one card there's nothing to choose: "Credit card" is that card.
+    if (o.method === "card" && cards.length === 1) return pickCard(cards[0].id);
     setKeypad(false);
     setMethod(o.method);
     setAutoPay(false);
-    if (o.cardId) {
-      setCardId(o.cardId);
-      const c = cards.find((x) => x.id === o.cardId);
-      if (c && !existing) setScope(c.scope);
-    }
   };
   // "Add a card" from the form: when you come back with a new card, it's the one picked.
   const cardsBeforeAdd = useRef<Set<string> | null>(null);
@@ -1308,22 +1317,30 @@ export function TxnForm({
               icon={o.icon}
               label={o.label}
               sub={o.sub}
-              selected={
-                method === o.method &&
-                (o.method !== "card" || cardId === o.cardId)
-              }
+              selected={method === o.method}
               onPress={() => pickPay(o)}
             />
           ))}
-          {type === "expense" ? (
-            <Tile
-              width={92}
-              icon="add"
-              label={cards.length ? "New card" : "Add a card"}
-              onPress={addCard}
-            />
+          {type === "expense" && !cards.length ? (
+            <Tile width={92} icon="add" label="Add a card" onPress={addCard} />
           ) : null}
         </TileRow>
+        {method === "card" && type !== "transfer" && cards.length ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {cards.map((c) => (
+              <Chip
+                key={c.id}
+                icon="card"
+                label={`${c.name}${c.last4 ? ` ••${c.last4}` : ""}`}
+                selected={cardId === c.id}
+                onPress={() => pickCard(c.id)}
+              />
+            ))}
+            {type === "expense" ? (
+              <Chip icon="add" label="New card" onPress={addCard} />
+            ) : null}
+          </View>
+        ) : null}
         {method !== "card" && accounts.length > 1 ? (
           <ChipSelect
             value={accountId}
