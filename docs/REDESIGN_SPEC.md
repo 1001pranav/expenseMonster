@@ -444,4 +444,7 @@ Built on branch `claude/serene-dijkstra-uc9n5r`. Where the build differs from th
 | Onboarding (§2.9) | Done | Fresh start skips the name (saved as "Me"); joining a family phone still asks. |
 | Icon and splash | Done | Regenerated from `scripts/brand/mark.js`; needs a new native build. |
 
-Not done: categories management screen changes (§2.7), the settings hub regrouping (§2.8), mascot poses and empty-state copy (§2.10), pull-to-rescan SMS (§4).
+| Categories (§2.7) | Done | ↑/↓ buttons instead of drag. Quick Add's suggestion still comes first in "as listed" order. Built-in categories used by Mark paid can be hidden, not deleted. |
+| Settings (§2.8) | Done, in the hub (`src/app/hub.tsx`) | Status line says whether a backup exists and how old it is, and warns after 7 days. Capture options moved to `settings/capture.tsx`. |
+
+Not done: mascot poses and empty-state copy (§2.10), pull-to-rescan SMS (§4).
