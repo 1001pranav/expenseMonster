@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { effectivePayday, type BudgetPeriod } from '@/domain/cycle';
 import type { ConflictPolicy } from '@/domain/sync/merge';
 import type { Scope, TableMap, TableName } from '@/domain/types';
 
@@ -27,7 +28,9 @@ export interface Settings {
   smsCheckOnOpen: boolean;
   /** The Home card offering bank SMS reading was closed. */
   smsOfferDismissed: boolean;
-  /** Day of the month the budget period starts (1–28): salary day. 1 = calendar months. See domain/cycle.ts. */
+  /** How budgets are measured: calendar months, or from payday to the day before the next one. */
+  budgetPeriod: BudgetPeriod;
+  /** Salary day (1–28), used only when budgetPeriod is 'payday'. See domain/cycle.ts. */
   payday: number;
 }
 
@@ -49,8 +52,12 @@ export const DEFAULT_SETTINGS: Settings = {
   smsImportedTo: null,
   smsCheckOnOpen: true,
   smsOfferDismissed: false,
+  budgetPeriod: 'calendar',
   payday: 1,
 };
+
+/** The start day budgets use right now: 1 unless the user chose pay day to pay day. */
+export const paydayOf = (s: Pick<Settings, 'budgetPeriod' | 'payday'>) => effectivePayday(s.budgetPeriod, s.payday);
 
 export interface Identity {
   deviceId: string;

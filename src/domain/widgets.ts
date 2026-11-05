@@ -37,7 +37,7 @@ export interface WidgetInput {
   today: YMD;
   hideAmounts: boolean;
   scheme: string;
-  /** Budget period start day (Settings › Pay day); 1 = calendar months. */
+  /** Budget period start day (Settings › Budget period); 1 = calendar months. */
   payday?: number;
 }
 

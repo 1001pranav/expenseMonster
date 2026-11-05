@@ -382,7 +382,10 @@ export async function saveIdentity(patch: Partial<Identity>): Promise<void> {
 export async function loadSettings(): Promise<Settings> {
   const raw = await getMeta('settings');
   try {
-    return { ...DEFAULT_SETTINGS, ...(raw ? JSON.parse(raw) : {}) };
+    const saved = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
+    // Settings saved before the period choice existed: a payday other than the 1st meant pay day mode.
+    if (!saved.budgetPeriod && saved.payday && saved.payday !== 1) saved.budgetPeriod = 'payday';
+    return { ...DEFAULT_SETTINGS, ...saved };
   } catch (e) {
     logFailure('settings unreadable, using defaults', e);
     return DEFAULT_SETTINGS;

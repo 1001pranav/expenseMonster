@@ -5,7 +5,7 @@ import { cycleLabel, shiftCycle } from '@/domain/cycle';
 import { diffDays } from '@/domain/dates';
 import type { Paise } from '@/domain/money';
 import { insert, remove, update } from '@/db/repo';
-import { useConfirmed, useCycle, useSortedCategories, useTable, useToday } from '@/data/hooks';
+import { useConfirmed, useCycle, usePayday, useSortedCategories, useTable, useToday } from '@/data/hooks';
 import { useStore } from '@/db/store';
 import { Button, Card, Chip, IconCircle, ListRow, Money, ProgressBar, Row, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { Sheet } from '@/ui/components/feedback';
@@ -19,9 +19,10 @@ export function BudgetsBody() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const today = useToday();
-  // Payday to payday, or the calendar month (Settings › Pay day).
+  // Payday to payday, or the calendar month (Settings › Budget period).
   const cycle = useCycle();
-  const payday = useStore((s) => s.settings.payday);
+  const payday = usePayday();
+  const mode = useStore((s) => s.settings.budgetPeriod);
   const [paydaySheet, setPaydaySheet] = useState(false);
   const cats = useSortedCategories('expense');
   const budgets = useTable('budgets');
@@ -79,7 +80,7 @@ export function BudgetsBody() {
           </Txt>
         </Card>
       )}
-      <ListRow icon="calendar-outline" title="Budget period" subtitle={paydayText(payday)} chevron onPress={() => setPaydaySheet(true)} />
+      <ListRow icon="calendar-outline" title="Budget period" subtitle={paydayText(mode, payday)} chevron onPress={() => setPaydaySheet(true)} />
       <PaydaySheet visible={paydaySheet} onClose={() => setPaydaySheet(false)} />
       <Card padded={false} style={{ overflow: 'hidden' }}>
         {cats.map((c) => {

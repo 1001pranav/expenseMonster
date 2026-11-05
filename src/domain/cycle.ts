@@ -1,4 +1,5 @@
 import { addDays, addMonths, diffDays, formatDay, formatMonth, fromParts, monthKey, parts, type YMD } from './dates';
+import type { RecurringIncome } from './types';
 
 /**
  * A budget period that starts on payday. With payday = 1 it is exactly the calendar month; with
@@ -36,4 +37,29 @@ export function cycleLabel(c: Cycle): string {
   if (parts(c.start).d === 1) return formatMonth(c.key);
   const year = c.start.slice(0, 4) !== c.end.slice(0, 4);
   return `${formatDay(c.start, { year })} – ${formatDay(c.end, { year })}`;
+}
+
+/** How budgets are measured (Settings › Budget period). */
+export type BudgetPeriod = 'calendar' | 'payday';
+
+/** The start day actually used: 1 for calendar months, the chosen payday otherwise. */
+export function effectivePayday(period: BudgetPeriod | undefined, payday: number): number {
+  return period === 'payday' ? clampPayday(payday) : 1;
+}
+
+/** The period budgets for `month` ('YYYY-MM') are measured over: the one holding its 15th. */
+export function cycleForMonth(month: string, payday: number): Cycle {
+  return cycleFor(`${month}-15`, payday);
+}
+
+/**
+ * A payday to offer: the day the largest active monthly recurring income (salary) arrives.
+ * Null when there's none, or it arrives on the 1st (that's already the calendar month).
+ */
+export function suggestPayday(incomes: readonly RecurringIncome[]): { day: number; name: string } | null {
+  const monthly = incomes.filter((i) => i.active && !i.deletedAt && i.frequency === 'monthly');
+  const top = monthly.sort((a, b) => b.amount - a.amount)[0];
+  if (!top) return null;
+  const day = clampPayday(parts(top.nextDate).d);
+  return day === 1 ? null : { day, name: top.name };
 }

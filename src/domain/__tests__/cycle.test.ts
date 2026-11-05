@@ -1,7 +1,7 @@
 import { cycleUsage } from '../budget';
-import { clampPayday, cycleFor, cycleLabel, shiftCycle } from '../cycle';
+import { clampPayday, cycleFor, cycleForMonth, cycleLabel, effectivePayday, shiftCycle, suggestPayday } from '../cycle';
 import { rangeTotals } from '../transactions';
-import type { Budget, Transaction } from '../types';
+import type { Budget, RecurringIncome, Transaction } from '../types';
 
 describe('cycleFor', () => {
   it('is the calendar month when payday is the 1st', () => {
@@ -55,5 +55,28 @@ describe('spend over a payday period', () => {
   it("measures the period against the budget for the month it's named after", () => {
     const budgets = [{ categoryId: 'food', month: '2026-11', amount: 1000, deletedAt: null }] as Budget[];
     expect(cycleUsage(budgets, txns, cycle)).toEqual([{ categoryId: 'food', limit: 1000, spent: 500, ratio: 0.5, level: 'ok' }]);
+  });
+});
+
+describe('budget period setting', () => {
+  it('uses the payday only in payday mode', () => {
+    expect(effectivePayday('calendar', 25)).toBe(1);
+    expect(effectivePayday(undefined, 25)).toBe(1);
+    expect(effectivePayday('payday', 25)).toBe(25);
+    expect(effectivePayday('payday', 31)).toBe(28);
+  });
+
+  it("finds the period a month's budgets are measured over", () => {
+    expect(cycleForMonth('2026-11', 25)).toMatchObject({ start: '2026-10-25', end: '2026-11-24', key: '2026-11' });
+    expect(cycleForMonth('2026-11', 7)).toMatchObject({ start: '2026-11-07', end: '2026-12-06', key: '2026-11' });
+    expect(cycleForMonth('2026-11', 1)).toMatchObject({ start: '2026-11-01', end: '2026-11-30' });
+  });
+
+  it('suggests the day the biggest monthly income arrives', () => {
+    const inc = (p: Partial<RecurringIncome>) => ({ active: 1, deletedAt: null, frequency: 'monthly', amount: 0, nextDate: '2026-11-01', name: 'x', ...p }) as RecurringIncome;
+    expect(suggestPayday([inc({ name: 'Rent in', amount: 20_000_00, nextDate: '2026-11-05' }), inc({ name: 'Salary', amount: 85_000_00, nextDate: '2026-11-30' })])).toEqual({ day: 28, name: 'Salary' });
+    expect(suggestPayday([inc({ amount: 1, nextDate: '2026-12-01' })])).toBeNull();
+    expect(suggestPayday([inc({ amount: 1, nextDate: '2026-12-25', active: 0 })])).toBeNull();
+    expect(suggestPayday([])).toBeNull();
   });
 });

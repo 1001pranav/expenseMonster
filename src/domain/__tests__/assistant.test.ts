@@ -170,6 +170,13 @@ describe('finance tools', () => {
     expect(r.budgets[0]).toMatchObject({ category: 'Food', used: '90%', status: 'close to limit' });
   });
 
+  it('measures budgets over the pay period when the user budgets from payday', () => {
+    // Payday 10: on 20 Sep the period is 10 Sep – 9 Oct, so the ₹4,500 on 5 Sep isn't in it.
+    const r = financeTools({ ...snap, payday: 10 }, TODAY).budget_status.run({}) as { month: string; period: string; budgets: { used: string }[] };
+    expect(r).toMatchObject({ month: '2026-09', period: '2026-09-10 to 2026-10-09' });
+    expect(r.budgets[0].used).toBe('0%');
+  });
+
   it('clamps and sanitises arguments instead of trusting the model', () => {
     const r = tools.spending_by_category.run({ month: 'last month', top: 500 }) as { month: string; categories: unknown[] };
     expect(r.month).toBe('2026-09');

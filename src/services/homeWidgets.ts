@@ -3,7 +3,7 @@ import { AppState } from 'react-native';
 import { todayYMD } from '@/domain/dates';
 import { computeDues } from '@/domain/dues';
 import { widgetSnapshot } from '@/domain/widgets';
-import { getState, useStore } from '@/db/store';
+import { getState, paydayOf, useStore } from '@/db/store';
 import { homeWidgetsAvailable, updateHomeWidgets } from '../../modules/home-widgets';
 import { logFailure } from './diagnostics';
 
@@ -25,7 +25,7 @@ export function refreshHomeWidgets(): void {
     );
     const scheme = Constants.expoConfig?.scheme;
     const json = JSON.stringify(
-      widgetSnapshot({ transactions: tables.transactions, budgets: tables.budgets, dues, today, hideAmounts: settings.hideAmounts, payday: settings.payday, scheme: (Array.isArray(scheme) ? scheme[0] : scheme) ?? 'expensemonster' }),
+      widgetSnapshot({ transactions: tables.transactions, budgets: tables.budgets, dues, today, hideAmounts: settings.hideAmounts, payday: paydayOf(settings), scheme: (Array.isArray(scheme) ? scheme[0] : scheme) ?? 'expensemonster' }),
     );
     if (json === last) return;
     updateHomeWidgets(json);

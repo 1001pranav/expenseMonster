@@ -4,7 +4,7 @@ import { cycleFor } from '@/domain/cycle';
 import { todayYMD } from '@/domain/dates';
 import { computeDues } from '@/domain/dues';
 import type { Category, TableMap, TableName } from '@/domain/types';
-import { useStore } from '@/db/store';
+import { paydayOf, useStore } from '@/db/store';
 
 export const useTable = <K extends TableName>(name: K): TableMap[K][] => useStore((s) => s.tables[name] as TableMap[K][]);
 
@@ -17,9 +17,12 @@ export const useToday = () => {
 /** The budget period holding today: from payday to the day before the next one (domain/cycle.ts). */
 export function useCycle() {
   const today = useToday();
-  const payday = useStore((s) => s.settings.payday);
+  const payday = usePayday();
   return useMemo(() => cycleFor(today, payday), [today, payday]);
 }
+
+/** The start day budgets use: 1 for calendar months, else the chosen payday (Settings › Budget period). */
+export const usePayday = () => useStore((s) => paydayOf(s.settings));
 
 export function useCategoryMap(): Map<string, Category> {
   const cats = useTable('categories');

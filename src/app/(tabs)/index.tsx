@@ -41,7 +41,7 @@ export default function Home() {
   const household = useStore((s) => s.identity.householdName);
 
   const me = members.find((m) => m.id === selfId);
-  // The budget period: the calendar month, or payday to payday (Settings › Pay day).
+  // The budget period: the calendar month, or payday to payday (Settings › Budget period).
   const monthName = MONTH_NAMES[parts(`${cycle.key}-01`).m - 1];
   const calendar = parts(cycle.start).d === 1;
   const periodName = calendar ? monthName : cycleLabel(cycle);

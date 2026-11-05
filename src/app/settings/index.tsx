@@ -100,7 +100,7 @@ export default function Settings() {
 
       <Section title="Budgets">
         <Card padded={false}>
-          <ListRow icon="calendar-outline" iconColor={colors.primary} title="Pay day" subtitle={`Budget period: ${paydayText(settings.payday).toLowerCase()}`} chevron onPress={() => setPaydaySheet(true)} />
+          <ListRow icon="calendar-outline" iconColor={colors.primary} title="Budget period" subtitle={paydayText(settings.budgetPeriod, settings.payday)} chevron onPress={() => setPaydaySheet(true)} />
         </Card>
         <PaydaySheet visible={paydaySheet} onClose={() => setPaydaySheet(false)} />
       </Section>

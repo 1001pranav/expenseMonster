@@ -9,8 +9,7 @@ import { scheduleFor } from '@/domain/emi';
 import type { Paise } from '@/domain/money';
 import { financialHealth } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
-import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
-import { useStore } from '@/db/store';
+import { useCategoryMap, useConfirmed, usePayday, useTable, useToday } from '@/data/hooks';
 import { Bars, HeatCalendar, LineChart, RankedBars, type Slice } from '@/ui/components/charts';
 import { Card, IconButton, Money, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
@@ -31,7 +30,7 @@ export default function Insights() {
   const overrides = useTable('card_overrides');
   const loans = useTable('loans');
   const allTxns = useTable('transactions');
-  const payday = useStore((st) => st.settings.payday);
+  const payday = usePayday();
   const health = useMemo(() => financialHealth({ transactions: allTxns, loans, cards, cardOverrides: overrides, budgets, payday }, today, money), [allTxns, loans, cards, overrides, budgets, payday, today, money]);
   const [range, setRange] = useState<Range>('month');
   const [month, setMonth] = useState(monthKey(today));
