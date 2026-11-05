@@ -1,4 +1,4 @@
-import { pendingFixedBills, rechargeValidity, prepaidStatus } from '@/domain/bills';
+import { nextExpectedBillDate, pendingFixedBills, rechargeValidity, prepaidStatus } from '@/domain/bills';
 import { addDays, toISO, todayYMD, type YMD } from '@/domain/dates';
 import { findDuplicate } from '@/domain/dedupe';
 import type { DueItem } from '@/domain/dues';
@@ -7,7 +7,7 @@ import { advance } from '@/domain/recurrence';
 import { categoryRefs, resplit } from '@/domain/categories';
 import { isLearned } from '@/domain/rules';
 import { isClearCapture, ruleKey } from '@/domain/transactions';
-import type { Bill, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
+import type { Bill, Biller, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
 import { findById, insert, insertMany, remove, restore, update, type NewRow } from '@/db/repo';
 import { CATEGORY_FOR } from '@/db/seed';
 import { getState } from '@/db/store';
@@ -165,7 +165,6 @@ export interface PayInput {
 /** Record a payment against a due (EMI, bill, card, premium, recharge…) and advance its schedule. */
 export async function markDuePaid(due: DueItem, pay: PayInput): Promise<Transaction | null> {
   if (!due.link) return null;
-  const { tables } = getState();
   const occurredAt = toISO(pay.date, pay.date === todayYMD() ? new Date().getHours() * 60 + new Date().getMinutes() : null);
   const common = {
     amount: pay.amount,
@@ -228,26 +227,39 @@ export async function markDuePaid(due: DueItem, pay: PayInput): Promise<Transact
       // Prepaid recharge or LPG booking: create the "bill" record then pay it.
       const biller = findById('billers', due.link.id);
       if (!biller) return null;
-      const current = prepaidStatus(tables.bills, biller.id, pay.date).validUntil;
-      const bill = await insert('bills', {
-        billerId: biller.id,
-        periodFrom: null,
-        periodTo: null,
-        billDate: pay.date,
-        dueDate: pay.date,
-        amount: pay.amount,
-        lateFee: 0,
-        usage: null,
-        validUntil: biller.amountMode === 'prepaid' && biller.validityDays ? rechargeValidity(current, pay.date, biller.validityDays) : null,
-        status: 'open',
-        attachment: null,
-        sourceHash: null,
-        scope: biller.scope,
-      });
+      const bill = await billForPayment(biller, pay.amount, pay.date);
       return saveTransaction({ ...common, type: 'expense', categoryId: biller.categoryId ?? categoryForBiller(biller.type), linkType: 'bill', linkId: bill.id, scope: biller.scope });
     }
   }
   return null;
+}
+
+/**
+ * A payment to a biller that has no open bill (a recharge, an LPG booking, or an electricity bill paid
+ * without entering it first): record the bill it paid, dated the day of payment, so the biller's
+ * history, usage trend and next-due prediction include it.
+ */
+export async function billForPayment(biller: Biller, amount: Paise, date: YMD): Promise<Bill> {
+  const { tables } = getState();
+  const current = prepaidStatus(tables.bills, biller.id, date).validUntil;
+  // A fixed bill (rent, broadband) is paid for its cycle: date it on that cycle, so the bill that
+  // would be generated for the cycle isn't added again as due.
+  const cycle = biller.amountMode === 'fixed' ? nextExpectedBillDate(biller, tables.bills, date) : null;
+  return insert('bills', {
+    billerId: biller.id,
+    periodFrom: cycle,
+    periodTo: cycle ? addDays(advance(cycle, biller.frequency, biller.billDay), -1) : null,
+    billDate: cycle ?? date,
+    dueDate: cycle ? addDays(cycle, biller.dueOffsetDays) : date,
+    amount,
+    lateFee: 0,
+    usage: null,
+    validUntil: biller.amountMode === 'prepaid' && biller.validityDays ? rechargeValidity(current, date, biller.validityDays) : null,
+    status: 'open',
+    attachment: null,
+    sourceHash: null,
+    scope: biller.scope,
+  });
 }
 
 export function categoryForBiller(type: string | undefined): string {

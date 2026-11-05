@@ -15,7 +15,8 @@ import { Screen } from '@/ui/components/Screen';
 import { askForReminders } from '@/services/notifications';
 
 export default function BillerForm() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  /** `from=txn`: opened from an expense being recorded, which records this cycle's bill itself. */
+  const { id, from } = useLocalSearchParams<{ id?: string; from?: string }>();
   const existing = useTable('billers').find((b) => b.id === id);
   const cards = useTable('cards');
   const [type, setType] = useState<BillerType | null>(existing?.type ?? null);
@@ -86,9 +87,9 @@ export default function BillerForm() {
     try {
       const saved = existing ? await update('billers', existing.id, data) : await insert('billers', data);
       await generateFixedBills();
-      toast(existing ? 'Bill updated' : mode === 'variable' ? "Added — you'll be asked for the amount each cycle" : 'Added — reminders are on', { tone: 'success' });
+      toast(existing ? 'Bill updated' : from === 'txn' ? `${name.trim()} added — this payment is saved against it` : mode === 'variable' ? "Added — you'll be asked for the amount each cycle" : 'Added — reminders are on', { tone: 'success' });
       askForReminders();
-      if (!existing && mode === 'variable') router.replace({ pathname: '/bill/new', params: { billerId: saved.id } });
+      if (!existing && mode === 'variable' && from !== 'txn') router.replace({ pathname: '/bill/new', params: { billerId: saved.id } });
       else router.back();
     } finally {
       setSaving(false);

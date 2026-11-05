@@ -24,12 +24,14 @@ import {
   flagsOf,
   suggestCategory,
 } from "@/domain/transactions";
-import type { PayMethod, Scope, Transaction, TxnType } from "@/domain/types";
-import { update } from "@/db/repo";
+import type { Bill, PayMethod, Scope, Transaction, TxnType } from "@/domain/types";
+import { remove, update } from "@/db/repo";
 import { useStore } from "@/db/store";
 import {
   answerCardHint,
   approveCapture,
+  billForPayment,
+  categoryForBiller,
   deleteTransaction,
   learnRule,
   rejectCapture,
@@ -173,6 +175,11 @@ export function TxnForm({
     type: Transaction["linkType"];
     id: string | null;
   }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });
+  /**
+   * A biller this payment is for when it has no open bill yet (electricity paid without entering the
+   * bill first, a recharge, an LPG booking). Saving records that bill, paid, so the biller keeps track.
+   */
+  const [billerPick, setBillerPick] = useState<string | null | undefined>();
   const [showAllCats, setShowAllCats] = useState(false);
   /** True while the category was filled in from the payee, so typing more can still change it. */
   const [autoCat, setAutoCat] = useState(false);
@@ -350,11 +357,65 @@ export function TxnForm({
         .sort((a, b) => a.v.bill.dueDate.localeCompare(b.v.bill.dueDate)),
     [bills, billers, txns, today, link.id],
   );
+  const capturedBiller = flags
+    .find((f) => f.startsWith("biller:"))
+    ?.slice("biller:".length);
   const billCategory =
     categoryId === "cat_utilities" ||
     categoryId === "cat_rent" ||
     categoryId === "cat_education" ||
-    flags.some((f) => f.startsWith("biller:"));
+    Boolean(capturedBiller);
+  // Billers with nothing open to pay, in this category (or the one the capture matched): picking one
+  // records its bill on save.
+  const billsOpen = new Set(openBills.map((x) => x.biller!.id));
+  const billerChoices = billers.filter(
+    (b) =>
+      b.active &&
+      !billsOpen.has(b.id) &&
+      (b.id === capturedBiller ||
+        (b.categoryId ?? categoryForBiller(b.type)) === categoryId),
+  );
+  // Until you pick, a capture waiting for review that matched a biller starts with that biller.
+  const billerId =
+    billerPick === undefined ? (pending ? capturedBiller : null) : billerPick;
+  // Only while it's on screen: switching category away from it doesn't quietly keep it linked.
+  const pickedBiller =
+    type === "expense" && billCategory && !link.id
+      ? billers.find(
+          (b) =>
+            b.id === billerId &&
+            (billsOpen.has(b.id) || billerChoices.some((x) => x.id === b.id)),
+        )
+      : undefined;
+  // A picked biller that has an open bill (adding rent generates this cycle's): the payment pays it.
+  const pickedOpenBill = pickedBiller
+    ? openBills.find((x) => x.biller!.id === pickedBiller.id)?.v.bill
+    : undefined;
+
+  // "Add a bill" from the form: when you come back with a new biller, it's the one picked (or the bill
+  // you entered for it, if you did).
+  const billersBeforeAdd = useRef<Set<string> | null>(null);
+  const addBiller = () => {
+    setKeypad(false);
+    billersBeforeAdd.current = new Set(billers.map((b) => b.id));
+    router.push({ pathname: "/biller/new", params: { from: "txn" } });
+  };
+  useEffect(() => {
+    const before = billersBeforeAdd.current;
+    if (!before) return;
+    const added = billers.find((b) => !before.has(b.id));
+    if (!added) return;
+    billersBeforeAdd.current = null;
+    if (added.categoryId && added.categoryId !== categoryId) {
+      setCategoryId(added.categoryId);
+      setAutoCat(false);
+    }
+    setBillerPick(added.id);
+    setLink({ type: null, id: null });
+    if (!payee) setPayee(added.name);
+    if (!amountStr && added.fixedAmount) setAmount(amountText(added.fixedAmount));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billers]);
 
   const amountShown = groupAmount(amountStr);
   const onKey = (k: string) => {
@@ -376,6 +437,7 @@ export function TxnForm({
     if (isFamily && (!payer || !toMember || payer === toMember))
       return toast("Pick who sent it and who got it", { tone: "error" });
     setSaving(true);
+    let paidBill: Bill | null = null;
     try {
       const time =
         existing && isoToYMD(existing.occurredAt) === date
@@ -387,6 +449,12 @@ export function TxnForm({
                 : null,
             );
       const isCardPayment = type === "transfer" && link.type === "card";
+      // Paying a biller with no open bill: record the bill it paid, and link the payment to it.
+      paidBill =
+        pickedBiller && !pickedOpenBill && !isFamily
+          ? await billForPayment(pickedBiller, amount, date)
+          : null;
+      const payBill = paidBill ?? (isFamily ? undefined : pickedOpenBill);
       const draft = {
         type: isFamily && countsInBalance ? "settlement" : type,
         amount,
@@ -404,8 +472,12 @@ export function TxnForm({
           type === "expense" && splitWith.length
             ? JSON.stringify(splitWith)
             : null,
-        linkType: link.id && !isFamily ? link.type : null,
-        linkId: isFamily ? null : link.id,
+        linkType: payBill
+          ? ("bill" as const)
+          : link.id && !isFamily
+            ? link.type
+            : null,
+        linkId: payBill ? payBill.id : isFamily ? null : link.id,
         ...(fromSms && !existing
           ? {
               source: "sms" as const,
@@ -441,6 +513,8 @@ export function TxnForm({
       }
       goBack();
     } catch (e) {
+      // Don't leave behind a bill whose payment didn't save.
+      if (paidBill) await remove("bills", paidBill.id).catch(() => {});
       toast((e as Error).message, { tone: "error" });
     } finally {
       setSaving(false);
@@ -502,40 +576,67 @@ export function TxnForm({
         ...categories.slice(CAT_LIMIT).filter((c) => c.id === categoryId),
       ];
 
-  // How it was paid, one box per choice: each saved card is its own box, so picking a card is one tap.
+  // How it was paid, one box per choice. All credit cards share one "Credit card" box; picking it lists
+  // your cards underneath, so the row stays short however many cards you have.
   const payOptions: {
     key: string;
     icon: IconName;
     label: string;
     sub?: string;
     method: PayMethod;
-    cardId?: string;
   }[] = [
     { key: "upi", icon: "qr-code", label: "UPI", method: "upi" },
-    ...(type === "transfer"
+    ...(type === "transfer" || !cards.length
       ? []
-      : cards.map((c) => ({
-          key: `card:${c.id}`,
-          icon: "card" as IconName,
-          label: type === "income" ? `Refund to ${c.name}` : c.name,
-          sub: c.last4 ? `••${c.last4}` : "Credit card",
-          method: "card" as PayMethod,
-          cardId: c.id,
-        }))),
+      : [
+          {
+            key: "card",
+            icon: "card" as IconName,
+            label: type === "income" ? "Refund to card" : "Credit card",
+            sub:
+              method === "card" && card
+                ? `${card.name}${card.last4 ? ` ••${card.last4}` : ""}`
+                : `${cards.length} card${cards.length === 1 ? "" : "s"}`,
+            method: "card" as PayMethod,
+          },
+        ]),
     { key: "cash", icon: "cash", label: "Cash", method: "cash" },
     { key: "bank", icon: "business", label: "Bank", method: "bank" },
     { key: "wallet", icon: "wallet", label: "Wallet", method: "wallet" },
   ];
+  const pickCard = (id: string) => {
+    setKeypad(false);
+    setMethod("card");
+    setAutoPay(false);
+    setCardId(id);
+    const c = cards.find((x) => x.id === id);
+    if (c && !existing) setScope(c.scope);
+  };
   const pickPay = (o: (typeof payOptions)[number]) => {
+    // With one card there's nothing to choose: "Credit card" is that card.
+    if (o.method === "card" && cards.length === 1) return pickCard(cards[0].id);
     setKeypad(false);
     setMethod(o.method);
     setAutoPay(false);
-    if (o.cardId) {
-      setCardId(o.cardId);
-      const c = cards.find((x) => x.id === o.cardId);
-      if (c && !existing) setScope(c.scope);
-    }
   };
+  // "Add a card" from the form: when you come back with a new card, it's the one picked.
+  const cardsBeforeAdd = useRef<Set<string> | null>(null);
+  const addCard = () => {
+    setKeypad(false);
+    cardsBeforeAdd.current = new Set(cards.map((c) => c.id));
+    router.push("/card/new");
+  };
+  useEffect(() => {
+    const before = cardsBeforeAdd.current;
+    if (!before) return;
+    const added = cards.find((c) => !before.has(c.id));
+    if (!added) return;
+    cardsBeforeAdd.current = null;
+    setMethod("card");
+    setAutoPay(false);
+    setCardId(added.id);
+    if (!existing) setScope(added.scope);
+  }, [cards, existing]);
   const pickCategory = (id: string) => {
     setKeypad(false);
     setCategoryId(id);
@@ -1178,17 +1279,34 @@ export function TxnForm({
         </Card>
       ) : null}
 
-      {type === "expense" && billCategory && openBills.length ? (
-        <Field label="Which bill does this pay?">
+      {type === "expense" && billCategory ? (
+        <Field
+          label="Which bill does this pay?"
+          hint={
+            pickedBiller && !pickedOpenBill
+              ? `Saved as this ${pickedBiller.amountMode === "prepaid" ? "recharge" : "bill"} for ${pickedBiller.name}, paid`
+              : !openBills.length && !billerChoices.length
+                ? "Add your electricity, water or other bills to see what's due and how much each one costs over time"
+                : undefined
+          }
+        >
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {openBills.map(({ v, biller }) => (
               <Chip
                 key={v.bill.id}
                 icon={billerMeta(biller!.type).icon as IconName}
                 label={`${biller!.name}, ${formatDay(v.bill.dueDate)}, ${formatINR(v.remaining || v.totalDue)}`}
-                selected={link.type === "bill" && link.id === v.bill.id}
+                selected={
+                  (link.type === "bill" && link.id === v.bill.id) ||
+                  pickedOpenBill?.id === v.bill.id
+                }
                 onPress={() => {
-                  const on = !(link.type === "bill" && link.id === v.bill.id);
+                  const on = !(
+                    (link.type === "bill" && link.id === v.bill.id) ||
+                    pickedOpenBill?.id === v.bill.id
+                  );
+                  setKeypad(false);
+                  setBillerPick(null);
                   setLink(
                     on
                       ? { type: "bill", id: v.bill.id }
@@ -1199,6 +1317,24 @@ export function TxnForm({
                 }}
               />
             ))}
+            {billerChoices.map((b) => (
+              <Chip
+                key={b.id}
+                icon={billerMeta(b.type).icon as IconName}
+                label={b.name}
+                selected={pickedBiller?.id === b.id}
+                onPress={() => {
+                  const on = pickedBiller?.id !== b.id;
+                  setKeypad(false);
+                  setBillerPick(on ? b.id : null);
+                  if (link.type === "bill") setLink({ type: null, id: null });
+                  if (on && !amountStr && b.fixedAmount)
+                    setAmount(amountText(b.fixedAmount));
+                  if (on && !payee) setPayee(b.name);
+                }}
+              />
+            ))}
+            <Chip icon="add" label="Add a bill" onPress={addBiller} />
           </View>
         </Field>
       ) : null}
@@ -1242,22 +1378,30 @@ export function TxnForm({
               icon={o.icon}
               label={o.label}
               sub={o.sub}
-              selected={
-                method === o.method &&
-                (o.method !== "card" || cardId === o.cardId)
-              }
+              selected={method === o.method}
               onPress={() => pickPay(o)}
             />
           ))}
           {type === "expense" && !cards.length ? (
-            <Tile
-              width={92}
-              icon="add"
-              label="Add a card"
-              onPress={() => router.push("/card/new")}
-            />
+            <Tile width={92} icon="add" label="Add a card" onPress={addCard} />
           ) : null}
         </TileRow>
+        {method === "card" && type !== "transfer" && cards.length ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {cards.map((c) => (
+              <Chip
+                key={c.id}
+                icon="card"
+                label={`${c.name}${c.last4 ? ` ••${c.last4}` : ""}`}
+                selected={cardId === c.id}
+                onPress={() => pickCard(c.id)}
+              />
+            ))}
+            {type === "expense" ? (
+              <Chip icon="add" label="New card" onPress={addCard} />
+            ) : null}
+          </View>
+        ) : null}
         {method !== "card" && accounts.length > 1 ? (
           <ChipSelect
             value={accountId}
