@@ -7,7 +7,7 @@ import type { Paise } from '@/domain/money';
 import { insert, remove, update } from '@/db/repo';
 import { useConfirmed, useCycle, usePayday, useSortedCategories, useTable, useToday } from '@/data/hooks';
 import { useStore } from '@/db/store';
-import { Button, Card, Chip, IconCircle, ListRow, Money, ProgressBar, Row, Txt, useMoneyText, type IconName } from '@/ui/components/core';
+import { Button, Chip, IconCircle, List, ListRow, Money, ProgressBar, Row, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { Sheet } from '@/ui/components/feedback';
 import { AmountField } from '@/ui/components/forms';
 import { PaydaySheet, paydayText } from '@/ui/components/PaydaySheet';
@@ -57,7 +57,7 @@ export function BudgetsBody() {
   return (
     <>
       {total ? (
-        <Card style={{ gap: space(1.25) }}>
+        <View style={{ gap: space(1.25), paddingHorizontal: 4 }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="caption" tone="muted">
               {cycleLabel(cycle)}{overall ? '' : ', budgeted categories'}
@@ -70,22 +70,22 @@ export function BudgetsBody() {
             <Money value={spent} variant="h1" decimals="never" />
             <Txt tone="muted">of {money(total, { decimals: 'never' })}</Txt>
           </Row>
-          <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.good} />
+          <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.primary} />
           <Txt variant="small" tone="muted">
             {spent < total ? `${money(total - spent, { decimals: 'never' })} left · about ${money(Math.floor((total - spent) / daysLeft), { decimals: 'never' })} a day` : `Over by ${money(spent - total, { decimals: 'never' })} this period`}
           </Txt>
-        </Card>
+        </View>
       ) : (
-        <Card tone="alt" style={{ gap: 4 }}>
+        <View style={{ gap: 4, paddingHorizontal: 4 }}>
           <Txt variant="bodyStrong">Start with your top 3 categories</Txt>
           <Txt variant="small" tone="muted">
             Groceries, food delivery and shopping usually move the needle most. Tap one below to set a monthly limit — it repeats every month.
           </Txt>
-        </Card>
+        </View>
       )}
       <ListRow icon="calendar-outline" title="Budget period" subtitle={paydayText(mode, payday)} chevron onPress={() => setPaydaySheet(true)} />
       <PaydaySheet visible={paydaySheet} onClose={() => setPaydaySheet(false)} />
-      <Card padded={false} style={{ overflow: 'hidden' }}>
+      <List>
         <ListRow
           icon="wallet-outline"
           title="Whole month"
@@ -96,21 +96,22 @@ export function BudgetsBody() {
           }}
           chevron
         />
-      </Card>
-      <Card padded={false} style={{ overflow: 'hidden' }}>
+      </List>
+      <List>
         {cats.map((c) => {
           const u = usage.get(c.id);
           return (
             <ListRow
               key={c.id}
-              leading={<IconCircle name={c.icon as IconName} color={c.color} />}
+              leading={<IconCircle name={c.icon as IconName} />}
               title={c.name}
               subtitle={
                 u ? (
                   <View style={{ gap: 4, marginTop: 4 }}>
-                    <ProgressBar value={u.ratio} color={u.level === 'over' ? colors.expense : u.level === 'warn' ? colors.warn : colors.good} height={6} />
-                    <Txt variant="small" tone="muted">
+                    <ProgressBar value={u.ratio} color={u.level === 'over' ? colors.expense : u.level === 'warn' ? colors.warn : colors.primary} height={6} />
+                    <Txt variant="small" tone={u.level === 'over' ? 'expense' : u.level === 'warn' ? 'warn' : 'muted'}>
                       {money(u.spent, { compact: true })} of {money(u.limit, { compact: true })}
+                      {u.level === 'over' ? ' · Over' : u.level === 'warn' ? ' · Close to limit' : ''}
                     </Txt>
                   </View>
                 ) : (
@@ -125,7 +126,7 @@ export function BudgetsBody() {
             />
           );
         })}
-      </Card>
+      </List>
       <Sheet visible={Boolean(editing)} onClose={() => setEditing(null)} title={`Budget · ${editing === OVERALL_BUDGET ? 'Whole month' : (cats.find((c) => c.id === editing)?.name ?? '')}`}>
         <AmountField key={`${editing}-${amountKey}`} label="Per month" value={amount} onChange={setAmount} autoFocus />
         {lastMonth || avg3 ? (

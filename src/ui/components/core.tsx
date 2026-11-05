@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { type ComponentProps, type ReactNode } from 'react';
+import { Children, type ComponentProps, type ReactNode } from 'react';
 import {
   useWindowDimensions,
   ActivityIndicator,
@@ -88,7 +88,7 @@ export function Card({ children, style, onPress, padded = true, tone }: { childr
   const hero = tone === 'primary';
   const bg = hero ? colors.heroBase : tone === 'alt' ? colors.surfaceAlt : colors.glass;
   const body = [
-    { backgroundColor: bg, borderRadius: 20, padding: padded ? space(2) : 0 },
+    { backgroundColor: bg, borderRadius: radius.md, padding: padded ? space(2) : 0 },
     hero ? { overflow: 'hidden' as const, padding: padded ? space(2.5) : 0 } : tone ? null : shadow(dark),
     style,
   ];
@@ -102,7 +102,7 @@ export function Card({ children, style, onPress, padded = true, tone }: { childr
   );
   if (!onPress) return <View style={body}>{content}</View>;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [body, pressed && { opacity: 0.9, transform: [{ scale: 0.985 }] }]} accessibilityRole="button">
+    <Pressable onPress={onPress} style={({ pressed }) => [body, pressed && { opacity: 0.85 }]} accessibilityRole="button">
       {content}
     </Pressable>
   );
@@ -309,17 +309,36 @@ export function ListRow({
   );
 }
 
+/**
+ * A flat group of rows: thin lines between them, no box (spec §3.3: cards only for things tapped
+ * as one unit). Bleeds to the screen edges so rows keep their own 16 dp padding, like Activity.
+ */
+export function List({ children, inset = space(2) + 40 + space(1.5) }: { children: ReactNode; inset?: number }) {
+  const { colors } = useTheme();
+  const items = Children.toArray(children).filter(Boolean);
+  return (
+    <View style={{ marginHorizontal: -space(2) }}>
+      {items.map((child, i) => (
+        <View key={i}>
+          {i ? <View style={{ height: 1, backgroundColor: colors.border, marginLeft: inset }} /> : null}
+          {child}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function Section({ title, action, onAction, children, style }: { title?: string; action?: string; onAction?: () => void; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[{ gap: space(1.25) }, style]}>
       {title ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-          <Txt variant="h3" style={{ fontWeight: fonts.displaySemi, fontSize: 17 }}>
+          <Txt variant="caption" tone="faint" accessibilityRole="header" style={{ fontWeight: fonts.semibold, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 1 }}>
             {title}
           </Txt>
           {action ? (
-            <Pressable onPress={onAction} hitSlop={10} accessibilityRole="button">
-              <Txt variant="small" tone="primary">
+            <Pressable onPress={onAction} hitSlop={10} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}>
+              <Txt variant="small" tone="primary" style={{ fontWeight: fonts.semibold }}>
                 {action}
               </Txt>
             </Pressable>

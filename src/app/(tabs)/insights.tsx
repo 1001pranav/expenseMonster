@@ -11,11 +11,11 @@ import { financialHealth } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, usePayday, useTable, useToday } from '@/data/hooks';
 import { Bars, HeatCalendar, LineChart, RankedBars, type Slice } from '@/ui/components/charts';
-import { Card, IconButton, Money, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
+import { IconButton, Money, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
 import { TaxBody } from '../tax';
 import { Screen } from '@/ui/components/Screen';
-import { space, useTheme } from '@/ui/theme';
+import { fonts, space, useTheme } from '@/ui/theme';
 
 type Range = 'month' | 'quarter' | 'year';
 
@@ -160,27 +160,35 @@ export default function Insights() {
       {view === 'tax' ? <TaxBody /> : (
         <>
           <Section title="Am I in good shape?">
-          <Card style={{ gap: space(1.5) }}>
+          <View style={{ gap: space(1.5) }}>
             {health.map((m) => (
               <Row key={m.key} gap={1.25} style={{ alignItems: 'flex-start' }}>
                 <View style={{ width: 10, height: 10, borderRadius: 5, marginTop: 6, backgroundColor: { good: colors.good, watch: colors.warn, risk: colors.expense, unknown: colors.border }[m.status] }} />
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Txt variant="bodyStrong">
-                    {m.label}
-                    {m.status === 'unknown' ? '' : `: ${m.value}`}
-                  </Txt>
+                  <Row gap={1} style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <Txt variant="bodyStrong" style={{ flexShrink: 1 }}>
+                      {m.label}
+                      {m.status === 'unknown' ? '' : `: ${m.value}`}
+                    </Txt>
+                    {/* The word, not only the dot's colour, says how it's going. */}
+                    {m.status === 'unknown' ? null : (
+                      <Txt variant="caption" tone={m.status === 'good' ? 'good' : m.status === 'watch' ? 'warn' : 'expense'} style={{ fontWeight: fonts.semibold }}>
+                        {m.status === 'good' ? 'Good' : m.status === 'watch' ? 'Watch' : 'At risk'}
+                      </Txt>
+                    )}
+                  </Row>
                   <Txt variant="small" tone="muted">
                     {m.reason}
                   </Txt>
                 </View>
               </Row>
             ))}
-          </Card>
+          </View>
           </Section>
 
           {mom.length ? (
             <Section title="Am I spending more than before?">
-              <Card style={{ gap: space(1.5) }}>
+              <View style={{ gap: space(1.5) }}>
                 {momLine ? <Txt variant="small" tone="muted">{momLine}</Txt> : null}
                 {/* Invested (net of sales) as a second bar once there is any: money set aside, not spent. */}
                 {mom.some((s) => s.invested > 0) ? (
@@ -257,7 +265,7 @@ export default function Insights() {
                 <Txt variant="small" tone="muted">
                   Change is against the month before; the current month is compared with the same days of last month.
                 </Txt>
-              </Card>
+              </View>
             </Section>
           ) : null}
 
@@ -277,57 +285,57 @@ export default function Insights() {
           </Row>
 
           <Section title={range === 'month' ? `Where did my money go in ${formatMonth(month)}?` : 'Where did my money go?'}>
-            <Card style={{ gap: space(1.5) }}>
+            <View style={{ gap: space(1.5) }}>
               <Txt variant="small" tone="muted">
                 {takeaway}
               </Txt>
               {slices.length ? <RankedBars slices={slices} onSelect={(k) => router.push({ pathname: '/activity', params: { category: k } })} /> : null}
-            </Card>
+            </View>
           </Section>
 
           <Section title="Am I keeping more each month?">
-            <Card style={{ gap: space(1) }}>
+            <View style={{ gap: space(1) }}>
               <Txt variant="small" tone="muted">
                 {savingsLine}
               </Txt>
               <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.good} />
-            </Card>
+            </View>
           </Section>
 
           <Section title={`Which days cost the most in ${formatMonth(month)}?`}>
-            <Card style={{ gap: space(1) }}>
+            <View style={{ gap: space(1) }}>
               {topDay ? (
                 <Txt variant="small" tone="muted">
                   {`Your biggest day was ${formatDay(topDay.date)}: ${money(topDay.amount, opts)}.`}
                 </Txt>
               ) : null}
               <HeatCalendar days={heat} />
-            </Card>
+            </View>
           </Section>
 
           {cardSpend.some((c) => c.spend) ? (
             <Section title="Which card do I use most?">
-              <Card style={{ gap: space(1) }}>
+              <View style={{ gap: space(1) }}>
                 {topCard?.spend ? (
                   <Txt variant="small" tone="muted">
                     {`${topCard.card.name}: ${money(topCard.spend, opts)} in ${range === 'month' ? 'the last statement cycle' : `the last ${months} cycles`}.`}
                   </Txt>
                 ) : null}
                 <Bars data={cardSpend.map((c) => ({ key: c.card.id, label: c.card.name.split(' ')[0], values: [c.spend] }))} colors={[colors.primary]} height={130} />
-              </Card>
+              </View>
             </Section>
           ) : null}
 
           {debt ? (
             <Section title="When will my loans be paid off?">
-              <Card style={{ gap: space(1) }}>
+              <View style={{ gap: space(1) }}>
                 <Txt variant="small" tone="muted">
                   {debtFree >= 0
                     ? `Debt-free around ${debt.labels[debtFree]} if you pay every EMI on time.`
                     : `${money(debt.points[debt.points.length - 1], opts)} still owed in 5 years if you pay every EMI on time.`}
                 </Txt>
                 <LineChart points={debt.points} labels={debt.labels} color={colors.primary} />
-              </Card>
+              </View>
             </Section>
           ) : null}
         </>

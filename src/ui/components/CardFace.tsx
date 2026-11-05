@@ -1,18 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
-import { radius, shade, space } from '../theme';
-import { GradientFill } from './Aurora';
+import { radius, space } from '../theme';
 import { Row, Txt } from './core';
 
 export function CardFace({ name, last4, color, children }: { name: string; last4: string | null; color: string | null; children?: ReactNode }) {
   const base = color && /^#[0-9a-f]{6}$/i.test(color) ? color : '#14201B';
   return (
-    <View style={{ borderRadius: radius.lg, shadowColor: base, shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 6, backgroundColor: base }}>
+    // The card's own colour, flat: it's how people recognise their card, so it stays; the gradient,
+    // glow rings and drop shadow were decoration and are gone.
+    <View style={{ borderRadius: radius.lg, backgroundColor: base }}>
       <View style={{ borderRadius: radius.lg, padding: space(2.25), gap: space(1.5), overflow: 'hidden' }}>
-        <GradientFill from={shade(base, 0.22)} to={shade(base, -0.35)} />
-        <View pointerEvents="none" style={{ position: 'absolute', right: -50, top: -60, width: 190, height: 190, borderRadius: 95, borderWidth: 26, borderColor: 'rgba(255,255,255,0.07)' }} />
-        <View pointerEvents="none" style={{ position: 'absolute', right: 50, bottom: -80, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,255,255,0.06)' }} />
         <Row style={{ justifyContent: 'space-between' }}>
           <Txt variant="h3" style={{ color: '#fff', flex: 1 }} numberOfLines={1}>
             {name}

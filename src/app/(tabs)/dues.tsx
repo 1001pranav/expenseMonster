@@ -8,7 +8,7 @@ import { loanEmisPaid } from '@/domain/dues';
 import { loanProgress, scheduleFor } from '@/domain/emi';
 import { FREQUENCY_LABEL } from '@/domain/recurrence';
 import { useDues, useTable, useToday } from '@/data/hooks';
-import { Button, Card, Chip, EmptyState, IconCircle, ListRow, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
+import { Button, Chip, EmptyState, IconCircle, List, ListRow, Money, Pill, ProgressBar, Row, Section, Stat, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { CardFace } from '@/ui/components/CardFace';
 import { DueRow, openPay } from '@/ui/components/rows';
 import { Segmented } from '@/ui/components/forms';
@@ -70,7 +70,6 @@ function DuesBody() {
 }
 
 function AllDues() {
-  const { colors } = useTheme();
   const dues = useDues(45);
   const today = useToday();
   const overdue = dues.filter((d) => d.state === 'overdue');
@@ -86,14 +85,11 @@ function AllDues() {
   const group = (title: string, items: typeof dues) =>
     items.length ? (
       <Section title={title} key={title}>
-        <Card padded={false} style={{ overflow: 'hidden' }}>
-          {items.map((d, i) => (
-            <View key={d.key}>
-              {i ? <View style={{ height: 1, backgroundColor: colors.surfaceAlt, marginLeft: space(8.5) }} /> : null}
-              <DueRow d={d} today={today} onPay={() => openPay(d)} />
-            </View>
+        <List>
+          {items.map((d) => (
+            <DueRow key={d.key} d={d} today={today} onPay={() => openPay(d)} />
           ))}
-        </Card>
+        </List>
       </Section>
     ) : null;
   return (
@@ -137,7 +133,7 @@ function Loans() {
   if (!loans.length) return <EmptyState icon="trending-down-outline" title="No loans" body="Track home, car, personal or informal loans — and money you lent." action="Add loan" onAction={() => router.push('/loan/new')} />;
 
   const item = ({ loan, p, n }: (typeof rows)[number]) => (
-    <Card key={loan.id} onPress={() => router.push(`/loan/${loan.id}`)} style={{ gap: space(1.25) }}>
+    <Pressable key={loan.id} onPress={() => router.push(`/loan/${loan.id}`)} accessibilityRole="button" style={({ pressed }) => ({ gap: space(1), paddingHorizontal: space(2), paddingVertical: space(1.5), backgroundColor: pressed ? colors.surfaceAlt : 'transparent' })}>
       <Row style={{ justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
           <Txt variant="bodyStrong">{loan.name}</Txt>
@@ -158,31 +154,27 @@ function Loans() {
       ) : (
         <Pill label="Fully repaid" tone="good" />
       )}
-    </Card>
+    </Pressable>
   );
 
   return (
     <>
       {borrowed.length ? (
-        <Card tone="alt">
-          <Row gap={2}>
-            <View style={{ flex: 1 }}>
-              <Txt variant="caption" tone="muted">
-                Still to pay
-              </Txt>
-              <Money value={totalOutstanding} variant="h2" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Txt variant="caption" tone="muted">
-                EMIs a month
-              </Txt>
-              <Money value={totalEmi} variant="h2" />
-            </View>
-          </Row>
-        </Card>
+        <Row gap={2} style={{ paddingHorizontal: 4 }}>
+          <Stat label="Still to pay" value={totalOutstanding} />
+          <Stat label="EMIs a month" value={totalEmi} />
+        </Row>
       ) : null}
-      {borrowed.length ? <Section title="Borrowed">{borrowed.map(item)}</Section> : null}
-      {lent.length ? <Section title="Lent to others">{lent.map(item)}</Section> : null}
+      {borrowed.length ? (
+        <Section title="Borrowed">
+          <List inset={space(2)}>{borrowed.map(item)}</List>
+        </Section>
+      ) : null}
+      {lent.length ? (
+        <Section title="Lent to others">
+          <List inset={space(2)}>{lent.map(item)}</List>
+        </Section>
+      ) : null}
       <Button title="Add loan" icon="add" variant="secondary" onPress={() => router.push('/loan/new')} />
     </>
   );
@@ -253,7 +245,7 @@ function Bills() {
   if (!billers.length) return <EmptyState icon="flash-outline" title="No bills yet" body="Electricity, internet, rent, school fees, prepaid recharges, LPG — add each once and get reminded every cycle." action="Add bill" onAction={() => router.push('/biller/new')} />;
   return (
     <>
-      <Card padded={false} style={{ overflow: 'hidden' }}>
+      <List>
         {billers.map((b) => {
           const meta = billerMeta(b.type);
           const mine = bills.filter((x) => x.billerId === b.id && x.status !== 'draft').sort((x, y) => y.billDate.localeCompare(x.billDate));
@@ -268,9 +260,9 @@ function Bills() {
             subtitle = `${b.autopay ? 'Autopay · ' : ''}${v.state === 'paid' ? 'Paid' : `Due ${relativeDay(v.bill.dueDate, today)}`}`;
             right = <Money value={v.state === 'paid' ? v.totalDue : v.remaining} tone={v.state === 'overdue' ? 'expense' : v.state === 'paid' ? 'muted' : 'default'} />;
           }
-          return <ListRow key={b.id} icon={meta.icon as IconName} iconColor={b.active ? colors.primary : colors.textFaint} title={b.name} subtitle={subtitle} right={right} chevron onPress={() => router.push(`/biller/${b.id}`)} />;
+          return <ListRow key={b.id} icon={meta.icon as IconName} iconColor={b.active ? colors.textMuted : colors.textFaint} title={b.name} subtitle={subtitle} right={right} chevron onPress={() => router.push(`/biller/${b.id}`)} />;
         })}
-      </Card>
+      </List>
       <Button title="Add bill" icon="add" variant="secondary" onPress={() => router.push('/biller/new')} />
     </>
   );
@@ -279,22 +271,18 @@ function Bills() {
 function Insurance() {
   const policies = useTable('policies');
   const today = useToday();
-  const { colors } = useTheme();
   if (!policies.length) return <EmptyState icon="shield-checkmark-outline" title="No policies" body="Add life, health and vehicle policies to get renewal alerts 30, 7 and 1 day before." action="Add policy" onAction={() => router.push('/policy/new')} />;
   const yearly = policies.filter((p) => p.active).reduce((a, p) => a + p.premium * (12 / { monthly: 1, bimonthly: 2, quarterly: 3, half_yearly: 6, yearly: 12 }[p.frequency]), 0);
   return (
     <>
-      <Card tone="alt">
-        <Txt variant="caption" tone="muted">
-          Premiums per year
-        </Txt>
-        <Money value={Math.round(yearly)} variant="h2" />
-      </Card>
-      <Card padded={false} style={{ overflow: 'hidden' }}>
+      <Row style={{ paddingHorizontal: 4 }}>
+        <Stat label="Premiums per year" value={Math.round(yearly)} />
+      </Row>
+      <List>
         {policies.map((p) => (
           <ListRow
             key={p.id}
-            leading={<IconCircle name="shield-checkmark" color={p.nextDueDate < today ? colors.expense : colors.info} />}
+            leading={<IconCircle name="shield-checkmark" state={p.nextDueDate < today ? 'expense' : undefined} />}
             title={p.name}
             subtitle={`${p.insurer} · ${FREQUENCY_LABEL[p.frequency]} · ${p.nextDueDate < today ? 'Overdue' : `due ${relativeDay(p.nextDueDate, today)}`}`}
             right={<Money value={p.premium} />}
@@ -302,7 +290,7 @@ function Insurance() {
             onPress={() => router.push(`/policy/${p.id}`)}
           />
         ))}
-      </Card>
+      </List>
       <Button title="Add policy" icon="add" variant="secondary" onPress={() => router.push('/policy/new')} />
     </>
   );
