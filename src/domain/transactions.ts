@@ -41,6 +41,12 @@ export function monthTotals(transactions: Transaction[], month: string, uptoDay 
   return { income, expense, net, cardSpend, invested };
 }
 
+/** The same totals between two days, both included (a payday budget period). */
+export function rangeTotals(transactions: Transaction[], from: YMD, to: YMD): MonthTotals {
+  const { income, expense, net, cardSpend, invested } = totalsWhere(transactions, (d) => d >= from && d <= to);
+  return { income, expense, net, cardSpend, invested };
+}
+
 /** The same totals for one day (the Home "Spent today"), plus how many payments made it up. */
 export function dayTotals(transactions: Transaction[], day: YMD): MonthTotals & { payments: number } {
   return totalsWhere(transactions, (d) => d === day);

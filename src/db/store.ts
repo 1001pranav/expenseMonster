@@ -27,6 +27,8 @@ export interface Settings {
   smsCheckOnOpen: boolean;
   /** The Home card offering bank SMS reading was closed. */
   smsOfferDismissed: boolean;
+  /** Day of the month the budget period starts (1–28): salary day. 1 = calendar months. See domain/cycle.ts. */
+  payday: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   smsImportedTo: null,
   smsCheckOnOpen: true,
   smsOfferDismissed: false,
+  payday: 1,
 };
 
 export interface Identity {

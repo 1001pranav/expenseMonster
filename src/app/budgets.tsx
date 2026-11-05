@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { budgetUsage, spendByCategory } from '@/domain/budget';
-import { addMonths, daysInMonth, formatMonth, monthKey, parts } from '@/domain/dates';
+import { cycleUsage, spendInRange } from '@/domain/budget';
+import { cycleLabel, shiftCycle } from '@/domain/cycle';
+import { diffDays } from '@/domain/dates';
 import type { Paise } from '@/domain/money';
 import { insert, remove, update } from '@/db/repo';
-import { useConfirmed, useSortedCategories, useTable, useToday } from '@/data/hooks';
+import { useConfirmed, useCycle, useSortedCategories, useTable, useToday } from '@/data/hooks';
+import { useStore } from '@/db/store';
 import { Button, Card, Chip, IconCircle, ListRow, Money, ProgressBar, Row, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { Sheet } from '@/ui/components/feedback';
 import { AmountField } from '@/ui/components/forms';
+import { PaydaySheet, paydayText } from '@/ui/components/PaydaySheet';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -16,24 +19,26 @@ export function BudgetsBody() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const today = useToday();
-  const month = monthKey(today);
+  // Payday to payday, or the calendar month (Settings › Pay day).
+  const cycle = useCycle();
+  const payday = useStore((s) => s.settings.payday);
+  const [paydaySheet, setPaydaySheet] = useState(false);
   const cats = useSortedCategories('expense');
   const budgets = useTable('budgets');
   const txns = useConfirmed();
-  const usage = useMemo(() => new Map(budgetUsage(budgets, txns, month).map((u) => [u.categoryId, u])), [budgets, txns, month]);
+  const usage = useMemo(() => new Map(cycleUsage(budgets, txns, cycle).map((u) => [u.categoryId, u])), [budgets, txns, cycle]);
   const [editing, setEditing] = useState<string | null>(null);
   const [amount, setAmount] = useState<Paise | null>(null);
   const [amountKey, setAmountKey] = useState(0);
   // Suggest limits from what was actually spent, rounded up to the next ₹500.
-  const history = useMemo(() => [1, 2, 3].map((i) => spendByCategory(txns, monthKey(addMonths(today, -i)))), [txns, today]);
+  const history = useMemo(() => [1, 2, 3].map((i) => shiftCycle(today, payday, -i)).map((c) => spendInRange(txns, c.start, c.end)), [txns, today, payday]);
   const roundUp = (p: Paise) => Math.ceil(p / 500_00) * 500_00;
   const lastMonth = editing ? (history[0].get(editing) ?? 0) : 0;
   const avg3 = editing ? Math.round(history.reduce((a, h) => a + (h.get(editing) ?? 0), 0) / 3) : 0;
   const total = [...usage.values()].reduce((a, u) => a + u.limit, 0);
   const spent = [...usage.values()].reduce((a, u) => a + u.spent, 0);
   const over = [...usage.values()].filter((u) => u.level === 'over').length;
-  const { y, m, d } = parts(today);
-  const daysLeft = daysInMonth(y, m) - d + 1;
+  const daysLeft = diffDays(cycle.end, today) + 1;
   const ratio = total ? spent / total : 0;
 
   const save = async () => {
@@ -51,7 +56,7 @@ export function BudgetsBody() {
         <Card style={{ gap: space(1.25) }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <Txt variant="caption" tone="muted">
-              {formatMonth(month)}, budgeted categories
+              {cycleLabel(cycle)}, budgeted categories
             </Txt>
             <Txt variant="caption" tone={over ? 'expense' : 'muted'}>
               {over ? `${over} over budget` : `${daysLeft} days left`}
@@ -63,7 +68,7 @@ export function BudgetsBody() {
           </Row>
           <ProgressBar value={ratio} color={ratio >= 1 ? colors.expense : ratio >= 0.8 ? colors.warn : colors.good} />
           <Txt variant="small" tone="muted">
-            {spent < total ? `${money(total - spent, { decimals: 'never' })} left · about ${money(Math.floor((total - spent) / daysLeft), { decimals: 'never' })} a day` : `Over by ${money(spent - total, { decimals: 'never' })} this month`}
+            {spent < total ? `${money(total - spent, { decimals: 'never' })} left · about ${money(Math.floor((total - spent) / daysLeft), { decimals: 'never' })} a day` : `Over by ${money(spent - total, { decimals: 'never' })} this period`}
           </Txt>
         </Card>
       ) : (
@@ -74,6 +79,8 @@ export function BudgetsBody() {
           </Txt>
         </Card>
       )}
+      <ListRow icon="calendar-outline" title="Budget period" subtitle={paydayText(payday)} chevron onPress={() => setPaydaySheet(true)} />
+      <PaydaySheet visible={paydaySheet} onClose={() => setPaydaySheet(false)} />
       <Card padded={false} style={{ overflow: 'hidden' }}>
         {cats.map((c) => {
           const u = usage.get(c.id);

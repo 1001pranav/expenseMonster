@@ -25,7 +25,7 @@ export function refreshHomeWidgets(): void {
     );
     const scheme = Constants.expoConfig?.scheme;
     const json = JSON.stringify(
-      widgetSnapshot({ transactions: tables.transactions, budgets: tables.budgets, dues, today, hideAmounts: settings.hideAmounts, scheme: (Array.isArray(scheme) ? scheme[0] : scheme) ?? 'expensemonster' }),
+      widgetSnapshot({ transactions: tables.transactions, budgets: tables.budgets, dues, today, hideAmounts: settings.hideAmounts, payday: settings.payday, scheme: (Array.isArray(scheme) ? scheme[0] : scheme) ?? 'expensemonster' }),
     );
     if (json === last) return;
     updateHomeWidgets(json);

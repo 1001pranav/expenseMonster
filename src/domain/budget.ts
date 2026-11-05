@@ -1,4 +1,5 @@
-import { isoToYMD, monthKey } from './dates';
+import type { Cycle } from './cycle';
+import { isoToYMD, monthKey, type YMD } from './dates';
 import type { Paise } from './money';
 import { parseSplits } from './transactions';
 import type { Budget, Transaction } from './types';
@@ -13,11 +14,20 @@ export interface BudgetUsage {
 
 /** Spend per category for a month, honouring category splits. Card bill payments are transfers, so never counted. */
 export function spendByCategory(transactions: Transaction[], month: string, uptoDay = 31): Map<string, Paise> {
+  return spendWhere(transactions, (d) => monthKey(d) === month && Number(d.slice(8)) <= uptoDay);
+}
+
+/** Spend per category between two days, both included (a payday budget period). */
+export function spendInRange(transactions: Transaction[], from: YMD, to: YMD): Map<string, Paise> {
+  return spendWhere(transactions, (d) => d >= from && d <= to);
+}
+
+function spendWhere(transactions: Transaction[], within: (day: YMD) => boolean): Map<string, Paise> {
   const out = new Map<string, Paise>();
   for (const t of transactions) {
     if (t.deletedAt || t.status !== 'confirmed' || t.type !== 'expense') continue;
     const d = isoToYMD(t.occurredAt);
-    if (monthKey(d) !== month || Number(d.slice(8)) > uptoDay) continue;
+    if (!within(d)) continue;
     const splits = parseSplits(t.splits);
     const parts = splits.length ? splits : [{ categoryId: t.categoryId ?? 'uncategorised', amount: t.amount }];
     for (const p of parts) out.set(p.categoryId, (out.get(p.categoryId) ?? 0) + p.amount);
@@ -34,8 +44,16 @@ export function budgetsFor(budgets: Budget[], month: string): Budget[] {
 }
 
 export function budgetUsage(budgets: Budget[], transactions: Transaction[], month: string): BudgetUsage[] {
-  const spend = spendByCategory(transactions, month);
-  return budgetsFor(budgets, month)
+  return usageOf(budgetsFor(budgets, month), spendByCategory(transactions, month));
+}
+
+/** Budget use over a payday period: the limits set for the month it mostly covers, spend inside it. */
+export function cycleUsage(budgets: Budget[], transactions: Transaction[], cycle: Cycle): BudgetUsage[] {
+  return usageOf(budgetsFor(budgets, cycle.key), spendInRange(transactions, cycle.start, cycle.end));
+}
+
+function usageOf(limits: Budget[], spend: Map<string, Paise>): BudgetUsage[] {
+  return limits
     .map((b) => {
       const spent = spend.get(b.categoryId) ?? 0;
       const ratio = b.amount > 0 ? spent / b.amount : 0;

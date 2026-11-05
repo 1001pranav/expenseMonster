@@ -1,8 +1,9 @@
-import { budgetUsage } from './budget';
-import { monthKey, type YMD } from './dates';
+import { cycleUsage } from './budget';
+import { cycleFor } from './cycle';
+import { type YMD } from './dates';
 import type { DueItem } from './dues';
 import { formatINR, type Paise } from './money';
-import { dayTotals, monthTotals } from './transactions';
+import { dayTotals, rangeTotals } from './transactions';
 import type { Budget, Transaction } from './types';
 
 export const HIDDEN = '₹ ••••';
@@ -36,14 +37,18 @@ export interface WidgetInput {
   today: YMD;
   hideAmounts: boolean;
   scheme: string;
+  /** Budget period start day (Settings › Pay day); 1 = calendar months. */
+  payday?: number;
 }
 
-export function widgetSnapshot({ transactions, budgets, dues, today, hideAmounts, scheme }: WidgetInput): WidgetSnapshot {
-  const month = monthKey(today);
+export function widgetSnapshot({ transactions, budgets, dues, today, hideAmounts, scheme, payday = 1 }: WidgetInput): WidgetSnapshot {
+  // The same budget period as Home, so the widget and the app never disagree.
+  const cycle = cycleFor(today, payday);
+  const month = cycle.key;
   const confirmed = transactions.filter((t) => t.status === 'confirmed');
   const day = dayTotals(confirmed, today);
-  const totals = monthTotals(confirmed, month);
-  const limit = budgetUsage(budgets, confirmed, month).reduce((a, b) => a + b.limit, 0);
+  const totals = rangeTotals(confirmed, cycle.start, cycle.end);
+  const limit = cycleUsage(budgets, confirmed, cycle).reduce((a, b) => a + b.limit, 0);
   const inr = (p: Paise) => (hideAmounts ? HIDDEN : formatINR(p, { decimals: 'never' }));
   return {
     v: 1,

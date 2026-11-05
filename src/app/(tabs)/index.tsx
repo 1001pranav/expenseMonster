@@ -1,14 +1,15 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
-import { budgetUsage, committedDues, safeToSpend } from '@/domain/budget';
+import { committedDues, cycleUsage, safeToSpend } from '@/domain/budget';
+import { cycleLabel } from '@/domain/cycle';
 import { splitCaptures } from '@/domain/captures';
-import { addDays, daysInMonth, monthKey, parts, type YMD } from '@/domain/dates';
-import { comparableChange, dayTotals, monthTotals } from '@/domain/transactions';
+import { addDays, diffDays, parts, type YMD } from '@/domain/dates';
+import { comparableChange, dayTotals, rangeTotals } from '@/domain/transactions';
 import type { Transaction } from '@/domain/types';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
-import { useCategoryMap, useConfirmed, useDues, useMembers, usePending, useSelfId, useTable, useToday } from '@/data/hooks';
+import { useCategoryMap, useConfirmed, useCycle, useDues, useMembers, usePending, useSelfId, useTable, useToday } from '@/data/hooks';
 import { Ionicons } from '@expo/vector-icons';
 import { IconButton, IconCircle, Money, ProgressBar, Row, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { smsCaptureAvailable } from '@/services/smsInbox';
@@ -22,7 +23,6 @@ export default function Home() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const today = useToday();
-  const month = monthKey(today);
   const confirmed = useConfirmed();
   const all = useTable('transactions');
   const cats = useCategoryMap();
@@ -34,17 +34,20 @@ export default function Home() {
   const members = useMembers();
   const selfId = useSelfId();
   const pending = usePending();
-  // Far enough to reach the month's end (for safe-to-spend); the list shows the next 15 days.
+  const cycle = useCycle();
+  // Far enough to reach the period's end (for safe-to-spend); the list shows the next 15 days.
   const dues = useDues(31);
   const settings = useStore((s) => s.settings);
   const household = useStore((s) => s.identity.householdName);
 
   const me = members.find((m) => m.id === selfId);
-  const { y, m, d: dayOfMonth } = parts(today);
-  const monthName = MONTH_NAMES[m - 1];
-  const totals = useMemo(() => monthTotals(confirmed, month), [confirmed, month]);
+  // The budget period: the calendar month, or payday to payday (Settings › Pay day).
+  const monthName = MONTH_NAMES[parts(`${cycle.key}-01`).m - 1];
+  const calendar = parts(cycle.start).d === 1;
+  const periodName = calendar ? monthName : cycleLabel(cycle);
+  const totals = useMemo(() => rangeTotals(confirmed, cycle.start, cycle.end), [confirmed, cycle]);
   const todays = useMemo(() => dayTotals(confirmed, today), [confirmed, today]);
-  const budgetTotal = useMemo(() => budgetUsage(budgets, confirmed, month).reduce((a, b) => a + b.limit, 0), [budgets, confirmed, month]);
+  const budgetTotal = useMemo(() => cycleUsage(budgets, confirmed, cycle).reduce((a, b) => a + b.limit, 0), [budgets, confirmed, cycle]);
   const recent = useMemo(() => all.filter((t) => t.status !== 'rejected').slice(0, 3), [all]);
   const week = useMemo(() => weekSoFar(confirmed, today), [confirmed, today]);
   const reviewCount = pending.transactions.length + pending.bills.length;
@@ -53,7 +56,6 @@ export default function Home() {
   // Offered once, until the user imports or closes it: Android asks for SMS access only after they tap Allow.
   const offerSms = smsCaptureAvailable && !settings.smsImportedTo && !settings.smsOfferDismissed;
 
-  const monthEnd = `${month}-${String(daysInMonth(y, m)).padStart(2, '0')}` as YMD;
   const horizon = addDays(today, 15);
   const outgoing = dues.filter((x) => !x.incoming);
   // Overdue first, then by date; at most four rows on Home.
@@ -62,9 +64,9 @@ export default function Home() {
   const dueTotal = outgoing.filter((x) => x.state === 'overdue' || x.date <= horizon).reduce((a, x) => a + (x.amount ?? 0), 0);
   const lateCount = outgoing.filter((x) => x.state === 'overdue').length;
 
-  const daysLeft = daysInMonth(y, m) - dayOfMonth + 1;
+  const daysLeft = diffDays(cycle.end, today) + 1;
   const safe = budgetTotal
-    ? safeToSpend({ budget: budgetTotal, spentBeforeToday: totals.expense - todays.expense, spentToday: todays.expense, committed: committedDues(dues, monthEnd), daysLeft })
+    ? safeToSpend({ budget: budgetTotal, spentBeforeToday: totals.expense - todays.expense, spentToday: todays.expense, committed: committedDues(dues, cycle.end), daysLeft })
     : null;
   const monthRatio = budgetTotal ? totals.expense / budgetTotal : 0;
 
@@ -108,7 +110,7 @@ export default function Home() {
             <Txt tone="muted">{safe.left < 0 ? 'Over today’s budget by' : 'Safe to spend today'}</Txt>
             <Money value={Math.abs(safe.left)} variant="display" decimals="never" fit="narrow" tone={safe.state === 'over' ? 'expense' : 'default'} />
             <ProgressBar value={safe.allowance ? todays.expense / safe.allowance : 1} height={6} color={safe.state === 'over' ? colors.expense : safe.state === 'close' ? colors.warn : colors.primary} />
-            <StatusLine safe={safe} spent={todays.expense} payments={payments} money={money} colors={colors} />
+            <StatusLine safe={safe} spent={todays.expense} payments={payments} money={money} colors={colors} monthName={monthName} />
           </>
         ) : (
           <>
@@ -139,8 +141,8 @@ export default function Home() {
         </Row>
         <View style={{ gap: space(1), paddingHorizontal: 4 }}>
           <Row gap={1} style={{ alignItems: 'baseline' }}>
-            <Txt tone="muted" style={{ flex: 1 }}>
-              {monthName}
+            <Txt tone="muted" style={{ flex: 1 }} numberOfLines={1}>
+              {periodName}
             </Txt>
             <Txt style={{ fontWeight: fonts.medium, fontVariant: ['tabular-nums'] }}>
               {money(totals.expense, { decimals: 'never' })}
@@ -165,7 +167,7 @@ export default function Home() {
           )}
           {totals.income ? (
             <Txt variant="small" tone="muted">
-              <Txt variant="small" tone="income" style={{ fontWeight: fonts.semibold }}>{`+${money(totals.income, { decimals: 'never' })}`}</Txt> came in this month
+              <Txt variant="small" tone="income" style={{ fontWeight: fonts.semibold }}>{`+${money(totals.income, { decimals: 'never' })}`}</Txt> came in {calendar ? 'this month' : 'since payday'}
             </Txt>
           ) : null}
         </View>
@@ -245,12 +247,12 @@ export default function Home() {
 }
 
 /** What today's figure means and what happens next: always words plus an icon, never colour alone. */
-function StatusLine({ safe, spent, payments, money, colors }: { safe: ReturnType<typeof safeToSpend>; spent: number; payments: string; money: ReturnType<typeof useMoneyText>; colors: Colors }) {
+function StatusLine({ safe, spent, payments, money, colors, monthName }: { safe: ReturnType<typeof safeToSpend>; spent: number; payments: string; money: ReturnType<typeof useMoneyText>; colors: Colors; monthName: string }) {
   const opts = { decimals: 'never' } as const;
   if (safe.state === 'over') {
     const text =
       safe.allowance === 0
-        ? 'This month’s budget is used up'
+        ? `Your ${monthName} budget is used up`
         : `${money(spent, opts)} of ${money(safe.allowance, opts)} spent${safe.tomorrow !== null ? ` · tomorrow’s adjusted to ${money(safe.tomorrow, opts)}` : ''}`;
     return (
       <Row gap={0.75} style={{ alignItems: 'center' }}>

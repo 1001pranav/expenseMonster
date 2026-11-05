@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { buildCardLedger } from '@/domain/creditCard';
+import { cycleFor } from '@/domain/cycle';
 import { todayYMD } from '@/domain/dates';
 import { computeDues } from '@/domain/dues';
 import type { Category, TableMap, TableName } from '@/domain/types';
@@ -12,6 +13,13 @@ export const useToday = () => {
   useStore((s) => s.version);
   return todayYMD();
 };
+
+/** The budget period holding today: from payday to the day before the next one (domain/cycle.ts). */
+export function useCycle() {
+  const today = useToday();
+  const payday = useStore((s) => s.settings.payday);
+  return useMemo(() => cycleFor(today, payday), [today, payday]);
+}
 
 export function useCategoryMap(): Map<string, Category> {
   const cats = useTable('categories');

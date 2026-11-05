@@ -9,6 +9,7 @@ import { eraseEverything } from '@/services/wipe';
 import { Button, Card, Chip, Divider, ListRow, Row, Section, Txt } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { Segmented, SwitchRow, TextField } from '@/ui/components/forms';
+import { PaydaySheet, paydayText } from '@/ui/components/PaydaySheet';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -16,6 +17,7 @@ export default function Settings() {
   const { colors } = useTheme();
   const settings = useStore((s) => s.settings);
   const [pinSet, setPinSet] = useState(false);
+  const [paydaySheet, setPaydaySheet] = useState(false);
   const [pinSheet, setPinSheet] = useState(false);
   const [pin, setPinValue] = useState('');
   const [pin2, setPin2] = useState('');
@@ -94,6 +96,13 @@ export default function Settings() {
           <SwitchRow icon="moon" label="Evening review nudge" description="9 PM reminder when captures are waiting" value={settings.reviewNudge} onChange={(v) => saveSettings({ reviewNudge: v })} />
           <SwitchRow icon="people" label="Share new entries with family by default" description="Off = new entries are private" value={settings.defaultTxnScope === 'household'} onChange={(v) => saveSettings({ defaultTxnScope: v ? 'household' : 'personal' })} />
         </Card>
+      </Section>
+
+      <Section title="Budgets">
+        <Card padded={false}>
+          <ListRow icon="calendar-outline" iconColor={colors.primary} title="Pay day" subtitle={`Budget period: ${paydayText(settings.payday).toLowerCase()}`} chevron onPress={() => setPaydaySheet(true)} />
+        </Card>
+        <PaydaySheet visible={paydaySheet} onClose={() => setPaydaySheet(false)} />
       </Section>
 
       <Section title="Appearance">

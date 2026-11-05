@@ -10,6 +10,7 @@ import type { Paise } from '@/domain/money';
 import { financialHealth } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
+import { useStore } from '@/db/store';
 import { Bars, HeatCalendar, LineChart, RankedBars, type Slice } from '@/ui/components/charts';
 import { Card, IconButton, Money, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
@@ -30,7 +31,8 @@ export default function Insights() {
   const overrides = useTable('card_overrides');
   const loans = useTable('loans');
   const allTxns = useTable('transactions');
-  const health = useMemo(() => financialHealth({ transactions: allTxns, loans, cards, cardOverrides: overrides, budgets }, today, money), [allTxns, loans, cards, overrides, budgets, today, money]);
+  const payday = useStore((st) => st.settings.payday);
+  const health = useMemo(() => financialHealth({ transactions: allTxns, loans, cards, cardOverrides: overrides, budgets, payday }, today, money), [allTxns, loans, cards, overrides, budgets, payday, today, money]);
   const [range, setRange] = useState<Range>('month');
   const [month, setMonth] = useState(monthKey(today));
   const [view, setView] = useState<'overview' | 'tax'>('overview');
