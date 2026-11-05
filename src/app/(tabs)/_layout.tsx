@@ -78,11 +78,17 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
       <View style={{ flex: 1, alignItems: 'center' }}>
         <Pressable
           onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            router.push('/quick-add');
+          }}
+          // Hold for the full form: transfers, splits, payee and note up front.
+          onLongPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             router.push({ pathname: '/txn/new', params: { type: 'expense' } });
           }}
           accessibilityRole="button"
           accessibilityLabel="Add an expense"
+          accessibilityHint="Hold to open the full form"
           style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
         >
           <Ionicons name="add" size={30} color={colors.primaryText} />

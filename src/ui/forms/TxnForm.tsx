@@ -81,10 +81,15 @@ function amountText(paise: Paise | null) {
 export function TxnForm({
   existing,
   initialType = "expense",
+  initialAmount,
+  initialCategoryId,
   ocrText,
 }: {
   existing?: Transaction;
   initialType?: TxnType;
+  /** Carried over from Quick Add's "Payee, note, more…". */
+  initialAmount?: Paise;
+  initialCategoryId?: string;
   /** What OCR read, right after a scan. */ ocrText?: string;
 }) {
   const { colors } = useTheme();
@@ -109,7 +114,7 @@ export function TxnForm({
       : (existing?.type ?? initialType),
   );
   const [amountStr, setAmountStr] = useState(
-    amountText(existing?.amount ?? null),
+    amountText(existing?.amount ?? initialAmount ?? null),
   );
   /** Cursor in the typed amount (raw characters, no commas): keypad keys go there, not only at the end. */
   const [amountSel, setAmountSel] = useState<Selection>(() => ({
@@ -125,7 +130,7 @@ export function TxnForm({
   };
   const [keypad, setKeypad] = useState(!existing);
   const [categoryId, setCategoryId] = useState<string | null>(
-    existing?.categoryId ?? null,
+    existing?.categoryId ?? initialCategoryId ?? null,
   );
   const [method, setMethod] = useState<PayMethod>(existing?.method ?? "upi");
   const [cardId, setCardId] = useState<string | null>(

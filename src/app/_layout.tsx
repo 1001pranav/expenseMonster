@@ -245,6 +245,7 @@ function App() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'slide_from_right' }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+        <Stack.Screen name="quick-add" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
       </Stack>
       <ShareCatcher />
