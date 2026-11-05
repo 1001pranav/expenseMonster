@@ -105,3 +105,10 @@ export function fillFromSms(p: ParsedTxn, text: string, cards: { id: string; las
     paysCardId: cardBill ? (card?.id ?? null) : null,
   };
 }
+
+/** "3 new from your bank SMS, 1 to check", for the toast after an SMS import. */
+export function smsSummary({ added, saved }: { added: number; saved: number }): string {
+  if (!added) return 'No new bank SMS';
+  const waiting = added - saved;
+  return waiting ? `${added} new from your bank SMS, ${waiting} to check` : `${added} new from your bank SMS, all saved`;
+}

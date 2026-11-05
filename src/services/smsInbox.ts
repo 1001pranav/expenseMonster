@@ -4,6 +4,7 @@ import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { autoSaveCapture } from '@/data/actions';
 import { saveSettings } from '@/db/repo';
 import { getState } from '@/db/store';
+import { isSyncHeld } from './syncHold';
 import { allowedSenders } from '@/domain/smsSender';
 import { captureText } from './capture';
 import { logFailure, logInfo } from './diagnostics';
@@ -50,7 +51,18 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Read bank SMS received after `since` (ms) into Review, or straight in when clear. `startedAt` is
  * where the next import should start reading from.
  */
-export async function importBankSms(since: number, timeoutMs = 60_000): Promise<SmsImport & { startedAt: number }> {
+export function importBankSms(since: number, timeoutMs = 60_000): Promise<SmsImport & { startedAt: number }> {
+  // One import at a time: the check on app open, Review's Import and a pull to refresh can overlap,
+  // and two imports from the same point would read the same messages twice.
+  importing ??= runImport(since, timeoutMs).finally(() => {
+    importing = null;
+  });
+  return importing;
+}
+
+let importing: Promise<SmsImport & { startedAt: number }> | null = null;
+
+async function runImport(since: number, timeoutMs: number): Promise<SmsImport & { startedAt: number }> {
   const startedAt = Date.now();
   const pkg = Constants.expoConfig?.android?.package;
   if (!smsCaptureAvailable || !pkg) return { read: 0, added: 0, saved: 0, startedAt };
@@ -122,3 +134,27 @@ export async function checkNewBankSms(): Promise<SmsImport> {
   await saveSettings({ smsImportedTo: startedAt });
   return summary;
 }
+
+export type SmsRescan = ({ status: 'done' } & SmsImport) | { status: 'not-set-up' | 'not-allowed' };
+
+/**
+ * Pull to refresh on Home and Activity: read bank SMS received since the last import, now. Works
+ * whether or not "check when I open the app" is on, since pulling is asking. It never shows the
+ * Android permission prompt (a pull is too easy to do by accident for that): if access was taken
+ * away it says so, and Bank SMS settings asks again.
+ */
+export async function rescanBankSms(): Promise<SmsRescan> {
+  const { smsImportedTo } = getState().settings;
+  if (!smsCaptureAvailable || !smsImportedTo) return { status: 'not-set-up' };
+  // While a shared screenshot is being handled, only finish what was already copied.
+  if (isSyncHeld()) return { status: 'done', ...(await drainSmsInbox()) };
+  if (!(await smsPermissionGranted())) {
+    await drainSmsInbox();
+    return { status: 'not-allowed' };
+  }
+  const { startedAt, ...summary } = await importBankSms(smsImportedTo);
+  await saveSettings({ smsImportedTo: startedAt });
+  return { status: 'done', ...summary };
+}
+
+export { smsSummary } from '@/domain/captures';

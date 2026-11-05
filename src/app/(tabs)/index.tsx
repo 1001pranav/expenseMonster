@@ -15,6 +15,7 @@ import { IconButton, IconCircle, Money, ProgressBar, Row, Txt, useMoneyText, typ
 import { smsCaptureAvailable } from '@/services/smsInbox';
 import { DueRow, TxnRow, openPay } from '@/ui/components/rows';
 import { Screen } from '@/ui/components/Screen';
+import { useSmsRefresh } from '@/ui/hooks/useSmsRefresh';
 import { fonts, space, useTheme, type Colors } from '@/ui/theme';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -35,6 +36,8 @@ export default function Home() {
   const selfId = useSelfId();
   const pending = usePending();
   const cycle = useCycle();
+  // Pull down to check bank SMS now (only once SMS reading is set up).
+  const sms = useSmsRefresh();
   // Far enough to reach the period's end (for safe-to-spend); the list shows the next 15 days.
   const dues = useDues(31);
   const settings = useStore((s) => s.settings);
@@ -85,6 +88,8 @@ export default function Home() {
   return (
     <Screen
       tabBar
+      onRefresh={sms.onRefresh}
+      refreshing={sms.refreshing}
       header={
         <Row style={{ paddingHorizontal: space(2), paddingTop: space(1), gap: space(1) }}>
           <Pressable

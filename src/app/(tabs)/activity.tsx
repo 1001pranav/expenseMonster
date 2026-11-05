@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, SectionList, View } from 'react-native';
+import { RefreshControl, ScrollView, SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { filterActivity, type Flow, type Kind, type Period } from '@/domain/activityFilter';
 import { pickedRange, type DatePick } from '@/domain/datePick';
@@ -14,6 +14,7 @@ import { RangeCalendar } from '@/ui/components/RangeCalendar';
 import { TxnRow, groupByDay } from '@/ui/components/rows';
 import { TAB_BAR_SPACE } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
+import { useSmsRefresh } from '@/ui/hooks/useSmsRefresh';
 import { fonts, space, useTheme } from '@/ui/theme';
 
 /** "pick": a day or a range picked on one calendar (domain/datePick.ts). */
@@ -63,6 +64,7 @@ export default function Activity() {
   const [filters, setFilters] = useState(false);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const sms = useSmsRefresh();
   const [monthOffset, setMonthOffset] = useState(0);
   const [pick, setPick] = useState<DatePick>({ start: today, end: today });
   const [allCats, setAllCats] = useState(false);
@@ -232,6 +234,7 @@ export default function Activity() {
         sections={sections}
         keyExtractor={(t) => t.id}
         stickySectionHeadersEnabled
+        refreshControl={sms.onRefresh ? <RefreshControl refreshing={sms.refreshing} onRefresh={sms.onRefresh} tintColor={colors.primary} colors={[colors.primary]} /> : undefined}
         initialNumToRender={20}
         contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE + insets.bottom }}
         renderSectionHeader={({ section }) => (

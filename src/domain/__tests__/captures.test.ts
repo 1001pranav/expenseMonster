@@ -1,4 +1,4 @@
-import { appOf, cardHintOf, duplicateOf, fillFromSms, recentRepeats, splitCaptures, suggestAmountFix } from '../captures';
+import { appOf, cardHintOf, duplicateOf, fillFromSms, recentRepeats, smsSummary, splitCaptures, suggestAmountFix } from '../captures';
 import { cardEndingIn, maskedCardDigits, type ParsedTxn } from '../parsers/common';
 import { parseSms } from '../parsers/sms';
 import { txn } from './fixtures';
@@ -108,5 +108,13 @@ describe('filling the form from a pasted bank SMS', () => {
 
   it('money received is income', () => {
     expect(fill('Rs.85000.00 credited to HDFC Bank A/c XX1234 on 12-09-26 by NEFT from ACME PVT LTD').type).toBe('income');
+  });
+});
+
+describe('smsSummary', () => {
+  it('says how many arrived and how many still need a check', () => {
+    expect(smsSummary({ added: 0, saved: 0 })).toBe('No new bank SMS');
+    expect(smsSummary({ added: 3, saved: 2 })).toBe('3 new from your bank SMS, 1 to check');
+    expect(smsSummary({ added: 2, saved: 2 })).toBe('2 new from your bank SMS, all saved');
   });
 });

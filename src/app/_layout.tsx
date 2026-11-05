@@ -24,7 +24,7 @@ import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
 import { installErrorCapture, logError, logFailure, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
-import { checkNewBankSms, drainSmsInbox, smsCaptureAvailable } from '@/services/smsInbox';
+import { checkNewBankSms, drainSmsInbox, smsCaptureAvailable, smsSummary } from '@/services/smsInbox';
 import { startHomeWidgets } from '@/services/homeWidgets';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
@@ -200,10 +200,8 @@ function App() {
     if (!ready || locked || !identity.onboarded || !smsCaptureAvailable) return;
     // While a shared screenshot is being handled, don't open the import screen over it.
     (isSyncHeld() ? drainSmsInbox() : checkNewBankSms())
-      .then(({ added, saved }) => {
-        if (!added) return;
-        const waiting = added - saved;
-        toast(waiting ? `${added} new from your bank SMS, ${waiting} to check` : `${added} new from your bank SMS, all saved`, { tone: 'success' });
+      .then((r) => {
+        if (r.added) toast(smsSummary(r), { tone: 'success' });
       })
       .catch((e) => logFailure('sms: reading copied messages failed', e));
   }, [ready, locked, identity.onboarded]);
