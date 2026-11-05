@@ -24,10 +24,13 @@ export function BudgetsBody() {
   const payday = usePayday();
   const mode = useStore((s) => s.settings.budgetPeriod);
   const [paydaySheet, setPaydaySheet] = useState(false);
-  const cats = useSortedCategories('expense');
+  const pickable = useSortedCategories('expense');
+  const allCats = useTable('categories');
   const budgets = useTable('budgets');
   const txns = useConfirmed();
   const usage = useMemo(() => new Map(cycleUsage(budgets, txns, cycle).map((u) => [u.categoryId, u])), [budgets, txns, cycle]);
+  // A hidden category that still has a budget stays listed: its budget still counts.
+  const cats = useMemo(() => [...pickable, ...allCats.filter((c) => c.hidden && c.kind === 'expense' && !c.deletedAt && usage.has(c.id))], [pickable, allCats, usage]);
   const [editing, setEditing] = useState<string | null>(null);
   const [amount, setAmount] = useState<Paise | null>(null);
   const [amountKey, setAmountKey] = useState(0);

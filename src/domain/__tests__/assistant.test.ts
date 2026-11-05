@@ -30,7 +30,7 @@ const loan = (over: Partial<Loan> = {}): Loan => ({
   ...over,
 });
 
-const category = (id: string, name: string): Category => ({ ...base({ id }), name, icon: 'x', color: '#000', kind: 'expense', parentId: null, sortOrder: 0 });
+const category = (id: string, name: string): Category => ({ ...base({ id }), name, icon: 'x', color: '#000', kind: 'expense', parentId: null, sortOrder: 0, hidden: 0 });
 const budget = (categoryId: string, amount: number): Budget => ({ ...base(), categoryId, month: '*', amount });
 
 const salary = (month: string, amount = 1_00_000_00) => txn({ type: 'income', amount, occurredAt: `${month}-01T04:00:00.000Z`, method: 'bank' as never });

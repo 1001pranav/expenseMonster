@@ -200,7 +200,7 @@ export function TxnForm({
   }, [keypad, existing]);
 
   const catKind = type === "income" ? "income" : "expense";
-  const categories = useSortedCategories(catKind);
+  const categories = useSortedCategories(catKind, existing?.categoryId);
 
   // Payees used before for this type, newest first, with the category they were filed under.
   const knownPayees = useMemo(() => {

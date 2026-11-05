@@ -21,8 +21,10 @@ export default function RuleEdit() {
   const accounts = useTable('accounts');
   const txns = useTable('transactions');
   const catMap = useCategoryMap();
-  const categories = [...useSortedCategories('expense'), ...useSortedCategories('income')];
   const existing = rules.find((r) => r.id === params.id);
+  // A rule may point at a hidden category: keep it on offer so the rule still shows what it does.
+  const keep = existing?.categoryId ?? params.categoryId ?? null;
+  const categories = [...useSortedCategories('expense', keep), ...useSortedCategories('income', keep)];
 
   const [field, setField] = useState<RuleField>(existing?.field === 'text' ? 'text' : 'payee');
   const [pattern, setPattern] = useState(existing?.pattern ?? params.payee?.toLowerCase() ?? '');

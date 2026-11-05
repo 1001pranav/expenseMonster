@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { buildCardLedger } from '@/domain/creditCard';
+import { pickerCategories } from '@/domain/categories';
 import { cycleFor } from '@/domain/cycle';
 import { todayYMD } from '@/domain/dates';
 import { computeDues } from '@/domain/dues';
@@ -29,15 +30,19 @@ export function useCategoryMap(): Map<string, Category> {
   return useMemo(() => new Map(cats.map((c) => [c.id, c])), [cats]);
 }
 
-export function useSortedCategories(kind: Category['kind']) {
+/**
+ * Categories for pickers: hidden ones left out (except `include`, the one already picked), ordered
+ * most-used first or as arranged in Categories (Settings: categoryOrder).
+ */
+export function useSortedCategories(kind: Category['kind'], include?: string | null) {
   const cats = useTable('categories');
   const txns = useTable('transactions');
+  const order = useStore((s) => s.settings.categoryOrder);
   return useMemo(() => {
-    // Most-used first: fewer scrolls on the quick-add screen.
     const usage = new Map<string, number>();
     for (const t of txns.slice(0, 400)) if (t.categoryId) usage.set(t.categoryId, (usage.get(t.categoryId) ?? 0) + 1);
-    return cats.filter((c) => c.kind === kind).sort((a, b) => (usage.get(b.id) ?? 0) - (usage.get(a.id) ?? 0) || a.sortOrder - b.sortOrder);
-  }, [cats, txns, kind]);
+    return pickerCategories(cats, kind, order, usage, include);
+  }, [cats, txns, kind, order, include]);
 }
 
 export function useConfirmed() {
