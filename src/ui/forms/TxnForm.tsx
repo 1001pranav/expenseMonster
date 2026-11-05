@@ -71,6 +71,15 @@ import { fonts, space, useTheme } from "../theme";
 import { deleteAttachment } from "@/services/files";
 import { readSms } from "@/services/capture";
 
+const SOURCE_LABEL: Record<Transaction["source"], string | null> = {
+  manual: "by hand",
+  ocr: "from a screenshot",
+  sms: "from a bank SMS",
+  upi: "from a UPI app",
+  sync: "on a family phone",
+  bill: "from a bill",
+};
+
 function amountText(paise: Paise | null) {
   if (!paise) return "";
   const r = Math.floor(paise / 100);
@@ -451,6 +460,24 @@ export function TxnForm({
 
   const catName = categories.find((c) => c.id === categoryId)?.name;
   const card = cards.find((c) => c.id === cardId);
+
+  // An entry opened to check it shows where it came from instead of a Save button; Save appears
+  // once something is changed (spec §2.4). Everything editable goes into the signature.
+  const signature = JSON.stringify([type, amountStr, categoryId, method, cardId, accountId, date, payee, note, scope, payer, toMember, family, countsInBalance, splitWith, link]);
+  const [openedAs] = useState(signature);
+  const quiet = Boolean(existing && !pending && signature === openedAs);
+  const provenance = existing
+    ? [
+        `Logged ${formatDay(isoToYMD(existing.occurredAt))}${
+          // Back-dated entries are stored at noon: only show a time that was really recorded.
+          isoToYMD(existing.createdAt) === isoToYMD(existing.occurredAt) ? `, ${new Date(existing.occurredAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : ""
+        }`,
+        SOURCE_LABEL[existing.source],
+        existing.method === "card" ? cards.find((c) => c.id === existing.cardId)?.name : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
   const extras = [
     note.trim() ? "Note" : "",
     splitWith.length ? `Split ${splitWith.length} ways` : "",
@@ -589,13 +616,11 @@ export function TxnForm({
       }
       back
       right={
+        // Delete sits at the bottom for saved entries, away from Back; a capture keeps Reject here.
         existing ? (
-          <Button
-            title={pending ? "Reject" : "Delete"}
-            variant="ghost"
-            size="sm"
-            onPress={onDelete}
-          />
+          pending ? (
+            <Button title="Reject" variant="ghost" size="sm" onPress={onDelete} />
+          ) : null
         ) : (
           <Button
             title="Set up…"
@@ -606,6 +631,36 @@ export function TxnForm({
         )
       }
       footer={
+        existing && !pending ? (
+          <View style={{ gap: space(1) }}>
+            {keypad ? <AmountPad onKey={onKey} onDone={() => setKeypad(false)} /> : null}
+            {quiet ? (
+              <Txt variant="small" tone="muted" style={{ textAlign: "center" }}>
+                {provenance}
+              </Txt>
+            ) : null}
+            <Row gap={1}>
+              <Pressable
+                onPress={onDelete}
+                accessibilityRole="button"
+                accessibilityLabel="Delete this entry"
+                style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: space(2), justifyContent: "center", opacity: pressed ? 0.6 : 1 })}
+              >
+                <Txt style={{ color: colors.expenseText, fontWeight: fonts.semibold }}>Delete</Txt>
+              </Pressable>
+              {quiet ? null : (
+                <Button
+                  title={amount ? `Save ${formatINR(amount, { decimals: "auto" })}` : "Save"}
+                  icon="checkmark"
+                  onPress={() => save(false)}
+                  loading={saving}
+                  size="lg"
+                  style={{ flex: 1 }}
+                />
+              )}
+            </Row>
+          </View>
+        ) : (
         <View style={{ gap: space(1) }}>
           {keypad ? (
             <AmountPad
@@ -631,6 +686,7 @@ export function TxnForm({
             variant={pending ? "success" : "primary"}
           />
         </View>
+        )
       }
     >
       {pending && (existing?.attachment || warned) ? (
