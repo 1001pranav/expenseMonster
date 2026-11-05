@@ -423,3 +423,25 @@ Concept: **paper and ink.** Warm off-white paper, near-black ink, one fountain-p
 4. Rename `dues` → `plan` and add the Budgets segment.
 5. Insights: give each chart a question title and a takeaway sentence.
 6. Widget/app-shortcut deep link `expensemonster://quick-add`.
+
+---
+
+## 9. Implementation status (Nov 2026)
+
+Built on branch `claude/serene-dijkstra-uc9n5r`. Where the build differs from the spec above, the build wins and the reason is noted.
+
+| Area | Status | Differences from the spec |
+|---|---|---|
+| Theme (§3.1–3.3) | Done | Token names kept from the old theme so screens changed without edits. Manrope package still installed but unused. |
+| Quick Add (§2.2) | Done, `src/app/quick-add.tsx` | Category guess needs ≥3 hits and a majority in a ±90 min window. Payee isn't in the quick flow. |
+| Home (§2.1) | Done | Safe-to-spend subtracts EMIs, bills and premiums still due this period (they become expenses when paid); card bills are excluded (transfers). |
+| Activity (§2.3) | Done | No swipe-right-to-edit (tapping the row edits). Expenses carry no "−" sign. |
+| Detail (§2.4) | Done | Built on the existing `TxnForm`, not a new screen. |
+| Plan (§2.5) | Done | Route stays `/dues` so notifications keep working; `?view=budgets` opens Budgets. |
+| Insights (§2.6) | Done | Existing charts kept, retitled as questions with one-line answers; Budgets moved to Plan. |
+| Budget period | Added (not in the original spec) | Calendar month or pay day to pay day (1–28), per phone. Activity and Insights stay on calendar months. |
+| Whole-month budget | Added | Stored as a budget with category id `overall`. |
+| Onboarding (§2.9) | Done | Fresh start skips the name (saved as "Me"); joining a family phone still asks. |
+| Icon and splash | Done | Regenerated from `scripts/brand/mark.js`; needs a new native build. |
+
+Not done: categories management screen changes (§2.7), the settings hub regrouping (§2.8), mascot poses and empty-state copy (§2.10), pull-to-rescan SMS (§4).
