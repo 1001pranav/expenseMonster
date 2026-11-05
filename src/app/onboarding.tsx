@@ -70,9 +70,9 @@ export default function Onboarding() {
       <Screen contentStyle={{ paddingTop: space(6), gap: space(3) }}>
         <View style={{ gap: space(1.5), paddingHorizontal: 4 }}>
           <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-            <Txt style={{ fontFamily: fonts.display, fontSize: 26, color: colors.primaryText }}>₹</Txt>
+            <Txt style={{ fontWeight: fonts.display, fontSize: 26, color: colors.primaryText }}>₹</Txt>
           </View>
-          <Txt style={{ fontFamily: fonts.display, fontSize: 32, lineHeight: 38, letterSpacing: -1 }}>Your family's money, kept on your phone</Txt>
+          <Txt style={{ fontWeight: fonts.display, fontSize: 32, lineHeight: 38, letterSpacing: -1 }}>Your family's money, kept on your phone</Txt>
           <Txt tone="muted">Spending, EMIs, card bills and reminders. No account to create, nothing to sign up for.</Txt>
         </View>
         <View style={{ gap: space(1.25) }}>
@@ -102,7 +102,7 @@ export default function Onboarding() {
           </Row>
         }
       >
-        <Txt style={{ fontFamily: fonts.display, fontSize: 28, lineHeight: 34 }}>What should we call you?</Txt>
+        <Txt style={{ fontWeight: fonts.display, fontSize: 28, lineHeight: 34 }}>What should we call you?</Txt>
         <TextField label="Your name" value={name} onChangeText={setName} placeholder="For example, Asha" autoCapitalize="words" autoFocus />
         {start === 'fresh' ? <TextField label="Household name (optional)" value={household} onChangeText={setHousehold} placeholder="For example, The Sharmas" autoCapitalize="words" /> : null}
         {start === 'join' ? <Txt tone="muted">Next, scan the code on the other phone. They open it by tapping the initial at the top of Home, then Family phones, then Show QR.</Txt> : null}
@@ -124,7 +124,7 @@ export default function Onboarding() {
         </View>
       }
     >
-      <Txt style={{ fontFamily: fonts.display, fontSize: 28, lineHeight: 34 }}>Lock the app</Txt>
+      <Txt style={{ fontWeight: fonts.display, fontSize: 28, lineHeight: 34 }}>Lock the app</Txt>
       <Txt tone="muted">Your data is already encrypted on this phone. A lock stops anyone who picks up your unlocked phone from opening it.</Txt>
       <TextField label="6-digit PIN (optional)" value={pin} onChangeText={(v) => setPinValue(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secure />
       {bioAvailable ? <SwitchRow icon="finger-print" label="Unlock with fingerprint or face" value={bio} onChange={setBio} /> : null}

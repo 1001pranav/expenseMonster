@@ -199,7 +199,7 @@ export default function Spending() {
         contentContainerStyle={{ paddingHorizontal: space(2), paddingBottom: TAB_BAR_SPACE + insets.bottom }}
         renderSectionHeader={({ section }) => (
           <Row style={{ justifyContent: 'space-between', paddingHorizontal: 4, paddingTop: space(2), paddingBottom: space(1) }}>
-            <Txt variant="small" style={{ fontFamily: fonts.bold, color: colors.textMuted }}>
+            <Txt variant="small" style={{ fontWeight: fonts.bold, color: colors.textMuted }}>
               {relativeDay(section.title, today)}, {formatDay(section.title)}
             </Txt>
             {flow === 'income' ? (section.in ? <Money value={section.in} variant="small" tone="income" /> : null) : section.out ? <Money value={section.out} variant="small" tone="muted" /> : null}

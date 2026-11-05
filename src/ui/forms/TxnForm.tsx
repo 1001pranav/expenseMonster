@@ -793,7 +793,7 @@ export function TxnForm({
         <Row gap={0.5} style={{ alignItems: "center" }}>
           <Txt
             style={{
-              fontFamily: fonts.display,
+              fontWeight: fonts.display,
               fontSize: 36,
               color: amountStr
                 ? type === "income"
@@ -835,7 +835,7 @@ export function TxnForm({
             cursorColor={colors.primary}
             accessibilityLabel={`Amount ${amountStr || "zero"} rupees`}
             style={{
-              fontFamily: fonts.display,
+              fontWeight: fonts.display,
               fontSize: 48,
               height: 60,
               minWidth: 40,
@@ -1409,7 +1409,7 @@ function EmiLink({
       </View>
       <Txt
         variant="small"
-        style={{ color: colors.primary, fontFamily: fonts.bold }}
+        style={{ color: colors.primary, fontWeight: fonts.bold }}
       >
         {plan ? "Open" : "Set up"}
       </Txt>

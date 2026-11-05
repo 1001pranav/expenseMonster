@@ -1,10 +1,4 @@
 import '@/polyfills';
-import { Manrope_400Regular } from '@expo-google-fonts/manrope/400Regular';
-import { Manrope_500Medium } from '@expo-google-fonts/manrope/500Medium';
-import { Manrope_600SemiBold } from '@expo-google-fonts/manrope/600SemiBold';
-import { Manrope_700Bold } from '@expo-google-fonts/manrope/700Bold';
-import { Manrope_800ExtraBold } from '@expo-google-fonts/manrope/800ExtraBold';
-import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, useNavigationContainerRef, usePathname } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
@@ -65,7 +59,8 @@ let latestRoot = 0;
 function App() {
   const [rootId] = useState(() => ++latestRoot);
   const { colors, dark } = useTheme();
-  const [fontsLoaded] = useFonts({ Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold });
+  // The system font needs no loading (see theme.ts).
+  const fontsLoaded = true;
   const ready = useStore((s) => s.ready);
   const identity = useStore((s) => s.identity);
   const settings = useStore((s) => s.settings);

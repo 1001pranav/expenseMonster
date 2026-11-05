@@ -104,7 +104,7 @@ export function DueCard({ d, today, onPay }: { d: DueItem; today: YMD; onPay: ()
           opacity: pressed ? 0.8 : 1,
         })}
       >
-        <Txt variant="small" style={{ color: urgent ? '#FFFFFF' : colors.primary, fontFamily: fonts.semibold }}>
+        <Txt variant="small" style={{ color: urgent ? '#FFFFFF' : colors.primary, fontWeight: fonts.semibold }}>
           {d.kind === 'enter_bill' ? 'Enter bill' : d.incoming ? 'Mark received' : 'Pay now'}
         </Txt>
       </Pressable>
@@ -124,7 +124,7 @@ export function DueRow({ d, today, onPay }: { d: DueItem; today: YMD; onPay: () 
       title={d.title}
       subtitle={
         <Txt variant="small" tone="muted" numberOfLines={1}>
-          <Txt variant="small" tone={late ? 'expense' : d.state === 'due' ? 'warn' : 'muted'} style={late || d.state === 'due' ? { fontFamily: fonts.bold } : undefined}>
+          <Txt variant="small" tone={late ? 'expense' : d.state === 'due' ? 'warn' : 'muted'} style={late || d.state === 'due' ? { fontWeight: fonts.bold } : undefined}>
             {when}
           </Txt>
           {d.subtitle ? `, ${d.subtitle}` : ''}
@@ -140,7 +140,7 @@ export function DueRow({ d, today, onPay }: { d: DueItem; today: YMD; onPay: () 
             accessibilityLabel={`${action} ${d.title}`}
             style={({ pressed }) => ({ height: 34, paddingHorizontal: 14, borderRadius: 12, justifyContent: 'center', backgroundColor: late ? colors.primary : 'transparent', borderWidth: late ? 0 : 1.5, borderColor: colors.primary, opacity: pressed ? 0.7 : 1 })}
           >
-            <Txt variant="small" style={{ color: late ? colors.primaryText : colors.primary, fontFamily: fonts.bold }}>
+            <Txt variant="small" style={{ color: late ? colors.primaryText : colors.primary, fontWeight: fonts.bold }}>
               {action}
             </Txt>
           </Pressable>

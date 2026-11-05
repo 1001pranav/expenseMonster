@@ -73,7 +73,7 @@ function AllDues() {
         </Txt>
         <Money value={owed} variant="display" decimals="never" fit="narrow" />
         {lateTotal ? (
-          <Txt variant="small" tone="expense" style={{ fontFamily: fonts.bold }}>
+          <Txt variant="small" tone="expense" style={{ fontWeight: fonts.bold }}>
             {money(lateTotal, { decimals: 'never' })} of it is already late
           </Txt>
         ) : null}

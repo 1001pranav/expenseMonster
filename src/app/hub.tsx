@@ -43,7 +43,7 @@ export default function Hub() {
     <Screen back>
       <Row gap={1.75} style={{ paddingHorizontal: 4 }}>
         <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: colors.text, alignItems: 'center', justifyContent: 'center' }}>
-          <Txt style={{ fontFamily: fonts.display, fontSize: 22 }}>{(me?.name ?? identity.householdName).charAt(0).toUpperCase()}</Txt>
+          <Txt style={{ fontWeight: fonts.display, fontSize: 22 }}>{(me?.name ?? identity.householdName).charAt(0).toUpperCase()}</Txt>
         </View>
         <View style={{ flex: 1 }}>
           <Txt variant="h2">{me?.name ?? 'You'}</Txt>

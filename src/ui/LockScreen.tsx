@@ -156,7 +156,7 @@ export function LockScreen({ hasPin, onUnlock }: { hasPin: boolean; onUnlock: ()
         {hasPin ? (
           <Animated.View style={[{ flexDirection: 'row', gap: 14, marginTop: space(1) }, dotsStyle]} accessibilityLabel={`${pin.length} of 6 digits entered`}>
             {Array.from({ length: 6 }, (_, i) => (
-              <View key={i} style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: error ? colors.heroGlowB : i < pin.length ? '#FFFFFF' : 'transparent', borderWidth: 1.5, borderColor: error ? colors.heroGlowB : i < pin.length ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }} />
+              <View key={i} style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: error ? '#FF8A80' : i < pin.length ? '#FFFFFF' : 'transparent', borderWidth: 1.5, borderColor: error ? '#FF8A80' : i < pin.length ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }} />
             ))}
           </Animated.View>
         ) : null}

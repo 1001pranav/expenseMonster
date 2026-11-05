@@ -49,7 +49,7 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
             </View>
           ) : null}
         </View>
-        <Txt variant="caption" style={{ color: focused ? colors.primary : colors.textMuted, fontFamily: focused ? fonts.bold : fonts.semibold }}>
+        <Txt variant="caption" style={{ color: focused ? colors.primary : colors.textMuted, fontWeight: focused ? fonts.bold : fonts.semibold }}>
           {meta.label}
         </Txt>
       </Pressable>
@@ -89,7 +89,7 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
           accessibilityRole="button"
           accessibilityLabel="Add an expense"
           accessibilityHint="Hold to open the full form"
-          style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
+          style={({ pressed }) => ({ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
         >
           <Ionicons name="add" size={30} color={colors.primaryText} />
         </Pressable>

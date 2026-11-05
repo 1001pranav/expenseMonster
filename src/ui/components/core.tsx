@@ -69,7 +69,7 @@ export function Money({
   // tight: a third of the screen (stat columns); narrow: about half (hero numbers).
   const limit = fit === 'tight' ? (width < 400 ? 1_00_000_00 : 10_00_000_00) : fit === 'narrow' ? (width < 360 ? 10_00_000_00 : 1_00_00_000_00) : Infinity;
   if (Math.abs(value) >= limit) opts = { ...opts, compact: true };
-  const t: Tone = tone ?? (colorBySign ? (value < 0 ? 'expense' : value > 0 ? 'income' : 'default') : 'default');
+  const t: Tone = tone ?? (colorBySign ? (value > 0 ? 'income' : 'default') : 'default');
   return (
     <Txt
       variant={variant}
@@ -310,7 +310,7 @@ export function Section({ title, action, onAction, children, style }: { title?: 
     <View style={[{ gap: space(1.25) }, style]}>
       {title ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-          <Txt variant="h3" style={{ fontFamily: fonts.displaySemi, fontSize: 17 }}>
+          <Txt variant="h3" style={{ fontWeight: fonts.displaySemi, fontSize: 17 }}>
             {title}
           </Txt>
           {action ? (

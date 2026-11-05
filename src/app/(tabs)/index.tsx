@@ -82,7 +82,7 @@ export default function Home() {
       tabBar
       header={
         <Row style={{ paddingHorizontal: space(2), paddingTop: space(1), justifyContent: 'space-between' }}>
-          <Txt variant="h3" style={{ fontFamily: fonts.display, fontSize: 18, flex: 1 }}>
+          <Txt variant="h3" style={{ fontWeight: fonts.display, fontSize: 18, flex: 1 }}>
             {monthName}
           </Txt>
           <IconButton name={settings.hideAmounts ? 'eye-off-outline' : 'eye-outline'} label={settings.hideAmounts ? 'Show amounts' : 'Hide amounts'} onPress={() => saveSettings({ hideAmounts: !settings.hideAmounts })} />
@@ -93,7 +93,7 @@ export default function Home() {
             hitSlop={4}
             style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: colors.text, alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}
           >
-            <Txt style={{ fontFamily: fonts.display, fontSize: 15 }}>{initial}</Txt>
+            <Txt style={{ fontWeight: fonts.display, fontSize: 15 }}>{initial}</Txt>
           </Pressable>
         </Row>
       }
@@ -132,7 +132,7 @@ export default function Home() {
           </>
         ) : (
           <Pressable onPress={() => router.push('/budgets')} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' }}>
-            <Txt variant="small" style={{ color: colors.primary, fontFamily: fonts.bold }}>
+            <Txt variant="small" style={{ color: colors.primary, fontWeight: fonts.bold }}>
               Set a monthly budget
             </Txt>
           </Pressable>
@@ -292,7 +292,7 @@ function AttentionRow({ icon, state, title, subtitle, action, onPress, onClose }
           </Txt>
         ) : null}
       </View>
-      <Txt variant="small" style={{ color: colors.primary, fontFamily: fonts.bold }}>
+      <Txt variant="small" style={{ color: colors.primary, fontWeight: fonts.bold }}>
         {action}
       </Txt>
       {onClose ? <IconButton name="close" label="Hide" size={18} onPress={onClose} /> : null}

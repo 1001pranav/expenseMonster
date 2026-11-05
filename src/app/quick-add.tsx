@@ -166,9 +166,9 @@ export default function QuickAdd() {
               accessibilityLabel={`${income ? 'Money in' : 'Amount'} ${amount ? formatINR(amount, { decimals: 'auto' }) : 'zero'}`}
               adjustsFontSizeToFit
               numberOfLines={1}
-              style={{ fontFamily: fonts.bold, fontSize: 52, lineHeight: 62, fontVariant: ['tabular-nums'], color: raw ? (income ? colors.incomeText : colors.text) : colors.textFaint }}
+              style={{ fontWeight: fonts.bold, fontSize: 52, lineHeight: 62, fontVariant: ['tabular-nums'], color: raw ? (income ? colors.incomeText : colors.text) : colors.textFaint }}
             >
-              <Txt style={{ fontFamily: fonts.semibold, fontSize: 38, color: colors.textMuted }}>{income ? '+₹' : '₹'}</Txt>
+              <Txt style={{ fontWeight: fonts.semibold, fontSize: 38, color: colors.textMuted }}>{income ? '+₹' : '₹'}</Txt>
               {raw ? groupAmount(raw) : '0'}
             </Txt>
             <Txt variant="small" tone="muted" numberOfLines={1}>
@@ -193,10 +193,10 @@ export default function QuickAdd() {
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(1) }}>
             <Txt variant="small" tone="muted" style={{ flex: 1 }} numberOfLines={1}>
-              Paid with <Txt variant="small" style={{ fontFamily: fonts.semibold }}>{payLabel}</Txt>
+              Paid with <Txt variant="small" style={{ fontWeight: fonts.semibold }}>{payLabel}</Txt>
             </Txt>
             <Pressable onPress={moreDetails} accessibilityRole="button" hitSlop={10} style={{ minHeight: 44, justifyContent: 'center' }}>
-              <Txt variant="small" style={{ color: colors.primary, fontFamily: fonts.semibold }}>
+              <Txt variant="small" style={{ color: colors.primary, fontWeight: fonts.semibold }}>
                 Payee, note, more…
               </Txt>
             </Pressable>
@@ -213,7 +213,7 @@ export default function QuickAdd() {
                   accessibilityLabel={k === 'del' ? 'Delete digit. Hold to clear' : k === '.' ? 'Decimal point' : k}
                   style={({ pressed }) => ({ width: '31.5%', height: 52, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? colors.border : colors.surfaceAlt })}
                 >
-                  {k === 'del' ? <Ionicons name="backspace-outline" size={22} color={colors.text} /> : <Txt style={{ fontFamily: fonts.semibold, fontSize: 22, fontVariant: ['tabular-nums'] }}>{k}</Txt>}
+                  {k === 'del' ? <Ionicons name="backspace-outline" size={22} color={colors.text} /> : <Txt style={{ fontWeight: fonts.semibold, fontSize: 22, fontVariant: ['tabular-nums'] }}>{k}</Txt>}
                 </Pressable>
               ))}
             </View>
@@ -226,7 +226,7 @@ export default function QuickAdd() {
               style={({ pressed }) => ({ width: 96, borderRadius: radius.sm + 4, alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: amount ? colors.primary : colors.surfaceAlt, opacity: pressed ? 0.9 : 1 })}
             >
               <Ionicons name="checkmark" size={26} color={amount ? colors.primaryText : colors.textFaint} />
-              <Txt style={{ fontFamily: fonts.bold, fontSize: 17, color: amount ? colors.primaryText : colors.textFaint }}>Save</Txt>
+              <Txt style={{ fontWeight: fonts.bold, fontSize: 17, color: amount ? colors.primaryText : colors.textFaint }}>Save</Txt>
             </Pressable>
           </View>
         </Animated.View>
@@ -248,7 +248,7 @@ function SmallToggle({ label, icon, hint, warn, onPress }: { label: string; icon
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 12, borderRadius: radius.sm, backgroundColor: warn ? colors.warnSoft : colors.surfaceAlt, opacity: pressed ? 0.75 : 1 })}
     >
       <Ionicons name={icon} size={15} color={color} />
-      <Txt variant="small" style={{ color, fontFamily: fonts.semibold }}>
+      <Txt variant="small" style={{ color, fontWeight: fonts.semibold }}>
         {label}
       </Txt>
     </Pressable>
