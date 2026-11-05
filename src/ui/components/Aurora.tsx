@@ -83,8 +83,8 @@ export function BrandMark({ size = 72, color = '#E7ECF8', ink = '#1C3577' }: { s
       <Ellipse cx={57} cy={43.5} rx={3.4} ry={4.4} fill={ink} />
       <Rect x={22} y={52} width={56} height={34} rx={6} fill="#FFFFFF" />
       <Path d="M31 66 H69 M31 75 H58" stroke={ink} strokeOpacity={0.35} strokeWidth={3} strokeLinecap="round" />
-      <Rect x={31} y={47} width={11} height={12} rx={5.5} fill="#C7DCD2" />
-      <Rect x={58} y={47} width={11} height={12} rx={5.5} fill="#C7DCD2" />
+      <Rect x={31} y={47} width={11} height={12} rx={5.5} fill="#C4D2FA" />
+      <Rect x={58} y={47} width={11} height={12} rx={5.5} fill="#C4D2FA" />
     </Svg>
   );
 }

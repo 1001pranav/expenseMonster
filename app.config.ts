@@ -60,7 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.expensemonster.app',
     adaptiveIcon: {
-      backgroundColor: '#0F5C4A',
+      backgroundColor: '#1C3577',
       foregroundImage: './assets/android-icon-foreground.png',
       backgroundImage: './assets/android-icon-background.png',
       monochromeImage: './assets/android-icon-monochrome.png',
@@ -86,8 +86,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-secure-store',
     'expo-sharing',
     'expo-font',
-    ['expo-splash-screen', { image: './assets/splash-icon.png', imageWidth: 160, backgroundColor: '#0F5C4A' }],
-    ['expo-notifications', { color: '#0F5C4A' }],
+    ['expo-splash-screen', { image: './assets/splash-icon.png', imageWidth: 160, backgroundColor: '#1C3577' }],
+    ['expo-notifications', { color: '#1C3577' }],
     ['expo-local-authentication', { faceIDPermission: 'Unlock ExpenseMonster with Face ID.' }],
     ['expo-camera', { cameraPermission: 'Used only to scan the pairing QR code of a family member’s phone.', recordAudioAndroid: false }],
     ['expo-image-picker', { photosPermission: 'Used to read payment screenshots you choose. Images stay on this phone.', cameraPermission: 'Used only to scan the pairing QR code.', microphonePermission: false }],
