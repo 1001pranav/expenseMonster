@@ -1163,7 +1163,6 @@ export function TxnForm({
                     key={c.id}
                     width={w}
                     icon={c.icon as IconName}
-                    tint={c.color}
                     label={c.name}
                     selected={categoryId === c.id}
                     onPress={() => pickCategory(c.id)}
