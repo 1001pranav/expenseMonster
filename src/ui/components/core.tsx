@@ -202,9 +202,15 @@ export function IconButton({ name, onPress, label, color, size = 22, filled, dis
   );
 }
 
+/**
+ * Filter and choice chip. Selected = accent-soft fill, accent text and a ✓ (or its own icon), so
+ * the state never rests on colour alone. 40/44 dp tall; `compact` trims only the side padding.
+ */
 export function Chip({ label, selected, onPress, icon, color, compact }: { label: string; selected?: boolean; onPress?: () => void; icon?: IconName; color?: string; compact?: boolean }) {
   const { colors } = useTheme();
-  const accent = color ?? colors.primary;
+  // A caller's colour (a member's, an SMS role's) tints only the icon: text stays on the AA pair.
+  const accent = colors.primaryOnSoft;
+  const glyph = icon ?? (selected ? 'checkmark' : undefined);
   return (
     <Pressable
       onPress={onPress}
@@ -218,16 +224,14 @@ export function Chip({ label, selected, onPress, icon, color, compact }: { label
           gap: 6,
           paddingHorizontal: compact ? 10 : 14,
           height: compact ? 40 : 44,
-          borderRadius: radius.pill,
-          backgroundColor: selected ? accent : colors.surface,
-          borderWidth: 1,
-          borderColor: selected ? accent : colors.border,
+          borderRadius: radius.sm,
+          backgroundColor: selected ? colors.primarySoft : colors.surfaceAlt,
         },
         pressed && { opacity: 0.75 },
       ]}
     >
-      {icon ? <Ionicons name={icon} size={15} color={selected ? '#fff' : accent} /> : null}
-      <Text style={[type.small, { color: selected ? '#fff' : colors.text }]} numberOfLines={1}>
+      {glyph ? <Ionicons name={glyph} size={15} color={color ?? (selected ? accent : colors.textMuted)} /> : null}
+      <Text style={[type.small, { color: selected ? accent : colors.text, fontWeight: selected ? '600' : '400' }]} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
