@@ -504,6 +504,24 @@ export function TxnForm({
       if (c && !existing) setScope(c.scope);
     }
   };
+  // "Add a card" from the form: when you come back with a new card, it's the one picked.
+  const cardsBeforeAdd = useRef<Set<string> | null>(null);
+  const addCard = () => {
+    setKeypad(false);
+    cardsBeforeAdd.current = new Set(cards.map((c) => c.id));
+    router.push("/card/new");
+  };
+  useEffect(() => {
+    const before = cardsBeforeAdd.current;
+    if (!before) return;
+    const added = cards.find((c) => !before.has(c.id));
+    if (!added) return;
+    cardsBeforeAdd.current = null;
+    setMethod("card");
+    setAutoPay(false);
+    setCardId(added.id);
+    if (!existing) setScope(added.scope);
+  }, [cards, existing]);
   const pickCategory = (id: string) => {
     setKeypad(false);
     setCategoryId(id);
@@ -1188,12 +1206,12 @@ export function TxnForm({
               onPress={() => pickPay(o)}
             />
           ))}
-          {type === "expense" && !cards.length ? (
+          {type === "expense" ? (
             <Tile
               width={92}
               icon="add"
-              label="Add a card"
-              onPress={() => router.push("/card/new")}
+              label={cards.length ? "New card" : "Add a card"}
+              onPress={addCard}
             />
           ) : null}
         </TileRow>
