@@ -21,7 +21,7 @@ const TOOL_LINKS: Record<string, { label: string; href: string }> = {
   month_summary: { label: 'Insights', href: '/insights' },
   spending_by_category: { label: 'Insights', href: '/insights' },
   financial_health: { label: 'Insights', href: '/insights' },
-  budget_status: { label: 'Budgets', href: '/budgets' },
+  budget_status: { label: 'Budgets', href: '/dues?view=budgets' },
   upcoming_dues: { label: 'Dues', href: '/dues' },
   loans: { label: 'Dues', href: '/dues' },
   credit_cards: { label: 'Dues', href: '/dues' },

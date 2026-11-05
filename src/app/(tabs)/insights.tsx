@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { budgetUsage, spendByCategory } from '@/domain/budget';
+import { spendByCategory } from '@/domain/budget';
 import { buildCardLedger } from '@/domain/creditCard';
-import { addMonths, daysInMonth, formatMonth, fromParts, isoToYMD, monthKey, parts, shortMonth } from '@/domain/dates';
+import { addMonths, daysInMonth, formatDay, formatMonth, fromParts, isoToYMD, monthKey, parts, shortMonth } from '@/domain/dates';
 import { loanEmisPaid } from '@/domain/dues';
 import { scheduleFor } from '@/domain/emi';
 import type { Paise } from '@/domain/money';
@@ -11,9 +11,8 @@ import { financialHealth } from '@/domain/health';
 import { comparableChange, monthTotals, monthlySeries } from '@/domain/transactions';
 import { useCategoryMap, useConfirmed, useTable, useToday } from '@/data/hooks';
 import { Bars, HeatCalendar, LineChart, RankedBars, type Slice } from '@/ui/components/charts';
-import { Card, IconButton, Money, ProgressBar, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
+import { Card, IconButton, Money, Row, Section, Txt, useMoneyText } from '@/ui/components/core';
 import { Segmented } from '@/ui/components/forms';
-import { BudgetsBody } from '../budgets';
 import { TaxBody } from '../tax';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
@@ -34,7 +33,7 @@ export default function Insights() {
   const health = useMemo(() => financialHealth({ transactions: allTxns, loans, cards, cardOverrides: overrides, budgets }, today, money), [allTxns, loans, cards, overrides, budgets, today, money]);
   const [range, setRange] = useState<Range>('month');
   const [month, setMonth] = useState(monthKey(today));
-  const [view, setView] = useState<'overview' | 'budgets' | 'tax'>('overview');
+  const [view, setView] = useState<'overview' | 'tax'>('overview');
 
   const months = range === 'month' ? 1 : range === 'quarter' ? 3 : 12;
   const monthList = Array.from({ length: months }, (_, i) => monthKey(addMonths(`${month}-01`, -i)));
@@ -88,8 +87,6 @@ export default function Insights() {
     return days;
   }, [txns, month]);
 
-  const budget = useMemo(() => budgetUsage(budgets, txns, month), [budgets, txns, month]);
-
   const cardSpend = useMemo(
     () =>
       cards.map((c) => {
@@ -120,6 +117,24 @@ export default function Insights() {
   }, [loans, allTxns, today]);
 
   const savings = mom.map((s) => s.net);
+  const opts = { compact: true } as const;
+  // One plain sentence per chart: on a glance people read the sentence, not the chart.
+  const momLine = (() => {
+    const cur = mom[mom.length - 1];
+    if (!cur || cur.change === null) return null;
+    const prev = shortMonth(monthKey(addMonths(`${cur.month}-01`, -1)));
+    const head = cur.month === currentMonth ? `So far in ${formatMonth(cur.month)}: ${money(cur.expense, opts)}` : `${formatMonth(cur.month)}: ${money(cur.expense, opts)}`;
+    return `${head}, ${changeText(cur.change)} ${cur.month === currentMonth ? `the same days of ${prev}` : prev}.`;
+  })();
+  const savingsLine = (() => {
+    const full = mom.filter((s) => s.month !== currentMonth && s.income);
+    const last = full[full.length - 1];
+    if (!last) return 'Add your income to see what you keep each month.';
+    return last.net >= 0 ? `You kept ${money(last.net, opts)} in ${formatMonth(last.month)}.` : `You spent ${money(-last.net, opts)} more than came in during ${formatMonth(last.month)}.`;
+  })();
+  const topDay = heat.reduce<(typeof heat)[number] | null>((a, d) => (d.amount > (a?.amount ?? 0) ? d : a), null);
+  const topCard = [...cardSpend].sort((a, b) => b.spend - a.spend)[0];
+  const debtFree = debt ? debt.points.findIndex((p) => p <= 0) : -1;
   const topCat = slices[0];
   const prevCatSpend = topCat && range === 'month' ? (spendByCategory(txns, prevMonth, uptoDay).get(topCat.key) ?? 0) : 0;
   const takeaway = (() => {
@@ -138,12 +153,12 @@ export default function Insights() {
         onChange={setView}
         options={[
           { value: 'overview', label: 'Overview' },
-          { value: 'budgets', label: 'Budgets' },
           { value: 'tax', label: 'Tax' },
         ]}
       />
-      {view === 'budgets' ? <BudgetsBody /> : view === 'tax' ? <TaxBody /> : (
+      {view === 'tax' ? <TaxBody /> : (
         <>
+          <Section title="Am I in good shape?">
           <Card style={{ gap: space(1.5) }}>
             {health.map((m) => (
               <Row key={m.key} gap={1.25} style={{ alignItems: 'flex-start' }}>
@@ -160,15 +175,17 @@ export default function Insights() {
               </Row>
             ))}
           </Card>
+          </Section>
 
           {mom.length ? (
-            <Section title="Month on month">
+            <Section title="Am I spending more than before?">
               <Card style={{ gap: space(1.5) }}>
+                {momLine ? <Txt variant="small" tone="muted">{momLine}</Txt> : null}
                 {/* Invested (net of sales) as a second bar once there is any: money set aside, not spent. */}
                 {mom.some((s) => s.invested > 0) ? (
                   <Bars
                     data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense, Math.max(0, s.invested)] }))}
-                    colors={[colors.expense, colors.info]}
+                    colors={[colors.primary, colors.textFaint]}
                     legend={['Spent', 'Invested']}
                     height={150}
                     highlightLast
@@ -176,7 +193,7 @@ export default function Insights() {
                 ) : (
                   <Bars
                     data={mom.map((s) => ({ key: s.month, label: shortMonth(s.month), tooltip: s.month === currentMonth ? `${formatMonth(s.month)} so far` : formatMonth(s.month), values: [s.expense] }))}
-                    colors={[colors.expense]}
+                    colors={[colors.primary]}
                     height={150}
                     highlightLast
                   />
@@ -220,7 +237,7 @@ export default function Insights() {
                         <View style={{ alignItems: 'flex-end', gap: 2 }}>
                           <Money value={r.expense} variant="bodyStrong" decimals="never" />
                           {r.change !== null ? (
-                            <Txt variant="small" tone={flat ? 'muted' : r.change > 0 ? 'expense' : 'income'}>
+                            <Txt variant="small" tone={flat || r.change < 0 ? 'muted' : 'warn'}>
                               {flat ? 'Same as before' : `${r.change > 0 ? '↑' : '↓'} ${Math.min(999, Math.abs(Math.round(r.change * 100)))}%`}
                             </Txt>
                           ) : null}
@@ -258,7 +275,7 @@ export default function Insights() {
             <IconButton name="chevron-forward" label="Next month" disabled={month >= monthKey(today)} onPress={() => setMonth(monthKey(addMonths(`${month}-01`, 1)))} />
           </Row>
 
-          <Section title="Spending by category">
+          <Section title={range === 'month' ? `Where did my money go in ${formatMonth(month)}?` : 'Where did my money go?'}>
             <Card style={{ gap: space(1.5) }}>
               <Txt variant="small" tone="muted">
                 {takeaway}
@@ -267,51 +284,48 @@ export default function Insights() {
             </Card>
           </Section>
 
-          <Section title="Savings trend">
-            <Card>
+          <Section title="Am I keeping more each month?">
+            <Card style={{ gap: space(1) }}>
+              <Txt variant="small" tone="muted">
+                {savingsLine}
+              </Txt>
               <LineChart points={savings} labels={mom.map((s) => formatMonth(s.month))} color={colors.good} />
             </Card>
           </Section>
 
-          <Section title={`Daily spending · ${formatMonth(month)}`}>
-            <Card>
+          <Section title={`Which days cost the most in ${formatMonth(month)}?`}>
+            <Card style={{ gap: space(1) }}>
+              {topDay ? (
+                <Txt variant="small" tone="muted">
+                  {`Your biggest day was ${formatDay(topDay.date)}: ${money(topDay.amount, opts)}.`}
+                </Txt>
+              ) : null}
               <HeatCalendar days={heat} />
             </Card>
           </Section>
 
-          {budget.length ? (
-            <Section title="Budgets" action="Change" onAction={() => setView('budgets')}>
-              <Card style={{ gap: space(1.5) }}>
-                {budget.map((b) => (
-                  <View key={b.categoryId} style={{ gap: 6 }}>
-                    <Row style={{ justifyContent: 'space-between' }}>
-                      <Txt variant="bodyStrong">{cats.get(b.categoryId)?.name ?? 'Category'}</Txt>
-                      <Txt variant="small" tone={b.level === 'over' ? 'expense' : b.level === 'warn' ? 'warn' : 'muted'}>
-                        {money(b.spent, { compact: true })} / {money(b.limit, { compact: true })}
-                      </Txt>
-                    </Row>
-                    <ProgressBar value={b.ratio} color={b.level === 'over' ? colors.expense : b.level === 'warn' ? colors.warn : colors.good} />
-                  </View>
-                ))}
-              </Card>
-            </Section>
-          ) : null}
-
           {cardSpend.some((c) => c.spend) ? (
-            <Section title="Credit card spend">
-              <Card>
+            <Section title="Which card do I use most?">
+              <Card style={{ gap: space(1) }}>
+                {topCard?.spend ? (
+                  <Txt variant="small" tone="muted">
+                    {`${topCard.card.name}: ${money(topCard.spend, opts)} in ${range === 'month' ? 'the last statement cycle' : `the last ${months} cycles`}.`}
+                  </Txt>
+                ) : null}
                 <Bars data={cardSpend.map((c) => ({ key: c.card.id, label: c.card.name.split(' ')[0], values: [c.spend] }))} colors={[colors.primary]} height={130} />
               </Card>
             </Section>
           ) : null}
 
           {debt ? (
-            <Section title="Debt payoff projection">
+            <Section title="When will my loans be paid off?">
               <Card style={{ gap: space(1) }}>
                 <Txt variant="small" tone="muted">
-                  Outstanding loan principal over the next 5 years if you pay every EMI on time.
+                  {debtFree >= 0
+                    ? `Debt-free around ${debt.labels[debtFree]} if you pay every EMI on time.`
+                    : `${money(debt.points[debt.points.length - 1], opts)} still owed in 5 years if you pay every EMI on time.`}
                 </Txt>
-                <LineChart points={debt.points} labels={debt.labels} color={colors.expense} />
+                <LineChart points={debt.points} labels={debt.labels} color={colors.primary} />
               </Card>
             </Section>
           ) : null}

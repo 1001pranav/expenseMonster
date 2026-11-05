@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { billerMeta, prepaidStatus, viewBill } from '@/domain/bills';
@@ -11,7 +11,9 @@ import { useDues, useTable, useToday } from '@/data/hooks';
 import { Button, Card, Chip, EmptyState, IconCircle, ListRow, Money, Pill, ProgressBar, Row, Section, Txt, useMoneyText, type IconName } from '@/ui/components/core';
 import { CardFace } from '@/ui/components/CardFace';
 import { DueRow, openPay } from '@/ui/components/rows';
+import { Segmented } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
+import { BudgetsBody } from '../budgets';
 import { fonts, space, useTheme } from '@/ui/theme';
 
 type Seg = 'all' | 'loans' | 'cards' | 'bills' | 'insurance';
@@ -23,10 +25,39 @@ const SEGS: { key: Seg; label: string; icon: IconName }[] = [
   { key: 'insurance', label: 'Insurance', icon: 'shield-checkmark' },
 ];
 
-export default function Dues() {
+/**
+ * The Plan tab: what's coming (dues) and what you've allowed yourself (budgets). Both look forward;
+ * Insights looks back. The route stays /dues so reminders and links that open it keep working.
+ */
+export default function Plan() {
+  const params = useLocalSearchParams<{ view?: string }>();
+  const [view, setView] = useState<'dues' | 'budgets'>(params.view === 'budgets' ? 'budgets' : 'dues');
+  // Opening the tab with ?view=budgets (Home's "Set a budget") switches to it even if already
+  // mounted: follow the param when it changes, without an effect (React's "adjust state on prop change").
+  const [seenParam, setSeenParam] = useState(params.view);
+  if (params.view !== seenParam) {
+    setSeenParam(params.view);
+    if (params.view === 'budgets' || params.view === 'dues') setView(params.view);
+  }
+  return (
+    <Screen title="Plan" large tabBar>
+      <Segmented
+        value={view}
+        onChange={setView}
+        options={[
+          { value: 'dues', label: 'Dues' },
+          { value: 'budgets', label: 'Budgets' },
+        ]}
+      />
+      {view === 'budgets' ? <BudgetsBody /> : <DuesBody />}
+    </Screen>
+  );
+}
+
+function DuesBody() {
   const [seg, setSeg] = useState<Seg>('all');
   return (
-    <Screen title="Dues" large tabBar>
+    <>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ marginHorizontal: -space(2), paddingLeft: space(2), flexGrow: 0 }}>
         {SEGS.map((s) => (
           <Chip key={s.key} label={s.label} icon={s.icon} selected={seg === s.key} onPress={() => setSeg(s.key)} />
@@ -34,7 +65,7 @@ export default function Dues() {
         <View style={{ width: space(2) }} />
       </ScrollView>
       {seg === 'all' ? <AllDues /> : seg === 'loans' ? <Loans /> : seg === 'cards' ? <Cards /> : seg === 'bills' ? <Bills /> : <Insurance />}
-    </Screen>
+    </>
   );
 }
 

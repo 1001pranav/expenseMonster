@@ -70,7 +70,7 @@ export default function Home() {
 
   const setup = [
     { label: 'Record your first expense', done: all.length > 0, href: '/quick-add' },
-    { label: 'Set a monthly budget', done: budgets.length > 0, href: '/budgets' },
+    { label: 'Set a monthly budget', done: budgets.length > 0, href: '/dues?view=budgets' },
     { label: 'Add a card, EMI, bill or policy', done: cards.length + loans.length + billers.length + policies.length > 0, href: '/add' },
   ] as const;
   const setupDone = setup.filter((s) => s.done).length;
@@ -157,7 +157,7 @@ export default function Home() {
               </Txt>
             </Row>
           ) : (
-            <Pressable onPress={() => router.push('/budgets')} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' }}>
+            <Pressable onPress={() => router.push({ pathname: '/dues', params: { view: 'budgets' } })} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' }}>
               <Txt variant="small" style={{ color: colors.primary, fontWeight: fonts.semibold }}>
                 Set a monthly budget to see what’s safe to spend
               </Txt>

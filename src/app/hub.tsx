@@ -115,7 +115,7 @@ export default function Hub() {
         <Group>
           <ListRow icon="business-outline" title="Accounts and wallets" subtitle={accounts.length ? `${accounts.length} added` : 'Optional: helps match bank SMS'} chevron onPress={() => router.push('/accounts')} />
           <ListRow icon="trending-up-outline" title="Investments" subtitle="Gold, shares, funds… by person and joint" chevron onPress={() => router.push('/investments')} />
-          <ListRow icon="pie-chart-outline" title="Budgets" chevron onPress={() => router.push('/budgets')} />
+          <ListRow icon="pie-chart-outline" title="Budgets" chevron onPress={() => router.push({ pathname: '/dues', params: { view: 'budgets' } })} />
           <ListRow icon="pricetags-outline" title="Categories" chevron onPress={() => router.push('/categories')} />
           <ListRow icon="flash-outline" title="Rules" subtitle="e.g. screenshots with “credit card” go on your HDFC card" chevron onPress={() => router.push('/rules')} />
           <ListRow icon="wallet-outline" title="Regular income" subtitle={incomes.length ? `${incomes.length} added` : 'Salary, or rent you receive'} chevron onPress={() => router.push('/income')} />
