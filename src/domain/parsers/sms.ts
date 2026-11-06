@@ -9,6 +9,7 @@ import {
   findRef,
   findTime,
   findVpa,
+  isCardBillPayment,
   titleCase,
   type Parsed,
   type ParsedBill,
@@ -24,7 +25,8 @@ const IGNORE = [
   /^(?!.*\bcredited\b).*\b(?:failed|declined|unsuccessful)\b/is,
 ];
 
-const DEBIT = /\b(debited|spent|sent|paid|withdrawn|purchase|txn of|txn(?=\s*(?:₹|rs\b|inr\b))|transferred|deducted|charged|used for)\b/i;
+// "Thank you for using your Credit Card XX5678 for Rs 499 at AMAZON": some card issuers' only word for a purchase.
+const DEBIT = /\b(debited|spent|sent|paid|withdrawn|purchase|txn of|txn(?=\s*(?:₹|rs\b|inr\b))|transferred|deducted|charged|used for|thank(?:s| you) for using)\b/i;
 const CREDIT = /\b(credited|received|deposited|refund(?:ed)?|reversed|added)\b/i;
 
 function direction(text: string): 'debit' | 'credit' | null {
@@ -43,8 +45,8 @@ function findPayee(text: string, dir: 'debit' | 'credit'): string | null {
           /UPI\/P2[AM]\/\d+\/([^/\n]+)/i,
           /;\s*([A-Za-z0-9 .&'_-]{2,40}?)\s+credited/i,
           /\b(?:trf|transfer(?:red)?)\s+to\s+([A-Za-z0-9 .&'@_-]{2,40}?)(?=\s+(?:ref\w*|on|upi|via)\b|[.\n]|$)/i,
-          /\bat\s+([A-Za-z0-9 .&'*_-]{2,40}?)(?=\s+(?:on|via|ref|avl|txn|for)\b|[.\n]|$)/i,
-          /\bto\s+(?!your\b|a\/c\b|ac\b)([A-Za-z0-9 .&'@_-]{2,40}?)(?=\s+(?:on|via|ref|upi|from)\b|[.\n]|$)/i,
+          /\bat\s+([A-Za-z0-9 .&'*_-]{2,40}?)(?=\s+(?:on|via|ref|avl|txn|for|using)\b|[.\n]|$)/i,
+          /\bto\s+(?!your\b|a\/c\b|ac\b)([A-Za-z0-9 .&'@_-]{2,40}?)(?=\s+(?:on|via|ref|upi|from|using)\b|[.\n]|$)/i,
           /\bon\s+([A-Z][A-Z0-9 .&'*_-]{2,30})\.\s*(?:avl|if not)/,
           /\bInfo:?\s*([A-Za-z0-9 .&'*/_-]{2,40})/i,
         ]
@@ -133,6 +135,10 @@ export function parseSms(body: string, received: YMD): Parsed | null {
   const ref = findRef(text);
   const payee = titleCase(findPayee(text, dir)) ?? vpa;
   const isRefund = /refund|reversed|reversal|cashback/i.test(text) && dir === 'credit';
+  const isCreditCard = isCard && Boolean(cardLast4);
+  // A card's own SMS can say "Card A/c XX5678": that isn't a bank account. Keep the account only on
+  // the bank's side of a card bill payment, where it says which account the money left.
+  const paysCard = dir === 'debit' && isCardBillPayment(text, { direction: dir, isCreditCard, isRefund, accountLast4 });
 
   let confidence = 0.5;
   if (date) confidence += 0.1;
@@ -149,9 +155,9 @@ export function parseSms(body: string, received: YMD): Parsed | null {
     payee,
     vpa,
     ref,
-    accountLast4: isCard ? null : accountLast4,
+    accountLast4: isCard && !paysCard ? null : accountLast4,
     cardLast4,
-    isCreditCard: isCard && Boolean(cardLast4),
+    isCreditCard,
     isRefund,
     balance: findBalance(text),
     bank: findBank(text),

@@ -3,7 +3,7 @@ import { statementDateFor } from '@/domain/creditCard';
 import { addDays, addMonths, toISO, toYMD, todayYMD, type YMD } from '@/domain/dates';
 import { textHash } from '@/domain/ids';
 import type { Paise } from '@/domain/money';
-import { cardEndingIn, maskedCardDigits, type Parsed, type ParsedBill, type ParsedCardStatement, type ParsedTxn } from '@/domain/parsers/common';
+import { cardEndingIn, isCardBillPayment, isCardPaymentApp, maskedCardDigits, type Parsed, type ParsedBill, type ParsedCardStatement, type ParsedTxn } from '@/domain/parsers/common';
 import { applyFormat } from '@/domain/parsers/custom';
 import { analyzePaymentScreenshot, looksLikeBill, parseBillDocument, type ScreenshotAnalysis, type ScreenshotPayment } from '@/domain/parsers/ocr';
 import { parseSms } from '@/domain/parsers/sms';
@@ -46,11 +46,18 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
   };
   // The sender's card only when the SMS doesn't name an account, and either says "card" or the
   // sender has no account linked; its account only when the SMS isn't about a card.
+  // A card bill paid, seen from the bank's side ("debited from A/c 1234 towards Credit Card 5678")
+  // or the card's ("payment received"); or paid through a card-bill app such as CRED.
+  const paysCard = isCardBillPayment(rawText, p) || (p.direction === 'debit' && !p.isCreditCard && isCardPaymentApp(p.payee, p.vpa));
   const senderCard = bySender?.cardId && !p.accountLast4 && (p.isCreditCard || !bySender.accountId) ? tables.cards.find((c) => c.id === bySender.cardId) : undefined;
-  const card = named.card ?? (named.account ? undefined : senderCard);
-  const senderAccount = bySender?.accountId && !p.isCreditCard && !card ? tables.accounts.find((a) => a.id === bySender.accountId) : undefined;
-  const account = named.account ?? senderAccount;
-  const viaCard = p.isCreditCard || Boolean(card);
+  const onlyCard = tables.cards.filter((c) => !c.deletedAt);
+  const card = paysCard
+    ? (named.card ?? (p.isCreditCard ? senderCard : undefined) ?? (!cardDigits && onlyCard.length === 1 ? onlyCard[0] : undefined))
+    : (named.card ?? (named.account ? undefined : senderCard));
+  const senderAccount = bySender?.accountId && (!p.isCreditCard || paysCard) && (paysCard || !card) ? tables.accounts.find((a) => a.id === bySender.accountId) : undefined;
+  // The card's own "payment received" SMS doesn't know which bank account it came from.
+  const account = paysCard && p.direction === 'credit' ? undefined : (named.account ?? senderAccount);
+  const viaCard = !paysCard && (p.isCreditCard || Boolean(card));
   const flags: string[] = [];
   if (p.isCreditCard && !card && cardDigits) flags.push(`card-hint:${cardDigits}`);
   if (p.isRefund) flags.push('refund');
@@ -68,11 +75,13 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     type = 'transfer';
     [memberId, toMemberId] = p.direction === 'debit' ? [identity.selfMemberId, member.id] : [member.id, identity.selfMemberId];
   }
-  // "Payment received on your credit card" → bill payment, which is a transfer, not income.
-  if (viaCard && p.direction === 'credit' && !p.isRefund && /payment/i.test(rawText)) {
+  // A card bill payment moves money from the bank to the card: a transfer, not income or spending.
+  if (paysCard) {
     type = 'transfer';
     linkType = 'card';
     linkId = card?.id ?? null;
+    memberId = identity.selfMemberId || null;
+    toMemberId = null;
   }
 
   // Payment for a known biller → suggest linking to its open bill.
@@ -110,8 +119,9 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     type,
     amount: p.amount,
     occurredAt: toISO(p.date ?? todayYMD(), p.time),
-    method: type === 'transfer' ? (viaCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank') : (mine.method ?? (viaCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank')),
-    cardId: ruleCard ?? card?.id ?? null,
+    // A card bill is paid from the bank, never "by card" (the same as recording it by hand).
+    method: paysCard ? (p.vpa ? 'upi' : 'bank') : type === 'transfer' ? (viaCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank') : (mine.method ?? (viaCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank')),
+    cardId: paysCard ? (card?.id ?? ruleCard ?? null) : (ruleCard ?? card?.id ?? null),
     accountId: mine.accountId ?? account?.id ?? null,
     payee: mine.payee ?? p.payee,
     vpa: p.vpa,
@@ -119,7 +129,7 @@ function toDraft(p: ParsedTxn, source: Transaction['source'], hash: string, rawT
     toMemberId,
     categoryId,
     linkType,
-    linkId,
+    linkId: paysCard ? (card?.id ?? ruleCard ?? null) : linkId,
     source,
     sourceRef: p.ref,
     sourceHash: hash,

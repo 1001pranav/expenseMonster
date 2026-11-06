@@ -1,6 +1,6 @@
 import { nextExpectedBillDate, pendingFixedBills, rechargeValidity, prepaidStatus } from '@/domain/bills';
 import { addDays, toISO, todayYMD, type YMD } from '@/domain/dates';
-import { findDuplicate } from '@/domain/dedupe';
+import { findDuplicate, mergeDuplicate } from '@/domain/dedupe';
 import type { DueItem } from '@/domain/dues';
 import type { Paise } from '@/domain/money';
 import { advance } from '@/domain/recurrence';
@@ -107,7 +107,10 @@ export async function answerCardHint(id: string, cardId: string) {
   // A full number becomes the card's own; two masked digits ("XXXXXX06") are remembered as a rule.
   if (hint?.length === 4 && !card.last4) await update('cards', cardId, { last4: hint });
   else if (hint && !card.last4?.endsWith(hint)) await rememberCard(hint.length === 4 ? hint : `xx${hint}`, t.source === 'ocr' ? 'ocr' : 'sms', cardId);
-  await update('transactions', id, { method: 'card', cardId, accountId: null, flags: stripFlag(t.flags, 'card-hint') });
+  const flags = stripFlag(t.flags, 'card-hint');
+  // A card bill payment stays paid from the bank: it's the card that was paid, not paid with.
+  if (t.type === 'transfer' && t.linkType === 'card') await update('transactions', id, { cardId, linkId: cardId, flags });
+  else await update('transactions', id, { method: 'card', cardId, accountId: null, flags });
 }
 
 /** A rule of your own: "when a screenshot / SMS mentions `text`, it was paid with this card". */
@@ -140,7 +143,11 @@ function stripFlag(flags: string | null, prefix: string) {
 export async function addCapture(draft: TxnDraft): Promise<{ row: Transaction | null; duplicate: boolean; duplicateOf: string | null }> {
   const base = blankTxn({ ...draft, status: 'pending' });
   const dup = findDuplicate(base as Transaction, allTransactionsIncludingRejected());
-  if (dup?.kind === 'exact') return { row: null, duplicate: true, duplicateOf: dup.existing.id };
+  if (dup?.kind === 'exact') {
+    const patch = mergeDuplicate(dup.existing, base);
+    if (patch) await update('transactions', dup.existing.id, patch);
+    return { row: null, duplicate: true, duplicateOf: dup.existing.id };
+  }
   const flags = dup ? [base.flags, `duplicate:${dup.existing.id}`].filter(Boolean).join(',') : base.flags;
   const row = await insert('transactions', { ...base, flags });
   return { row, duplicate: Boolean(dup), duplicateOf: dup?.existing.id ?? null };

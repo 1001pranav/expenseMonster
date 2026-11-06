@@ -97,6 +97,33 @@ export function maskedCardDigits(text: string): string | null {
   return m ? m[1] : null;
 }
 
+// "debited from A/c XX1234 towards HDFC Credit Card XX5678", "for Credit Card payment", "CC bill payment".
+// Words in between can't be "using"/"used": "Thank you for using your Credit Card" is a purchase.
+const PAYS_CARD = /\b(?:towards|to|for)\s+(?:(?!using\b|used\b)[a-z]+\s+){0,4}credit\s*card\b|\bcredit\s*card\s*(?:bill\s*)?(?:payment|dues?)\b|\bcc\s*(?:bill\s*)?payment\b/i;
+const AUTO_DEBIT = /\bauto[\s-]?(?:debit|pay)\b|\bstanding\s+instruction\b/i;
+
+/**
+ * A credit card bill being paid, seen from either side of it (one payment usually sends both):
+ * - the card: "Payment of Rs 10,000 received on your Credit Card XX5678"
+ * - the bank: "Rs 10,000 debited from A/c XX1234 towards Credit Card XX5678"
+ * The bank side must name the account it left (or be an auto-debit), so a purchase on the card
+ * that happens to say "for … credit card" isn't taken for a bill payment.
+ */
+export function isCardBillPayment(text: string, p: Pick<ParsedTxn, 'direction' | 'isCreditCard' | 'isRefund' | 'accountLast4'>): boolean {
+  if (!p.isCreditCard || p.isRefund) return false;
+  if (p.direction === 'credit') return /payment/i.test(text);
+  return PAYS_CARD.test(text) && (Boolean(p.accountLast4) || AUTO_DEBIT.test(text));
+}
+
+/**
+ * Apps that exist to pay credit card bills: money sent to them is a card bill payment, and the
+ * card's own "payment received" SMS follows. Only CRED's bill-pay account ("CRED Club",
+ * cred.club@…); a merchant paid through CRED Pay shows the merchant's name instead.
+ */
+export function isCardPaymentApp(payee: string | null, vpa: string | null): boolean {
+  return /^cred(?:\s*club)?$/i.test(payee?.trim() ?? '') || /^cred\.club@/i.test(vpa ?? '');
+}
+
 /** The one saved card whose number ends in these digits (2–4 of them), if exactly one does. */
 export function cardEndingIn<T extends { last4: string | null }>(cards: T[], digits: string | null): T | undefined {
   if (!digits) return undefined;
