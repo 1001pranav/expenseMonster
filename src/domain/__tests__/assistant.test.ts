@@ -30,7 +30,7 @@ const loan = (over: Partial<Loan> = {}): Loan => ({
   ...over,
 });
 
-const category = (id: string, name: string): Category => ({ ...base({ id }), name, icon: 'x', color: '#000', kind: 'expense', parentId: null, sortOrder: 0 });
+const category = (id: string, name: string): Category => ({ ...base({ id }), name, icon: 'x', color: '#000', kind: 'expense', parentId: null, sortOrder: 0, hidden: 0 });
 const budget = (categoryId: string, amount: number): Budget => ({ ...base(), categoryId, month: '*', amount });
 
 const salary = (month: string, amount = 1_00_000_00) => txn({ type: 'income', amount, occurredAt: `${month}-01T04:00:00.000Z`, method: 'bank' as never });
@@ -168,6 +168,13 @@ describe('finance tools', () => {
   it('reports budget usage', () => {
     const r = tools.budget_status.run({}) as { budgets: { category: string; used: string; status: string }[] };
     expect(r.budgets[0]).toMatchObject({ category: 'Food', used: '90%', status: 'close to limit' });
+  });
+
+  it('measures budgets over the pay period when the user budgets from payday', () => {
+    // Payday 10: on 20 Sep the period is 10 Sep – 9 Oct, so the ₹4,500 on 5 Sep isn't in it.
+    const r = financeTools({ ...snap, payday: 10 }, TODAY).budget_status.run({}) as { month: string; period: string; budgets: { used: string }[] };
+    expect(r).toMatchObject({ month: '2026-09', period: '2026-09-10 to 2026-10-09' });
+    expect(r.budgets[0].used).toBe('0%');
   });
 
   it('clamps and sanitises arguments instead of trusting the model', () => {

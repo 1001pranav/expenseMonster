@@ -4,7 +4,7 @@ import { expandExtra, foldUnknown, hasAdoptableExtra, replacesHeld, type HeldRec
 import { isNewer } from '@/domain/sync/merge';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableMap, type TableName } from '@/domain/types';
 import { getDb } from './client';
-import { columnsOf, MIGRATIONS } from './schema';
+import { columnsOf, defaultOf, MIGRATIONS } from './schema';
 import { DEFAULT_SETTINGS, EMPTY_TABLES, getState, type Identity, type Settings } from './store';
 import { logFailure } from '@/services/diagnostics';
 
@@ -18,7 +18,7 @@ function pick(table: TableName, row: Record<string, unknown>) {
   const cols = columnsOf(table);
   const values = cols.map((c) => {
     const v = row[c];
-    if (v === undefined) return null;
+    if (v === undefined) return defaultOf(table, c);
     if (typeof v === 'boolean') return v ? 1 : 0;
     return v as string | number | null;
   });
@@ -382,7 +382,10 @@ export async function saveIdentity(patch: Partial<Identity>): Promise<void> {
 export async function loadSettings(): Promise<Settings> {
   const raw = await getMeta('settings');
   try {
-    return { ...DEFAULT_SETTINGS, ...(raw ? JSON.parse(raw) : {}) };
+    const saved = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
+    // Settings saved before the period choice existed: a payday other than the 1st meant pay day mode.
+    if (!saved.budgetPeriod && saved.payday && saved.payday !== 1) saved.budgetPeriod = 'payday';
+    return { ...DEFAULT_SETTINGS, ...saved };
   } catch (e) {
     logFailure('settings unreadable, using defaults', e);
     return DEFAULT_SETTINGS;

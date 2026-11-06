@@ -4,7 +4,7 @@ import { AppState, Platform } from 'react-native';
 import { answer, type Answer, type ChatMessage, type Generate } from '@/domain/assistant/answer';
 import { financeTools, type FinanceSnapshot } from '@/domain/assistant/tools';
 import { todayYMD } from '@/domain/dates';
-import { getState } from '@/db/store';
+import { getState, paydayOf } from '@/db/store';
 import { logFailure } from './diagnostics';
 
 /**
@@ -107,6 +107,7 @@ function snapshot(): FinanceSnapshot {
     incomes: t.incomes,
     categories: t.categories,
     budgets: t.budgets,
+    payday: paydayOf(getState().settings),
   };
 }
 

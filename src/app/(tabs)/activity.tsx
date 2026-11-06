@@ -1,21 +1,21 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { SectionList, View } from 'react-native';
+import { RefreshControl, ScrollView, SectionList, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { filterActivity, type Flow, type Kind, type Period } from '@/domain/activityFilter';
 import { pickedRange, type DatePick } from '@/domain/datePick';
-import { addDays, addMonths, formatDay, formatMonth, monthKey, relativeDay, type YMD } from '@/domain/dates';
+import { addDays, addMonths, diffDays, formatDay, formatMonth, monthKey, type YMD } from '@/domain/dates';
 import { deleteTransaction, restoreTransaction } from '@/data/actions';
 import { useCategoryMap, useTable, useToday } from '@/data/hooks';
-import { Button, Chip, EmptyState, IconButton, Money, Row, Txt, useMoneyText } from '@/ui/components/core';
+import { Button, Chip, EmptyState, IconButton, Row, Txt, useMoneyText } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { Segmented, TextField } from '@/ui/components/forms';
 import { RangeCalendar } from '@/ui/components/RangeCalendar';
 import { TxnRow, groupByDay } from '@/ui/components/rows';
-import { Header, TAB_BAR_SPACE } from '@/ui/components/Screen';
+import { TAB_BAR_SPACE } from '@/ui/components/Screen';
 import { SwipeRow } from '@/ui/components/SwipeRow';
+import { useSmsRefresh } from '@/ui/hooks/useSmsRefresh';
 import { fonts, space, useTheme } from '@/ui/theme';
-import { Backdrop } from '@/ui/components/Aurora';
 
 /** "pick": a day or a range picked on one calendar (domain/datePick.ts). */
 type PeriodKind = 'month' | 'pick' | 'last30' | 'all';
@@ -47,7 +47,7 @@ function toPeriod(kind: PeriodKind, month: string, from: YMD, to: YMD): Period {
   return { kind };
 }
 
-export default function Spending() {
+export default function Activity() {
   const { colors } = useTheme();
   const money = useMoneyText();
   const insets = useSafeAreaInsets();
@@ -63,6 +63,8 @@ export default function Spending() {
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [filters, setFilters] = useState(false);
   const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const sms = useSmsRefresh();
   const [monthOffset, setMonthOffset] = useState(0);
   const [pick, setPick] = useState<DatePick>({ start: today, end: today });
   const [allCats, setAllCats] = useState(false);
@@ -132,8 +134,6 @@ export default function Spending() {
           : periodKind === 'last30'
             ? 'in the last 30 days'
             : 'in all';
-  // Showing only money in: lead with what came in.
-  const headline = flow === 'income' ? totalIn : totalOut;
   const clearFilters = () => {
     setPeriodKind('month');
     setMonthOffset(0);
@@ -158,86 +158,115 @@ export default function Spending() {
   };
   const clearCard = () => router.setParams({ card: undefined });
 
+  const periodLabel =
+    periodKind === 'month'
+      ? formatMonth(shownMonth)
+      : periodKind === 'pick'
+        ? single
+          ? formatDay(from)
+          : `${formatDay(from)} – ${formatDay(to)}`
+        : PERIODS.find((p) => p.key === periodKind)!.label;
+  const catLabel = categoryIds.length === 1 ? (cats.get(categoryIds[0])?.name ?? 'Category') : categoryIds.length ? `${categoryIds.length} categories` : 'Category';
+  const dayLabel = (d: YMD) => {
+    const n = diffDays(d, today);
+    const day = formatDay(d, { year: d.slice(0, 4) !== today.slice(0, 4) });
+    return (n === 0 ? `Today · ${day}` : n === -1 ? `Yesterday · ${day}` : day).toUpperCase();
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
-      <Backdrop />
-      <Header title="Spending" large />
-      <View style={{ paddingHorizontal: space(2), gap: space(1.5), paddingBottom: space(1) }}>
-        <Row gap={1}>
-          <View style={{ flex: 1 }}>
-            <TextField value={query} onChangeText={setQuery} placeholder="Search payee, note or amount" icon="search" />
-          </View>
-          <Button title={activeFilters ? `Filter, ${activeFilters}` : 'Filter'} icon="options-outline" variant="secondary" onPress={() => setFilters(true)} style={{ height: 52 }} />
-        </Row>
-        {cardFilter || flow !== 'all' || kind !== 'all' || categoryIds.length ? (
-          <Row gap={1} wrap>
-            {cardFilter ? <Chip compact icon="close" label={cardFilter.name} selected onPress={clearCard} /> : null}
-            {flow !== 'all' ? <Chip compact icon="close" label={FLOWS.find((x) => x.value === flow)!.label} selected onPress={() => setFlow('all')} /> : null}
-            {kind !== 'all' ? <Chip compact icon="close" label={KINDS.find((k) => k.key === kind)!.label} selected onPress={() => setKind('all')} /> : null}
-            {categoryIds.map((id) => (
-              <Chip key={id} compact icon="close" label={cats.get(id)?.name ?? 'Category'} selected onPress={() => toggleCategory(id)} />
-            ))}
-          </Row>
-        ) : null}
-        <Row style={{ justifyContent: 'space-between' }}>
-          {step ? <IconButton name="chevron-back" label={byDay ? 'Previous day' : 'Previous month'} onPress={back} /> : <View style={{ width: 44 }} />}
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <Money value={headline} variant="h1" tone={flow === 'income' ? 'income' : undefined} decimals="never" fit="narrow" />
-            <Txt variant="small" tone="muted" style={{ textAlign: 'center' }}>
-              {flow === 'income' ? `came in ${periodText}` : `spent ${periodText}`}
-              {flow === 'all' && totalIn ? `, ${money(totalIn, { decimals: 'never' })} came in` : ''}
+      <Row style={{ paddingHorizontal: space(2), paddingTop: space(1), minHeight: 52 }}>
+        {searching ? (
+          <>
+            <View style={{ flex: 1 }}>
+              <TextField value={query} onChangeText={setQuery} placeholder="Payee, note, category or amount" icon="search" autoFocus />
+            </View>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              size="sm"
+              onPress={() => {
+                setQuery('');
+                setSearching(false);
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <Txt variant="h1" style={{ flex: 1 }}>
+              Activity
             </Txt>
-          </View>
-          {step ? <IconButton name="chevron-forward" label={byDay ? 'Next day' : 'Next month'} disabled={atLatest} onPress={forward} /> : <View style={{ width: 44 }} />}
-        </Row>
-      </View>
+            <IconButton name="search" label="Search" onPress={() => setSearching(true)} />
+          </>
+        )}
+      </Row>
+
+      {/* Each chip shows what's filtered and opens the filter sheet; the card chip clears itself. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space(1), paddingHorizontal: space(2), paddingVertical: space(1) }}>
+        {cardFilter ? <Chip compact icon="close" label={cardFilter.name} selected onPress={clearCard} /> : null}
+        <Chip compact icon="chevron-down" label={periodLabel} selected={periodKind !== 'month' || monthOffset > 0} onPress={() => setFilters(true)} />
+        <Chip compact icon="chevron-down" label={flow === 'all' ? 'All types' : FLOWS.find((x) => x.value === flow)!.label} selected={flow !== 'all'} onPress={() => setFilters(true)} />
+        <Chip compact icon="chevron-down" label={catLabel} selected={categoryIds.length > 0} onPress={() => setFilters(true)} />
+        <Chip compact icon="chevron-down" label={kind === 'all' ? 'Paid by' : KINDS.find((k) => k.key === kind)!.label} selected={kind !== 'all'} onPress={() => setFilters(true)} />
+        {activeFilters ? <Chip compact icon="close" label="Clear" onPress={clearFilters} /> : null}
+      </ScrollView>
+
+      <Row style={{ paddingHorizontal: space(1), paddingBottom: space(0.5) }}>
+        {step ? <IconButton name="chevron-back" label={byDay ? 'Previous day' : 'Previous month'} onPress={back} /> : <View style={{ width: 44 }} />}
+        <Txt variant="small" tone="muted" style={{ flex: 1, textAlign: 'center', fontVariant: ['tabular-nums'] }} numberOfLines={1}>
+          {flow !== 'income' ? (
+            <>
+              Out <Txt variant="small" style={{ fontWeight: fonts.semibold }}>{money(totalOut, { decimals: 'never' })}</Txt>
+            </>
+          ) : null}
+          {flow === 'all' ? ' · ' : null}
+          {flow !== 'expense' ? (
+            <>
+              In <Txt variant="small" tone="income" style={{ fontWeight: fonts.semibold }}>{`+${money(totalIn, { decimals: 'never' })}`}</Txt>
+            </>
+          ) : null}
+          {` ${periodText}`}
+        </Txt>
+        {step ? <IconButton name="chevron-forward" label={byDay ? 'Next day' : 'Next month'} disabled={atLatest} onPress={forward} /> : <View style={{ width: 44 }} />}
+      </Row>
+
       <SectionList
         sections={sections}
         keyExtractor={(t) => t.id}
-        stickySectionHeadersEnabled={false}
+        stickySectionHeadersEnabled
+        refreshControl={sms.onRefresh ? <RefreshControl refreshing={sms.refreshing} onRefresh={sms.onRefresh} tintColor={colors.primary} colors={[colors.primary]} /> : undefined}
         initialNumToRender={20}
-        contentContainerStyle={{ paddingHorizontal: space(2), paddingBottom: TAB_BAR_SPACE + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: TAB_BAR_SPACE + insets.bottom }}
         renderSectionHeader={({ section }) => (
-          <Row style={{ justifyContent: 'space-between', paddingHorizontal: 4, paddingTop: space(2), paddingBottom: space(1) }}>
-            <Txt variant="small" style={{ fontFamily: fonts.bold, color: colors.textMuted }}>
-              {relativeDay(section.title, today)}, {formatDay(section.title)}
+          <Row style={{ justifyContent: 'space-between', paddingHorizontal: space(2), paddingTop: space(2), paddingBottom: space(0.75), backgroundColor: colors.bg }}>
+            <Txt variant="caption" tone="faint" style={{ fontWeight: fonts.semibold, letterSpacing: 0.5 }}>
+              {dayLabel(section.title)}
             </Txt>
-            {flow === 'income' ? (section.in ? <Money value={section.in} variant="small" tone="income" /> : null) : section.out ? <Money value={section.out} variant="small" tone="muted" /> : null}
+            {flow === 'income' ? (
+              section.in ? <Txt variant="caption" tone="income" style={{ fontWeight: fonts.semibold, fontVariant: ['tabular-nums'] }}>{`+${money(section.in, { decimals: 'auto' })}`}</Txt> : null
+            ) : section.out ? (
+              <Txt variant="caption" tone="faint" style={{ fontWeight: fonts.semibold, fontVariant: ['tabular-nums'] }}>{money(section.out, { decimals: 'auto' })}</Txt>
+            ) : null}
           </Row>
         )}
-        renderItem={({ item, index, section }) => {
-          const first = index === 0;
-          const last = index === section.data.length - 1;
-          return (
-            <View
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderLeftWidth: 1,
-                borderRightWidth: 1,
-                borderTopWidth: first ? 1 : 0,
-                borderBottomWidth: last ? 1 : 0,
-                borderTopLeftRadius: first ? 20 : 0,
-                borderTopRightRadius: first ? 20 : 0,
-                borderBottomLeftRadius: last ? 20 : 0,
-                borderBottomRightRadius: last ? 20 : 0,
-                overflow: 'hidden',
-              }}
-            >
-              {first ? null : <View style={{ height: 1, backgroundColor: colors.surfaceAlt, marginLeft: space(8.5) }} />}
-              <SwipeRow right={[{ label: 'Delete', icon: 'trash', color: colors.expenseText, onPress: () => onDelete(item.id) }]}>
+        renderItem={({ item, index }) => (
+          <View>
+            {/* Hairline inset to the text, not a card per day. */}
+            {index ? <View style={{ height: 1, backgroundColor: colors.border, marginLeft: space(2) + 40 + space(1.5) }} /> : null}
+            <SwipeRow right={[{ label: 'Delete', icon: 'trash', color: colors.expenseText, onPress: () => onDelete(item.id) }]}>
+              <View style={{ backgroundColor: colors.bg }}>
                 <TxnRow t={item} cat={cats.get(item.categoryId ?? '')} card={cards.find((c) => c.id === item.cardId)} />
-              </SwipeRow>
-            </View>
-          );
-        }}
+              </View>
+            </SwipeRow>
+          </View>
+        )}
         ListEmptyComponent={
           <EmptyState
             icon={query ? 'search' : 'receipt-outline'}
             title={query ? `Nothing matches "${query.trim()}"` : 'Nothing here yet'}
-            body={query ? 'Try a payee, category, note or amount.' : activeFilters ? `No entries ${periodText} for this filter.` : `No entries in ${formatMonth(shownMonth)}. Tap + to add one.`}
-            action={query ? 'Clear search' : activeFilters ? 'Clear filters' : undefined}
-            onAction={query ? () => setQuery('') : activeFilters ? clearFilters : undefined}
+            body={query ? 'Try a payee, category, note or amount.' : activeFilters ? `No entries ${periodText} for this filter.` : `Nothing logged in ${formatMonth(shownMonth)} yet.`}
+            action={query ? 'Clear search' : activeFilters ? 'Clear filters' : 'Log an expense'}
+            onAction={query ? () => setQuery('') : activeFilters ? clearFilters : () => router.push('/quick-add')}
           />
         }
       />

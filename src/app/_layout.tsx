@@ -1,10 +1,4 @@
 import '@/polyfills';
-import { Manrope_400Regular } from '@expo-google-fonts/manrope/400Regular';
-import { Manrope_500Medium } from '@expo-google-fonts/manrope/500Medium';
-import { Manrope_600SemiBold } from '@expo-google-fonts/manrope/600SemiBold';
-import { Manrope_700Bold } from '@expo-google-fonts/manrope/700Bold';
-import { Manrope_800ExtraBold } from '@expo-google-fonts/manrope/800ExtraBold';
-import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, useNavigationContainerRef, usePathname } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
@@ -30,7 +24,7 @@ import { stageImage } from '@/services/files';
 import { usePendingShare } from '@/services/pendingShare';
 import { installErrorCapture, logError, logFailure, logInfo } from '@/services/diagnostics';
 import { hasPin } from '@/services/secure';
-import { checkNewBankSms, drainSmsInbox, smsCaptureAvailable } from '@/services/smsInbox';
+import { checkNewBankSms, drainSmsInbox, smsCaptureAvailable, smsSummary } from '@/services/smsInbox';
 import { startHomeWidgets } from '@/services/homeWidgets';
 import { isOwnBiometricTransition } from '@/services/unlock';
 import { Button, Txt } from '@/ui/components/core';
@@ -65,7 +59,8 @@ let latestRoot = 0;
 function App() {
   const [rootId] = useState(() => ++latestRoot);
   const { colors, dark } = useTheme();
-  const [fontsLoaded] = useFonts({ Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold });
+  // The system font needs no loading (see theme.ts).
+  const fontsLoaded = true;
   const ready = useStore((s) => s.ready);
   const identity = useStore((s) => s.identity);
   const settings = useStore((s) => s.settings);
@@ -205,10 +200,8 @@ function App() {
     if (!ready || locked || !identity.onboarded || !smsCaptureAvailable) return;
     // While a shared screenshot is being handled, don't open the import screen over it.
     (isSyncHeld() ? drainSmsInbox() : checkNewBankSms())
-      .then(({ added, saved }) => {
-        if (!added) return;
-        const waiting = added - saved;
-        toast(waiting ? `${added} new from your bank SMS, ${waiting} to check` : `${added} new from your bank SMS, all saved`, { tone: 'success' });
+      .then((r) => {
+        if (r.added) toast(smsSummary(r), { tone: 'success' });
       })
       .catch((e) => logFailure('sms: reading copied messages failed', e));
   }, [ready, locked, identity.onboarded]);
@@ -245,6 +238,7 @@ function App() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg }, animation: 'slide_from_right' }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+        <Stack.Screen name="quick-add" options={{ presentation: 'transparentModal', animation: 'fade' }} />
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
       </Stack>
       <ShareCatcher />

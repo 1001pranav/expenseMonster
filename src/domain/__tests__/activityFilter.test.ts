@@ -2,7 +2,7 @@ import { filterActivity, inPeriod, type ActivityFilter } from '../activityFilter
 import type { Category } from '../types';
 import { at, base, txn } from './fixtures';
 
-const cat = (id: string, parentId: string | null = null): Category => ({ ...base({ id }), name: id, icon: 'pricetag', color: '#000', kind: 'expense', parentId, sortOrder: 0 });
+const cat = (id: string, parentId: string | null = null): Category => ({ ...base({ id }), name: id, icon: 'pricetag', color: '#000', kind: 'expense', parentId, sortOrder: 0, hidden: 0 });
 const categories = [cat('food'), cat('food-out', 'food'), cat('travel'), cat('salary')];
 const T = '2026-10-29';
 

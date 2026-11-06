@@ -145,7 +145,7 @@ export default function Review() {
 function SectionHead({ title, note }: { title: string; note: string }) {
   return (
     <Row style={{ justifyContent: 'space-between', paddingHorizontal: 4 }}>
-      <Txt variant="h3" style={{ fontFamily: fonts.displaySemi, fontSize: 17 }}>
+      <Txt variant="h3" style={{ fontWeight: fonts.displaySemi, fontSize: 17 }}>
         {title}
       </Txt>
       <Txt variant="small" tone="muted">
@@ -184,7 +184,7 @@ function SmsSource({ txnId, inset }: { txnId: string; inset?: boolean }) {
       style={{ marginTop: inset ? space(1) : 0, marginLeft: inset ? space(6.5) : 0, padding: space(1.25), borderRadius: 10, backgroundColor: colors.surfaceAlt, gap: 4 }}
     >
       <Row gap={0.75}>
-        <Txt variant="small" style={{ fontFamily: fonts.bold, flexShrink: 1 }} numberOfLines={1}>
+        <Txt variant="small" style={{ fontWeight: fonts.bold, flexShrink: 1 }} numberOfLines={1}>
           {sms.sender ?? 'Sender unknown'}
         </Txt>
         <Txt variant="caption" tone="muted">

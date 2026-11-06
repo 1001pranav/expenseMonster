@@ -19,10 +19,11 @@ describe('household space', () => {
 
   it('hides the record type and id behind the key', () => {
     const s = householdSpace(key, 'house-1');
-    const k = recordKey(s, 'transactions', 'abc');
+    // An id with letters hex can't contain: 'abc' failed at random (~1 in 70 keys contain it).
+    const k = recordKey(s, 'transactions', 'txn-42');
     expect(k).toMatch(/^[0-9a-f]{64}$/);
-    expect(k).not.toBe(recordKey(s, 'loans', 'abc'));
-    expect(k).not.toContain('abc');
+    expect(k).not.toBe(recordKey(s, 'loans', 'txn-42'));
+    expect(k).not.toContain('txn-42');
   });
 });
 

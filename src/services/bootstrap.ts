@@ -45,6 +45,7 @@ export async function bootstrap(): Promise<void> {
   const seedRow = (c: (typeof SEED_CATEGORIES)[number], i: number) => ({
     ...c,
     parentId: null,
+    hidden: 0 as const,
     sortOrder: i,
     scope: 'household' as const,
     createdAt: '2000-01-01T00:00:00.000Z',

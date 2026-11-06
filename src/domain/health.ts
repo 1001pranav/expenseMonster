@@ -1,6 +1,7 @@
 import { buildCardLedger } from './creditCard';
 import { addMonths, isoToYMD, monthKey, shortMonth, type YMD } from './dates';
-import { budgetUsage } from './budget';
+import { cycleUsage } from './budget';
+import { cycleFor } from './cycle';
 import { loanEmisPaid } from './dues';
 import { loanProgress, scheduleFor } from './emi';
 import { formatINR, type Paise } from './money';
@@ -25,6 +26,8 @@ export interface HealthInput {
   cards: CreditCard[];
   cardOverrides: CardStatementOverride[];
   budgets: Budget[];
+  /** Budget period start day (Settings › Budget period); 1 = calendar months. */
+  payday?: number;
 }
 
 /** Complete months used for averages: a month in progress would understate both income and spend. */
@@ -126,8 +129,8 @@ export function financialHealth(input: HealthInput, today: YMD, money: (p: Paise
     });
   }
 
-  // Budgets this month.
-  const usage = budgetUsage(input.budgets, input.transactions, monthKey(today));
+  // Budgets this period (payday to payday, or the calendar month).
+  const usage = cycleUsage(input.budgets, input.transactions, cycleFor(today, input.payday ?? 1));
   if (!usage.length) {
     out.push({ key: 'budgets', label: 'Budgets', value: '—', status: 'unknown', reason: 'No budgets set for this month.' });
   } else {

@@ -11,8 +11,8 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>
 
 const TABS: Record<string, { label: string; icon: IconName; active: IconName }> = {
   index: { label: 'Home', icon: 'home-outline', active: 'home' },
-  activity: { label: 'Spending', icon: 'list-outline', active: 'list' },
-  dues: { label: 'Dues', icon: 'calendar-outline', active: 'calendar' },
+  activity: { label: 'Activity', icon: 'list-outline', active: 'list' },
+  dues: { label: 'Plan', icon: 'calendar-outline', active: 'calendar' },
   insights: { label: 'Insights', icon: 'bar-chart-outline', active: 'bar-chart' },
 };
 
@@ -49,7 +49,7 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
             </View>
           ) : null}
         </View>
-        <Txt variant="caption" style={{ color: focused ? colors.primary : colors.textMuted, fontFamily: focused ? fonts.bold : fonts.semibold }}>
+        <Txt variant="caption" style={{ color: focused ? colors.primary : colors.textMuted, fontWeight: focused ? fonts.bold : fonts.semibold }}>
           {meta.label}
         </Txt>
       </Pressable>
@@ -78,12 +78,18 @@ function TabBar({ state, navigation, insets }: TabBarProps) {
       <View style={{ flex: 1, alignItems: 'center' }}>
         <Pressable
           onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            router.push('/quick-add');
+          }}
+          // Hold for the full form: transfers, splits, payee and note up front.
+          onLongPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             router.push({ pathname: '/txn/new', params: { type: 'expense' } });
           }}
           accessibilityRole="button"
           accessibilityLabel="Add an expense"
-          style={({ pressed }) => ({ width: 52, height: 52, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
+          accessibilityHint="Hold to open the full form"
+          style={({ pressed }) => ({ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pressed ? 0.94 : 1 }] })}
         >
           <Ionicons name="add" size={30} color={colors.primaryText} />
         </Pressable>

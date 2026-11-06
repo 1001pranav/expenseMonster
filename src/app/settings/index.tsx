@@ -3,12 +3,11 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { saveSettings } from '@/db/repo';
 import { useStore } from '@/db/store';
-import { ensurePermission, rescheduleAll } from '@/services/notifications';
 import { clearPin, hasPin, setPin } from '@/services/secure';
 import { eraseEverything } from '@/services/wipe';
 import { Button, Card, Chip, Divider, ListRow, Row, Section, Txt } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
-import { Segmented, SwitchRow, TextField } from '@/ui/components/forms';
+import { SwitchRow, TextField } from '@/ui/components/forms';
 import { Screen } from '@/ui/components/Screen';
 import { space, useTheme } from '@/ui/theme';
 
@@ -40,7 +39,7 @@ export default function Settings() {
   };
 
   return (
-    <Screen title="Lock, privacy and look" back>
+    <Screen title="App lock and privacy" back>
       <Section title="Security">
         <Card style={{ gap: 0 }}>
           <ListRow icon="keypad" iconColor={colors.primary} title={pinSet ? 'Change PIN' : 'Set a 6-digit PIN'} subtitle="Stored as a salted hash in the Android Keystore" chevron onPress={() => setPinSheet(true)} />
@@ -70,50 +69,21 @@ export default function Settings() {
           </View>
           <SwitchRow icon="eye-off" label="Block screenshots" description="Also hides amounts in the recent-apps view" value={settings.screenSecure} onChange={(v) => saveSettings({ screenSecure: v })} />
           <SwitchRow icon="trash-bin" label="Erase after 10 wrong PINs" value={settings.wipeAfterFailures} onChange={(v) => saveSettings({ wipeAfterFailures: v })} />
-          <SwitchRow icon="flash-outline" label="Save clear screenshots automatically" description="When the amount, payee and category are all certain. You get Undo, and anything unsure still waits for a check." value={settings.autoSaveCaptures} onChange={(v) => saveSettings({ autoSaveCaptures: v })} />
-          <SwitchRow icon="image" label="Delete screenshots after approval" description="Off: each entry keeps its screenshot to look at later" value={settings.deleteScreenshots} onChange={(v) => saveSettings({ deleteScreenshots: v })} />
         </Card>
-      </Section>
-
-      <Section title="Reminders and sharing">
-        <Card padded={false} style={{ overflow: 'hidden' }}>
-          <ListRow
-            icon="notifications"
-            iconColor={colors.warn}
-            title="Reminders"
-            subtitle="Allow notifications and rebuild schedule"
-            chevron
-            onPress={async () => {
-              if (!(await ensurePermission())) return toast('Notifications are blocked in Android settings', { tone: 'error' });
-              const n = await rescheduleAll();
-              toast(`${n} reminders scheduled`, { tone: 'success' });
-            }}
-          />
-        </Card>
-        <Card>
-          <SwitchRow icon="moon" label="Evening review nudge" description="9 PM reminder when captures are waiting" value={settings.reviewNudge} onChange={(v) => saveSettings({ reviewNudge: v })} />
-          <SwitchRow icon="people" label="Share new entries with family by default" description="Off = new entries are private" value={settings.defaultTxnScope === 'household'} onChange={(v) => saveSettings({ defaultTxnScope: v ? 'household' : 'personal' })} />
-        </Card>
-      </Section>
-
-      <Section title="Appearance">
-        <Segmented
-          value={settings.theme}
-          onChange={(v) => saveSettings({ theme: v })}
-          options={[
-            { value: 'system', label: 'System' },
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-          ]}
-        />
       </Section>
 
       <Section title="Privacy">
-        <Card tone="alt" style={{ gap: 6 }}>
-          <Txt variant="small" tone="muted">
-            • Everything is stored on this phone in an encrypted database.{'\n'}• Nothing is uploaded unless you turn on cloud sync or cloud backup, and then only encrypted data the server cannot read.{'\n'}• Screenshots and SMS are read on the phone; SMS text stays on this phone only until you approve or reject the capture, and is never synced or backed up.{'\n'}• Sync files are encrypted with your household key.{'\n'}• The optional assistant runs on this phone; questions and data are never sent anywhere.
-          </Txt>
-        </Card>
+        <SwitchRow icon="eye-off-outline" label="Hide amounts" description="Shows ₹ •••• everywhere until you tap the eye on Home" value={settings.hideAmounts} onChange={(v) => saveSettings({ hideAmounts: v })} />
+        <SwitchRow icon="people-outline" label="Share new entries with family by default" description="Off: new entries are private to you" value={settings.defaultTxnScope === 'household'} onChange={(v) => saveSettings({ defaultTxnScope: v ? 'household' : 'personal' })} />
+      </Section>
+
+      <Section title="How your data is kept">
+        <Txt variant="small" tone="muted" style={{ paddingHorizontal: 4 }}>
+          • Everything is stored on this phone in an encrypted database.{'\n'}• Nothing is uploaded unless you turn on cloud sync or cloud backup, and then only encrypted data the server cannot read.{'\n'}• Screenshots and SMS are read on the phone; SMS text stays on this phone only until you approve or reject the capture, and is never synced or backed up.{'\n'}• Sync files are encrypted with your household key.{'\n'}• The optional assistant runs on this phone; questions and data are never sent anywhere.
+        </Txt>
+      </Section>
+
+      <Section title="Erase">
         <Button title="Erase all data on this phone" variant="danger" icon="warning" onPress={() => setEraseSheet(true)} />
       </Section>
 

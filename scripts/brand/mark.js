@@ -1,9 +1,9 @@
-// The ExpenseMonster mark: a small horned monster peeking over the household ledger, on flat forest green.
-// Matches BrandMark in src/ui/components/Aurora.tsx and the "Ledger + Clear" palette.
-const FOREST = '#0F5C4A';
-const SAGE = '#E8F1EC';
-const PAW = '#C7DCD2';
-const ground = (s) => `<rect width="${s}" height="${s}" fill="${FOREST}"/>`;
+// The ExpenseMonster mark: a small horned monster peeking over the household ledger, on flat ink blue.
+// Matches BrandMark in src/ui/components/Aurora.tsx and the "paper and ink" palette (theme.ts heroBase).
+const INK = '#1C3577';
+const MIST = '#E7ECF8';
+const PAW = '#C4D2FA';
+const ground = (s) => `<rect width="${s}" height="${s}" fill="${INK}"/>`;
 
 // Mark drawn in a 100x100 box centred at 50,54: the monster peeking over the household ledger.
 // `head` is the monster, `page` the ledger sheet, `cut` the eyes, ruled lines and the gap that
@@ -27,11 +27,11 @@ const svg = (s, body) => `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" h
 const place = (s, scale, inner) => `<g transform="translate(${s / 2 - 50 * scale} ${s / 2 - 54 * scale}) scale(${scale})">${inner}</g>`;
 
 module.exports = {
-  FOREST,
-  icon: (s) => svg(s, ground(s) + place(s, s * 0.0078, mark(SAGE, '#FFFFFF', FOREST))),
+  INK,
+  icon: (s) => svg(s, ground(s) + place(s, s * 0.0078, mark(MIST, '#FFFFFF', INK))),
   bg: (s) => svg(s, ground(s)),
-  fg: (s) => svg(s, place(s, s * 0.0062, mark(SAGE, '#FFFFFF', FOREST))),
+  fg: (s) => svg(s, place(s, s * 0.0062, mark(MIST, '#FFFFFF', INK))),
   // Themed (monochrome) icon: the silhouette with eyes, ruled lines and the head/page gap cut out.
   mono: (s) => svg(s, `<defs><mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${s}" height="${s}">${place(s, s * 0.0064, mark('#FFFFFF', '#FFFFFF', '#000000', true))}</mask></defs><rect width="${s}" height="${s}" fill="#FFFFFF" mask="url(#m)"/>`),
-  splash: (s) => svg(s, place(s, s * 0.0085, mark(SAGE, '#FFFFFF', FOREST))),
+  splash: (s) => svg(s, place(s, s * 0.0085, mark(MIST, '#FFFFFF', INK))),
 };

@@ -50,6 +50,8 @@ export interface Category extends BaseRow {
   kind: CategoryKind;
   parentId: string | null;
   sortOrder: number;
+  /** 1: left out of category pickers, kept for the entries already filed under it. */
+  hidden: 0 | 1;
 }
 
 export interface Member extends BaseRow {

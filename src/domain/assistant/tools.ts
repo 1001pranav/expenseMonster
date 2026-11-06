@@ -1,4 +1,5 @@
-import { budgetUsage, spendByCategory } from '../budget';
+import { OVERALL_BUDGET, cycleUsage, spendByCategory } from '../budget';
+import { cycleFor, cycleForMonth } from '../cycle';
 import { buildCardLedger } from '../creditCard';
 import { addMonths, isoToYMD, monthKey, type YMD } from '../dates';
 import { computeDues, loanEmisPaid, type DuesInput } from '../dues';
@@ -20,6 +21,8 @@ import type { Budget, Category } from '../types';
 export interface FinanceSnapshot extends DuesInput {
   categories: Category[];
   budgets: Budget[];
+  /** Budget period start day (1 = calendar months), so answers match Home and Budgets. */
+  payday?: number;
 }
 
 export interface FinanceTool {
@@ -47,7 +50,7 @@ const MONTH_PARAM = { type: 'string', description: 'Month as YYYY-MM. Omit for t
 
 export function financeTools(snap: FinanceSnapshot, today: YMD): Record<string, FinanceTool> {
   const catName = new Map(snap.categories.map((c) => [c.id, c.name]));
-  const nameOf = (id: string | null) => (id ? (catName.get(id) ?? 'Uncategorised') : 'Uncategorised');
+  const nameOf = (id: string | null) => (id === OVERALL_BUDGET ? 'All spending' : id ? (catName.get(id) ?? 'Uncategorised') : 'Uncategorised');
   const live = snap.transactions.filter(isLive);
 
   return {
@@ -94,13 +97,17 @@ export function financeTools(snap: FinanceSnapshot, today: YMD): Record<string, 
     },
 
     budget_status: {
-      description: 'Budget limits and how much of each is used this month.',
+      description: 'Budget limits and how much of each is used this month (or pay period, if the user budgets from payday).',
       parameters: { type: 'object', properties: { month: MONTH_PARAM } },
       run: (args) => {
-        const month = monthArg(args.month, today);
-        const usage = budgetUsage(snap.budgets, live, month);
+        const payday = snap.payday ?? 1;
+        // Same period as Home and Budgets: the calendar month, or the payday period named after it.
+        const cycle = typeof args.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(args.month) ? cycleForMonth(args.month, payday) : cycleFor(today, payday);
+        const month = cycle.key;
+        const usage = cycleUsage(snap.budgets, live, cycle);
         return {
           month,
+          ...(payday === 1 ? {} : { period: `${cycle.start} to ${cycle.end}` }),
           budget_count: usage.length,
           budgets: usage.map((u) => ({
             category: nameOf(u.categoryId),

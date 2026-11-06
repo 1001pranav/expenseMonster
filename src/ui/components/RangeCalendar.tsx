@@ -63,7 +63,7 @@ export function RangeCalendar({ value, onChange, max }: { value: DatePick | null
                   accessibilityLabel={formatDay(day, { year: true })}
                   style={{ alignSelf: 'center', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: end ? colors.primary : 'transparent' }}
                 >
-                  <Txt variant="small" style={{ fontFamily: end ? fonts.bold : undefined, color: end ? colors.primaryText : future ? colors.textFaint : inside ? colors.primaryOnSoft : colors.text }}>
+                  <Txt variant="small" style={{ fontWeight: end ? fonts.bold : undefined, color: end ? colors.primaryText : future ? colors.textFaint : inside ? colors.primaryOnSoft : colors.text }}>
                     {Number(day.slice(8))}
                   </Txt>
                 </Pressable>

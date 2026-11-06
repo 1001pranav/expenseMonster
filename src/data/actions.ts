@@ -4,6 +4,7 @@ import { findDuplicate } from '@/domain/dedupe';
 import type { DueItem } from '@/domain/dues';
 import type { Paise } from '@/domain/money';
 import { advance } from '@/domain/recurrence';
+import { categoryRefs, resplit } from '@/domain/categories';
 import { isLearned } from '@/domain/rules';
 import { isClearCapture, ruleKey } from '@/domain/transactions';
 import type { Bill, Biller, PayMethod, Scope, Transaction, TxnType } from '@/domain/types';
@@ -299,3 +300,39 @@ export async function saveBill(data: Omit<NewRow<'bills'>, 'status' | 'attachmen
 export async function recordSettlement(fromMemberId: string, toMemberId: string, amount: Paise, method: PayMethod, scope: Scope = 'household') {
   return saveTransaction({ type: 'settlement', amount, memberId: fromMemberId, toMemberId, method, scope, categoryId: null });
 }
+
+/** Built-in categories that "Mark paid" files bills, EMIs and premiums under: hide, never delete. */
+export const SYSTEM_CATEGORIES: ReadonlySet<string> = new Set(Object.values(CATEGORY_FOR));
+
+/**
+ * Re-file everything under `from` to `to`, then delete `from`. Covers entries (and their splits),
+ * budgets (a budget the target already has for the same month wins), rules, recurring income and
+ * billers; sub-categories move up a level. Returns how many entries moved.
+ */
+export async function moveAndDeleteCategory(from: string, to: string): Promise<number> {
+  if (from === to || SYSTEM_CATEGORIES.has(from)) return 0;
+  const t = getState().tables;
+  let moved = 0;
+  for (const x of t.transactions) {
+    if (x.deletedAt) continue;
+    const splits = resplit(x.splits, from, to);
+    if (x.categoryId !== from && splits === null) continue;
+    await update('transactions', x.id, { ...(x.categoryId === from ? { categoryId: to } : {}), ...(splits !== null ? { splits } : {}) });
+    moved++;
+  }
+  for (const b of t.budgets) {
+    if (b.deletedAt || b.categoryId !== from) continue;
+    const clash = t.budgets.some((o) => !o.deletedAt && o.categoryId === to && o.month === b.month);
+    if (clash) await remove('budgets', b.id);
+    else await update('budgets', b.id, { categoryId: to });
+  }
+  for (const r of t.rules) if (!r.deletedAt && r.categoryId === from) await update('rules', r.id, { categoryId: to });
+  for (const i of t.incomes) if (!i.deletedAt && i.categoryId === from) await update('incomes', i.id, { categoryId: to });
+  for (const b of t.billers) if (!b.deletedAt && b.categoryId === from) await update('billers', b.id, { categoryId: to });
+  for (const c of t.categories) if (!c.deletedAt && c.parentId === from) await update('categories', c.id, { parentId: null });
+  await remove('categories', from);
+  return moved;
+}
+
+/** What points at a category, from the live tables. */
+export const refsOf = (id: string) => categoryRefs(id, getState().tables);

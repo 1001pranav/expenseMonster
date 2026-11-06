@@ -31,7 +31,8 @@ export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Catego
   const nameOf = (id: string | null) => (id === selfId ? 'You' : (members.find((m) => m.id === id)?.name ?? 'Someone'));
   const sign = t.type === 'expense' ? -1 : t.type === 'income' ? 1 : 0;
   const icon: IconName = isInvestment(t) ? 'trending-up' : isFamilyTransfer(t) ? 'people' : t.type === 'transfer' ? 'swap-horizontal' : ((cat?.icon as IconName) ?? (t.type === 'income' ? 'arrow-down' : 'arrow-up'));
-  const color = t.type === 'transfer' || t.type === 'settlement' ? colors.info : (cat?.color ?? colors.textMuted);
+  // Categories are told apart by icon and label, not colour (one accent in the whole app).
+  const color = t.type === 'income' ? colors.incomeText : colors.textMuted;
   const meta = [t.type === 'settlement' ? 'Settlement' : null, cat && t.payee ? cat.name : null, t.method === 'card' && card ? card.name : METHOD_LABEL[t.method]].filter(Boolean).join(' · ');
   const flags = flagsOf(t);
   return (
@@ -51,7 +52,7 @@ export function TxnRow({ t, cat, card, onPress }: { t: Transaction; cat?: Catego
           {t.scope === 'personal' ? <Ionicons name="lock-closed" size={11} color={colors.textFaint} /> : null}
         </Row>
       }
-      // Spending is the default, so it carries no minus sign; money in is marked with + and blue.
+      // Spending is the default, so it carries no minus sign; money in is marked with + and green.
       right={<Money value={t.amount} tone={sign > 0 ? 'income' : sign === 0 ? 'muted' : 'default'} signed={sign > 0} />}
     />
   );
@@ -104,7 +105,7 @@ export function DueCard({ d, today, onPay }: { d: DueItem; today: YMD; onPay: ()
           opacity: pressed ? 0.8 : 1,
         })}
       >
-        <Txt variant="small" style={{ color: urgent ? '#FFFFFF' : colors.primary, fontFamily: fonts.semibold }}>
+        <Txt variant="small" style={{ color: urgent ? '#FFFFFF' : colors.primary, fontWeight: fonts.semibold }}>
           {d.kind === 'enter_bill' ? 'Enter bill' : d.incoming ? 'Mark received' : 'Pay now'}
         </Txt>
       </Pressable>
@@ -124,7 +125,7 @@ export function DueRow({ d, today, onPay }: { d: DueItem; today: YMD; onPay: () 
       title={d.title}
       subtitle={
         <Txt variant="small" tone="muted" numberOfLines={1}>
-          <Txt variant="small" tone={late ? 'expense' : d.state === 'due' ? 'warn' : 'muted'} style={late || d.state === 'due' ? { fontFamily: fonts.bold } : undefined}>
+          <Txt variant="small" tone={late ? 'expense' : d.state === 'due' ? 'warn' : 'muted'} style={late || d.state === 'due' ? { fontWeight: fonts.bold } : undefined}>
             {when}
           </Txt>
           {d.subtitle ? `, ${d.subtitle}` : ''}
@@ -140,7 +141,7 @@ export function DueRow({ d, today, onPay }: { d: DueItem; today: YMD; onPay: () 
             accessibilityLabel={`${action} ${d.title}`}
             style={({ pressed }) => ({ height: 34, paddingHorizontal: 14, borderRadius: 12, justifyContent: 'center', backgroundColor: late ? colors.primary : 'transparent', borderWidth: late ? 0 : 1.5, borderColor: colors.primary, opacity: pressed ? 0.7 : 1 })}
           >
-            <Txt variant="small" style={{ color: late ? colors.primaryText : colors.primary, fontFamily: fonts.bold }}>
+            <Txt variant="small" style={{ color: late ? colors.primaryText : colors.primary, fontWeight: fonts.bold }}>
               {action}
             </Txt>
           </Pressable>
