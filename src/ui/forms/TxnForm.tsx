@@ -94,10 +94,13 @@ export function TxnForm({
   initialType = "expense",
   initialAmount,
   initialCategoryId,
+  initialPayCardId,
   ocrText,
 }: {
   existing?: Transaction;
   initialType?: TxnType;
+  /** Opened from a card's "Pay early": a bill payment to this card (a transfer from the bank). */
+  initialPayCardId?: string;
   /** Carried over from Quick Add's "Payee, note, more…". */
   initialAmount?: Paise;
   initialCategoryId?: string;
@@ -116,13 +119,16 @@ export function TxnForm({
   const selfId = useSelfId();
   const defaultScope = useStore((s) => s.settings.defaultTxnScope);
   const pending = existing?.status === "pending";
+  const payCard = existing
+    ? undefined
+    : cards.find((c) => c.id === initialPayCardId);
   const flags = existing ? flagsOf(existing) : [];
 
   // A settlement is edited as a family transfer that counts towards who owes whom.
   const [type, setType] = useState<TxnType>(
     existing?.type === "settlement"
       ? "transfer"
-      : (existing?.type ?? initialType),
+      : (existing?.type ?? (payCard ? "transfer" : initialType)),
   );
   const [amountStr, setAmountStr] = useState(
     amountText(existing?.amount ?? initialAmount ?? null),
@@ -143,9 +149,13 @@ export function TxnForm({
   const [categoryId, setCategoryId] = useState<string | null>(
     existing?.categoryId ?? initialCategoryId ?? null,
   );
-  const [method, setMethod] = useState<PayMethod>(existing?.method ?? "upi");
+  const [method, setMethod] = useState<PayMethod>(
+    existing?.method ?? (payCard ? "bank" : "upi"),
+  );
   const [cardId, setCardId] = useState<string | null>(
-    existing?.cardId ?? (cards.length === 1 ? cards[0].id : null),
+    existing?.cardId ??
+      payCard?.id ??
+      (cards.length === 1 ? cards[0].id : null),
   );
   const [accountId, setAccountId] = useState<string | null>(
     existing?.accountId ?? (accounts.length === 1 ? accounts[0].id : null),
@@ -155,7 +165,9 @@ export function TxnForm({
   );
   const [payee, setPayee] = useState(existing?.payee ?? "");
   const [note, setNote] = useState(existing?.note ?? "");
-  const [scope, setScope] = useState<Scope>(existing?.scope ?? defaultScope);
+  const [scope, setScope] = useState<Scope>(
+    existing?.scope ?? payCard?.scope ?? defaultScope,
+  );
   const [payer, setPayer] = useState<string | null>(
     existing?.memberId ?? (selfId || null),
   );
@@ -174,7 +186,11 @@ export function TxnForm({
   const [link, setLink] = useState<{
     type: Transaction["linkType"];
     id: string | null;
-  }>({ type: existing?.linkType ?? null, id: existing?.linkId ?? null });
+  }>(
+    payCard
+      ? { type: "card", id: payCard.id }
+      : { type: existing?.linkType ?? null, id: existing?.linkId ?? null },
+  );
   /**
    * A biller this payment is for when it has no open bill yet (electricity paid without entering the
    * bill first, a recharge, an LPG booking). Saving records that bill, paid, so the biller keeps track.

@@ -1,6 +1,6 @@
 import { addDays, isoToYMD, type YMD } from './dates';
 import type { Paise } from './money';
-import { cardEndingIn, maskedCardDigits, type ParsedTxn } from './parsers/common';
+import { cardEndingIn, isCardBillPayment, isCardPaymentApp, maskedCardDigits, type ParsedTxn } from './parsers/common';
 import { flagsOf, isClearCapture } from './transactions';
 import type { PayMethod, Transaction, TxnType } from './types';
 
@@ -84,20 +84,21 @@ export interface SmsFill {
   date: YMD | null;
   /** UPI reference, kept so the same SMS imported or pasted later is seen as already recorded. */
   sourceRef: string | null;
-  /** A "payment received" on a credit card: a card bill paid, so a transfer to that card. */
+  /** A credit card bill paid (the bank's debit for it or the card's "payment received"): a transfer to that card. */
   paysCardId: string | null;
 }
 
 export function fillFromSms(p: ParsedTxn, text: string, cards: { id: string; last4: string | null }[], accounts: { id: string; last4: string | null }[]): SmsFill {
   const card = p.isCreditCard ? cardEndingIn(cards, p.cardLast4 ?? maskedCardDigits(text)) : undefined;
-  const account = p.isCreditCard ? undefined : cardEndingIn(accounts, p.accountLast4);
-  const cardBill = p.isCreditCard && p.direction === 'credit' && !p.isRefund && /payment/i.test(text);
+  // Both sides of a card bill payment: the bank's debit and the card's "payment received".
+  const cardBill = isCardBillPayment(text, p) || (p.direction === 'debit' && !p.isCreditCard && isCardPaymentApp(p.payee, p.vpa));
+  const account = p.isCreditCard && !(cardBill && p.direction === 'debit') ? undefined : cardEndingIn(accounts, p.accountLast4);
   return {
     type: cardBill ? 'transfer' : p.direction === 'debit' ? 'expense' : 'income',
     amount: p.amount,
     payee: cardBill ? null : (p.payee ?? null),
     vpa: p.vpa,
-    method: cardBill ? 'bank' : p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank',
+    method: cardBill ? (p.vpa ? 'upi' : 'bank') : p.isCreditCard ? 'card' : p.vpa || p.ref ? 'upi' : 'bank',
     cardId: cardBill ? null : (card?.id ?? null),
     accountId: account?.id ?? null,
     date: p.date,

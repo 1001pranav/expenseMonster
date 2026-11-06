@@ -9,6 +9,7 @@ import {
   findRef,
   findTime,
   findVpa,
+  isCardBillPayment,
   titleCase,
   type Parsed,
   type ParsedBill,
@@ -133,6 +134,10 @@ export function parseSms(body: string, received: YMD): Parsed | null {
   const ref = findRef(text);
   const payee = titleCase(findPayee(text, dir)) ?? vpa;
   const isRefund = /refund|reversed|reversal|cashback/i.test(text) && dir === 'credit';
+  const isCreditCard = isCard && Boolean(cardLast4);
+  // A card's own SMS can say "Card A/c XX5678": that isn't a bank account. Keep the account only on
+  // the bank's side of a card bill payment, where it says which account the money left.
+  const paysCard = dir === 'debit' && isCardBillPayment(text, { direction: dir, isCreditCard, isRefund, accountLast4 });
 
   let confidence = 0.5;
   if (date) confidence += 0.1;
@@ -149,9 +154,9 @@ export function parseSms(body: string, received: YMD): Parsed | null {
     payee,
     vpa,
     ref,
-    accountLast4: isCard ? null : accountLast4,
+    accountLast4: isCard && !paysCard ? null : accountLast4,
     cardLast4,
-    isCreditCard: isCard && Boolean(cardLast4),
+    isCreditCard,
     isRefund,
     balance: findBalance(text),
     bank: findBank(text),

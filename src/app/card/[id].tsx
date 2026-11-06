@@ -73,7 +73,14 @@ export default function CardDetail() {
           <MoreMenu title={card.name} actions={[{ label: 'Delete card', icon: 'trash-outline', onPress: onDelete, destructive: true }]} />
         </>
       }
-      footer={unpaid ? <Button title={`Pay bill · ${formatINR(unpaid.remaining)} by ${formatDay(unpaid.dueDate)}`} icon="checkmark" size="lg" variant={unpaid.status === 'overdue' ? 'danger' : 'primary'} onPress={() => router.push({ pathname: '/pay', params: { due: `card:${card.id}:${unpaid.statementDate}` } })} /> : undefined}
+      footer={
+        unpaid ? (
+          <Button title={`Pay bill · ${formatINR(unpaid.remaining)} by ${formatDay(unpaid.dueDate)}`} icon="checkmark" size="lg" variant={unpaid.status === 'overdue' ? 'danger' : 'primary'} onPress={() => router.push({ pathname: '/pay', params: { due: `card:${card.id}:${unpaid.statementDate}` } })} />
+        ) : ledger.outstanding > 0 ? (
+          // No bill yet, but spending on the card: paying it now lowers next statement.
+          <Button title={`Pay early · ${formatINR(ledger.outstanding)}`} icon="arrow-forward" size="lg" variant="secondary" onPress={() => router.push({ pathname: '/txn/new', params: { payCard: card.id, amount: String(ledger.outstanding) } })} />
+        ) : undefined
+      }
     >
       <CardFace name={card.name} last4={card.last4} color={card.color}>
         <Row gap={2}>
