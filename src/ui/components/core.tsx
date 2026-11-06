@@ -231,7 +231,7 @@ export function Chip({ label, selected, onPress, icon, color, compact }: { label
       ]}
     >
       {glyph ? <Ionicons name={glyph} size={15} color={color ?? (selected ? accent : colors.textMuted)} /> : null}
-      <Text style={[type.small, { color: selected ? accent : colors.text, fontWeight: selected ? '600' : '400' }]} numberOfLines={1}>
+      <Text style={[type.small, { flexShrink: 1, color: selected ? accent : colors.text, fontWeight: selected ? '600' : '400' }]} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
