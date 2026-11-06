@@ -129,3 +129,21 @@ describe('folding the second SMS of one payment into the first', () => {
     expect(mergeDuplicate(bank, txn({ type: 'transfer', linkType: 'card', cardId: 'hdfc-cc' }))).toEqual({ cardId: 'hdfc-cc', linkId: 'hdfc-cc', flags: null });
   });
 });
+
+describe('two parser gaps', () => {
+  it('a payee name stops before "using UPI"', () => {
+    expect(read('You paid Rs.250 to Swiggy using UPI. UPI Ref No 512345678902. -PhonePe').payee).toBe('Swiggy');
+    expect(read('Rs 120 paid at Chai Point using UPI on 05-11-26').payee).toBe('Chai Point');
+  });
+
+  it('"Thank you for using your credit card" is a purchase on it', () => {
+    const body = 'Thank you for using your HDFC Bank Credit Card XX5678 for Rs 499 at AMAZON on 05-11-26';
+    const p = read(body);
+    expect(p).toMatchObject({ direction: 'debit', amount: 499_00, payee: 'Amazon', cardLast4: '5678', isCreditCard: true });
+    expect(fillFromSms(p, body, cards, accounts)).toMatchObject({ type: 'expense', method: 'card', cardId: 'hdfc-cc' });
+  });
+
+  it('"using" elsewhere does not turn money in into money out', () => {
+    expect(read('Rs 500 credited to A/c XX1234 using IMPS on 05-11-26').direction).toBe('credit');
+  });
+});

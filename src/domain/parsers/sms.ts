@@ -25,7 +25,8 @@ const IGNORE = [
   /^(?!.*\bcredited\b).*\b(?:failed|declined|unsuccessful)\b/is,
 ];
 
-const DEBIT = /\b(debited|spent|sent|paid|withdrawn|purchase|txn of|txn(?=\s*(?:₹|rs\b|inr\b))|transferred|deducted|charged|used for)\b/i;
+// "Thank you for using your Credit Card XX5678 for Rs 499 at AMAZON": some card issuers' only word for a purchase.
+const DEBIT = /\b(debited|spent|sent|paid|withdrawn|purchase|txn of|txn(?=\s*(?:₹|rs\b|inr\b))|transferred|deducted|charged|used for|thank(?:s| you) for using)\b/i;
 const CREDIT = /\b(credited|received|deposited|refund(?:ed)?|reversed|added)\b/i;
 
 function direction(text: string): 'debit' | 'credit' | null {
@@ -44,8 +45,8 @@ function findPayee(text: string, dir: 'debit' | 'credit'): string | null {
           /UPI\/P2[AM]\/\d+\/([^/\n]+)/i,
           /;\s*([A-Za-z0-9 .&'_-]{2,40}?)\s+credited/i,
           /\b(?:trf|transfer(?:red)?)\s+to\s+([A-Za-z0-9 .&'@_-]{2,40}?)(?=\s+(?:ref\w*|on|upi|via)\b|[.\n]|$)/i,
-          /\bat\s+([A-Za-z0-9 .&'*_-]{2,40}?)(?=\s+(?:on|via|ref|avl|txn|for)\b|[.\n]|$)/i,
-          /\bto\s+(?!your\b|a\/c\b|ac\b)([A-Za-z0-9 .&'@_-]{2,40}?)(?=\s+(?:on|via|ref|upi|from)\b|[.\n]|$)/i,
+          /\bat\s+([A-Za-z0-9 .&'*_-]{2,40}?)(?=\s+(?:on|via|ref|avl|txn|for|using)\b|[.\n]|$)/i,
+          /\bto\s+(?!your\b|a\/c\b|ac\b)([A-Za-z0-9 .&'@_-]{2,40}?)(?=\s+(?:on|via|ref|upi|from|using)\b|[.\n]|$)/i,
           /\bon\s+([A-Z][A-Z0-9 .&'*_-]{2,30})\.\s*(?:avl|if not)/,
           /\bInfo:?\s*([A-Za-z0-9 .&'*/_-]{2,40})/i,
         ]
