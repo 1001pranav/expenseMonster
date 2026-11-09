@@ -68,6 +68,7 @@ import {
 } from "../components/forms";
 import { Screen, goBack } from "../components/Screen";
 import { ScreenshotThumb } from "../components/Screenshot";
+import { SmsBubble, SmsSheet, useCaptureSms } from "../components/CaptureSource";
 import { Tile, TileGrid, TileRow } from "../components/tiles";
 import { fonts, space, useTheme } from "../theme";
 import { deleteAttachment } from "@/services/files";
@@ -210,6 +211,10 @@ export function TxnForm({
   const [rememberCredit, setRememberCredit] = useState(true);
   const queue = usePending().transactions;
   const [viewShot, setViewShot] = useState(false);
+  // The SMS a capture was read from, so it can be re-read while picking a category (and after
+  // "Approve & next" lands here on a capture you haven't seen yet).
+  const sms = useCaptureSms(pending ? existing?.id : undefined);
+  const [viewSms, setViewSms] = useState(false);
   /** The clipboard has text, so the keypad offers "Paste bank SMS". */
   const [clipHasText, setClipHasText] = useState(false);
   /** Where the form was filled from a pasted bank SMS: kept so the same SMS isn't recorded twice. */
@@ -786,34 +791,59 @@ export function TxnForm({
               onPaste={!existing && clipHasText ? pasteSms : undefined}
             />
           ) : null}
-          <Button
-            title={
-              pending
-                ? nextPending
-                  ? "Approve & next"
-                  : "Approve"
-                : amount
-                  ? `Save ${formatINR(amount, { decimals: "auto" })}`
-                  : "Save"
-            }
-            icon="checkmark"
-            onPress={() => save(pending)}
-            loading={saving}
-            size="lg"
-            variant={pending ? "success" : "primary"}
-          />
+          <Row gap={1}>
+            {/* What the capture was read from, one tap away from Approve wherever you have scrolled. */}
+            {pending && sms ? (
+              <Button
+                title="SMS"
+                label="Read the bank SMS"
+                icon="chatbubble-ellipses-outline"
+                variant="secondary"
+                size="lg"
+                onPress={() => setViewSms(true)}
+              />
+            ) : pending && existing?.attachment ? (
+              <Button
+                title="Image"
+                label="View the screenshot"
+                icon="image-outline"
+                variant="secondary"
+                size="lg"
+                onPress={() => setViewShot(true)}
+              />
+            ) : null}
+            <Button
+              title={
+                pending
+                  ? nextPending
+                    ? "Approve & next"
+                    : "Approve"
+                  : amount
+                    ? `Save ${formatINR(amount, { decimals: "auto" })}`
+                    : "Save"
+              }
+              icon="checkmark"
+              onPress={() => save(pending)}
+              loading={saving}
+              size="lg"
+              variant={pending ? "success" : "primary"}
+              style={{ flex: 1 }}
+            />
+          </Row>
         </View>
         )
       }
     >
-      {pending && (existing?.attachment || warned) ? (
-        <Card tone="alt" style={{ gap: 6, flexDirection: "row" }}>
+      {sms ? <SmsSheet sms={sms} visible={viewSms} onClose={() => setViewSms(false)} /> : null}
+      {pending && (existing?.attachment || warned || sms) ? (
+        <Card tone="alt" style={{ gap: space(1.25), flexDirection: "row" }}>
           {existing?.attachment ? (
-            <ScreenshotThumb uri={existing.attachment} />
+            <ScreenshotThumb uri={existing.attachment} open={viewShot} onOpenChange={setViewShot} />
           ) : null}
-          <View style={{ flex: 1, gap: 6 }}>
+          <View style={{ flex: 1, gap: space(1) }}>
+          {sms ? <SmsBubble sms={sms} lines={4} onSurface onPress={() => setViewSms(true)} /> : null}
           <Row gap={1} wrap>
-            <Pill
+            {sms ? null : <Pill
               label={
                 existing?.source === "sms"
                   ? "From SMS"
@@ -822,7 +852,7 @@ export function TxnForm({
                     : "Captured"
               }
               tone="info"
-            />
+            />}
             {existing?.confidence != null ? (
               <Pill
                 label={`${Math.round(existing.confidence * 100)}% sure`}
