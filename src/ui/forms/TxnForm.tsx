@@ -68,7 +68,7 @@ import {
 } from "../components/forms";
 import { Screen, goBack } from "../components/Screen";
 import { ScreenshotThumb } from "../components/Screenshot";
-import { SmsBubble, SmsSheet, useCaptureSms } from "../components/CaptureSource";
+import { ReadTextSheet, SmsBubble, SmsSheet, useCaptureText } from "../components/CaptureSource";
 import { Tile, TileGrid, TileRow } from "../components/tiles";
 import { fonts, space, useTheme } from "../theme";
 import { deleteAttachment } from "@/services/files";
@@ -105,7 +105,7 @@ export function TxnForm({
   /** Carried over from Quick Add's "Payee, note, more…". */
   initialAmount?: Paise;
   initialCategoryId?: string;
-  /** What OCR read, right after a scan. */ ocrText?: string;
+  /** What OCR read, right after a scan (otherwise it is loaded from this phone while pending). */ ocrText?: string;
 }) {
   const { colors } = useTheme();
   const today = useToday();
@@ -211,9 +211,11 @@ export function TxnForm({
   const [rememberCredit, setRememberCredit] = useState(true);
   const queue = usePending().transactions;
   const [viewShot, setViewShot] = useState(false);
-  // The SMS a capture was read from, so it can be re-read while picking a category (and after
-  // "Approve & next" lands here on a capture you haven't seen yet).
-  const sms = useCaptureSms(pending ? existing?.id : undefined);
+  // What a capture was read from (its SMS, or the screenshot's OCR text), so it can be re-read while
+  // picking a category, and after "Approve & next" lands here on a capture you haven't seen yet.
+  const captured = useCaptureText(pending ? existing?.id : undefined);
+  const sms = existing?.source === "sms" ? captured : null;
+  const readText = ocrText ?? (existing?.source === "ocr" ? captured?.body : undefined);
   const [viewSms, setViewSms] = useState(false);
   /** The clipboard has text, so the keypad offers "Paste bank SMS". */
   const [clipHasText, setClipHasText] = useState(false);
@@ -355,7 +357,7 @@ export function TxnForm({
     !ruleHits.length &&
     method === "card" &&
     Boolean(cardId) &&
-    /credit\s*card/i.test(ocrText ?? "credit card");
+    /credit\s*card/i.test(readText ?? "credit card");
   // A card payment that isn't sure of its card asks, in a highlighted "Paid with" (designs 1b, 2a).
   const askCard =
     pending &&
@@ -811,6 +813,16 @@ export function TxnForm({
                 size="lg"
                 onPress={() => setViewShot(true)}
               />
+            ) : pending && readText ? (
+              // The screenshot itself was deleted: what was read off it is all that's left.
+              <Button
+                title="Text"
+                label="Read what was read off the screenshot"
+                icon="document-text-outline"
+                variant="secondary"
+                size="lg"
+                onPress={() => setShowOcr(true)}
+              />
             ) : null}
             <Button
               title={
@@ -835,7 +847,8 @@ export function TxnForm({
       }
     >
       {sms ? <SmsSheet sms={sms} visible={viewSms} onClose={() => setViewSms(false)} /> : null}
-      {pending && (existing?.attachment || warned || sms) ? (
+      {readText ? <ReadTextSheet text={readText} visible={showOcr} onClose={() => setShowOcr(false)} /> : null}
+      {pending && (existing?.attachment || warned || sms || readText) ? (
         <Card tone="alt" style={{ gap: space(1.25), flexDirection: "row" }}>
           {existing?.attachment ? (
             <ScreenshotThumb uri={existing.attachment} open={viewShot} onOpenChange={setViewShot} />
@@ -899,20 +912,15 @@ export function TxnForm({
               UPI reference {existing.sourceRef}
             </Txt>
           ) : null}
-          {ocrText ? (
-            <Pressable
-              onPress={() => setShowOcr((v) => !v)}
-              accessibilityRole="button"
-            >
-              <Txt variant="small" tone="primary">
-                {showOcr ? "Hide what was read" : "Show what was read"}
-              </Txt>
-            </Pressable>
-          ) : null}
-          {showOcr && ocrText ? (
-            <Txt tone="muted" selectable style={{ fontSize: 12 }}>
-              {ocrText}
-            </Txt>
+          {readText ? (
+            <Button
+              title="What was read"
+              icon="document-text-outline"
+              variant="ghost"
+              size="sm"
+              onPress={() => setShowOcr(true)}
+              style={{ alignSelf: "flex-start", paddingHorizontal: 4, height: 32 }}
+            />
           ) : null}
           </View>
         </Card>

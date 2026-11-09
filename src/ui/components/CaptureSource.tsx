@@ -8,10 +8,10 @@ import { Row, Txt } from './core';
 import { Sheet } from './feedback';
 
 /**
- * The bank SMS a capture was read from, kept on this phone only while the capture waits in Check
- * captures. Null while loading, and for captures that have none (screenshots, older captures).
+ * The text a capture was read from (its bank SMS, or what OCR read off its screenshot), kept on this
+ * phone only while the capture waits in Check captures. Null while loading, and for older captures.
  */
-export function useCaptureSms(txnId: string | undefined): CaptureText | null {
+export function useCaptureText(txnId: string | undefined): CaptureText | null {
   // Tagged with its capture, so a stale message never shows for the next one while it loads.
   const [got, setGot] = useState<{ txnId: string; sms: CaptureText | null } | null>(null);
   useEffect(() => {
@@ -73,7 +73,7 @@ export function SmsBubble({ sms, lines = 2, inset, onSurface, onPress }: { sms: 
 
 /** A capture's SMS in Check captures; renders nothing when the capture has none. */
 export function SmsSource({ txnId, inset }: { txnId: string; inset?: boolean }) {
-  const sms = useCaptureSms(txnId);
+  const sms = useCaptureText(txnId);
   return sms ? <SmsBubble sms={sms} inset={inset} /> : null;
 }
 
@@ -99,6 +99,28 @@ export function SmsSheet({ sms, visible, onClose }: { sms: CaptureText; visible:
         <View style={{ padding: space(1.75), borderRadius: 16, borderTopLeftRadius: 4, backgroundColor: colors.surfaceAlt }}>
           <Txt selectable style={{ lineHeight: 22 }}>
             {sms.body}
+          </Txt>
+        </View>
+        <Txt variant="caption" tone="muted" style={{ textAlign: 'center' }}>
+          Kept on this phone only, until the capture is approved or rejected
+        </Txt>
+      </View>
+    </Sheet>
+  );
+}
+
+/** Everything OCR read off a screenshot, to check a payee or amount against. */
+export function ReadTextSheet({ text, visible, onClose }: { text: string; visible: boolean; onClose: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Sheet visible={visible} onClose={onClose} title="What was read">
+      <View style={{ gap: space(1) }}>
+        <Txt variant="small" tone="muted">
+          The text found in the screenshot, line by line. If something is wrong on the form, it was probably read wrong here.
+        </Txt>
+        <View style={{ padding: space(1.75), borderRadius: 16, backgroundColor: colors.surfaceAlt }}>
+          <Txt selectable variant="small" style={{ lineHeight: 20 }}>
+            {text.trim()}
           </Txt>
         </View>
         <Txt variant="caption" tone="muted" style={{ textAlign: 'center' }}>

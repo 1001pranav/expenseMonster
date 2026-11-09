@@ -137,6 +137,7 @@ export async function pruneHistory(days: number): Promise<void> {
 
 // ── capture texts (this phone only, never synced or backed up) ────────────────
 
+/** The text a pending capture was read from: the bank SMS, or what OCR read off a screenshot (the transaction's `source` says which; a screenshot's has no sender or time). */
 export interface CaptureText {
   txnId: string;
   sender: string | null;
