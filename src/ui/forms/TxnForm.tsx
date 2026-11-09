@@ -68,6 +68,7 @@ import {
 } from "../components/forms";
 import { Screen, goBack } from "../components/Screen";
 import { ScreenshotThumb } from "../components/Screenshot";
+import { ReadTextSheet, SmsBubble, SmsSheet, useCaptureText } from "../components/CaptureSource";
 import { Tile, TileGrid, TileRow } from "../components/tiles";
 import { fonts, space, useTheme } from "../theme";
 import { deleteAttachment } from "@/services/files";
@@ -104,7 +105,7 @@ export function TxnForm({
   /** Carried over from Quick Add's "Payee, note, more…". */
   initialAmount?: Paise;
   initialCategoryId?: string;
-  /** What OCR read, right after a scan. */ ocrText?: string;
+  /** What OCR read, right after a scan (otherwise it is loaded from this phone while pending). */ ocrText?: string;
 }) {
   const { colors } = useTheme();
   const today = useToday();
@@ -210,6 +211,12 @@ export function TxnForm({
   const [rememberCredit, setRememberCredit] = useState(true);
   const queue = usePending().transactions;
   const [viewShot, setViewShot] = useState(false);
+  // What a capture was read from (its SMS, or the screenshot's OCR text), so it can be re-read while
+  // picking a category, and after "Approve & next" lands here on a capture you haven't seen yet.
+  const captured = useCaptureText(pending ? existing?.id : undefined);
+  const sms = existing?.source === "sms" ? captured : null;
+  const readText = ocrText ?? (existing?.source === "ocr" ? captured?.body : undefined);
+  const [viewSms, setViewSms] = useState(false);
   /** The clipboard has text, so the keypad offers "Paste bank SMS". */
   const [clipHasText, setClipHasText] = useState(false);
   /** Where the form was filled from a pasted bank SMS: kept so the same SMS isn't recorded twice. */
@@ -350,7 +357,7 @@ export function TxnForm({
     !ruleHits.length &&
     method === "card" &&
     Boolean(cardId) &&
-    /credit\s*card/i.test(ocrText ?? "credit card");
+    /credit\s*card/i.test(readText ?? "credit card");
   // A card payment that isn't sure of its card asks, in a highlighted "Paid with" (designs 1b, 2a).
   const askCard =
     pending &&
@@ -786,34 +793,70 @@ export function TxnForm({
               onPaste={!existing && clipHasText ? pasteSms : undefined}
             />
           ) : null}
-          <Button
-            title={
-              pending
-                ? nextPending
-                  ? "Approve & next"
-                  : "Approve"
-                : amount
-                  ? `Save ${formatINR(amount, { decimals: "auto" })}`
-                  : "Save"
-            }
-            icon="checkmark"
-            onPress={() => save(pending)}
-            loading={saving}
-            size="lg"
-            variant={pending ? "success" : "primary"}
-          />
+          <Row gap={1}>
+            {/* What the capture was read from, one tap away from Approve wherever you have scrolled. */}
+            {pending && sms ? (
+              <Button
+                title="SMS"
+                label="Read the bank SMS"
+                icon="chatbubble-ellipses-outline"
+                variant="secondary"
+                size="lg"
+                onPress={() => setViewSms(true)}
+              />
+            ) : pending && existing?.attachment ? (
+              <Button
+                title="Image"
+                label="View the screenshot"
+                icon="image-outline"
+                variant="secondary"
+                size="lg"
+                onPress={() => setViewShot(true)}
+              />
+            ) : pending && readText ? (
+              // The screenshot itself was deleted: what was read off it is all that's left.
+              <Button
+                title="Text"
+                label="Read what was read off the screenshot"
+                icon="document-text-outline"
+                variant="secondary"
+                size="lg"
+                onPress={() => setShowOcr(true)}
+              />
+            ) : null}
+            <Button
+              title={
+                pending
+                  ? nextPending
+                    ? "Approve & next"
+                    : "Approve"
+                  : amount
+                    ? `Save ${formatINR(amount, { decimals: "auto" })}`
+                    : "Save"
+              }
+              icon="checkmark"
+              onPress={() => save(pending)}
+              loading={saving}
+              size="lg"
+              variant={pending ? "success" : "primary"}
+              style={{ flex: 1 }}
+            />
+          </Row>
         </View>
         )
       }
     >
-      {pending && (existing?.attachment || warned) ? (
-        <Card tone="alt" style={{ gap: 6, flexDirection: "row" }}>
+      {sms ? <SmsSheet sms={sms} visible={viewSms} onClose={() => setViewSms(false)} /> : null}
+      {readText ? <ReadTextSheet text={readText} visible={showOcr} onClose={() => setShowOcr(false)} /> : null}
+      {pending && (existing?.attachment || warned || sms || readText) ? (
+        <Card tone="alt" style={{ gap: space(1.25), flexDirection: "row" }}>
           {existing?.attachment ? (
-            <ScreenshotThumb uri={existing.attachment} />
+            <ScreenshotThumb uri={existing.attachment} open={viewShot} onOpenChange={setViewShot} />
           ) : null}
-          <View style={{ flex: 1, gap: 6 }}>
+          <View style={{ flex: 1, gap: space(1) }}>
+          {sms ? <SmsBubble sms={sms} lines={4} onSurface onPress={() => setViewSms(true)} /> : null}
           <Row gap={1} wrap>
-            <Pill
+            {sms ? null : <Pill
               label={
                 existing?.source === "sms"
                   ? "From SMS"
@@ -822,7 +865,7 @@ export function TxnForm({
                     : "Captured"
               }
               tone="info"
-            />
+            />}
             {existing?.confidence != null ? (
               <Pill
                 label={`${Math.round(existing.confidence * 100)}% sure`}
@@ -869,20 +912,15 @@ export function TxnForm({
               UPI reference {existing.sourceRef}
             </Txt>
           ) : null}
-          {ocrText ? (
-            <Pressable
-              onPress={() => setShowOcr((v) => !v)}
-              accessibilityRole="button"
-            >
-              <Txt variant="small" tone="primary">
-                {showOcr ? "Hide what was read" : "Show what was read"}
-              </Txt>
-            </Pressable>
-          ) : null}
-          {showOcr && ocrText ? (
-            <Txt tone="muted" selectable style={{ fontSize: 12 }}>
-              {ocrText}
-            </Txt>
+          {readText ? (
+            <Button
+              title="What was read"
+              icon="document-text-outline"
+              variant="ghost"
+              size="sm"
+              onPress={() => setShowOcr(true)}
+              style={{ alignSelf: "flex-start", paddingHorizontal: 4, height: 32 }}
+            />
           ) : null}
           </View>
         </Card>

@@ -249,7 +249,7 @@ export const MIGRATIONS: string[] = [
   ['field', 'source', 'method', 'cardId', 'accountId', 'rename', 'learned'].map((c) => `ALTER TABLE "rules" ADD COLUMN "${c}" ${TABLES.rules[c]};`).join('\n'),
   // v14: SMS senders marked as a bank (optionally linked to an account / card) or blocked.
   createTable('sms_senders', 14),
-  // v15: the SMS behind a capture still waiting in Review, so it can be shown there. This phone only
+  // v15: the SMS (and, later, a screenshot's OCR text) behind a capture still waiting in Review, so it can be shown there. This phone only
   // (not a synced table, not in backups); deleted once the capture is approved or rejected.
   'CREATE TABLE IF NOT EXISTS capture_texts (txnId TEXT PRIMARY KEY NOT NULL, sender TEXT, body TEXT NOT NULL, receivedAt TEXT);',
   // v16: categories can be hidden: kept for the entries filed under them, left out of pickers.
