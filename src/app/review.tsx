@@ -1,16 +1,17 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { cardHintOf, duplicateOf, splitCaptures } from '@/domain/captures';
-import { formatDay, formatTime, isoToYMD, relativeDay, toYMD } from '@/domain/dates';
+import { formatDay, isoToYMD, relativeDay, toYMD } from '@/domain/dates';
 import { formatINR } from '@/domain/money';
 import { flagsOf } from '@/domain/transactions';
 import type { Category, CreditCard, Transaction } from '@/domain/types';
-import { findById, getCaptureText, remove, saveSettings, update, type CaptureText } from '@/db/repo';
+import { findById, remove, saveSettings, update } from '@/db/repo';
 import { useStore } from '@/db/store';
 import { answerCardHint, approveCapture, keepBothCaptures, rejectCapture } from '@/data/actions';
 import { useCategoryMap, usePending, useTable, useToday } from '@/data/hooks';
 import { importBankSms, requestSmsPermission, smsCaptureAvailable } from '@/services/smsInbox';
+import { SmsSource } from '@/ui/components/CaptureSource';
 import { Button, Card, Chip, EmptyState, IconCircle, Money, Pill, Row, Section, Txt, type IconName } from '@/ui/components/core';
 import { toast } from '@/ui/components/feedback';
 import { Screen } from '@/ui/components/Screen';
@@ -152,49 +153,6 @@ function SectionHead({ title, note }: { title: string; note: string }) {
         {note}
       </Txt>
     </Row>
-  );
-}
-
-/**
- * Who sent the SMS and what it said, so you can tell what a payment was before approving it. Kept
- * on this phone only while the capture waits here; older captures (and pasted ones from before this
- * was kept) have none, and then nothing is shown. Tap to see the whole message.
- */
-function SmsSource({ txnId, inset }: { txnId: string; inset?: boolean }) {
-  const { colors } = useTheme();
-  const [sms, setSms] = useState<CaptureText | null>(null);
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    let live = true;
-    getCaptureText(txnId)
-      .then((r) => live && setSms(r))
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [txnId]);
-  if (!sms) return null;
-  const when = sms.receivedAt ? `${relativeDay(isoToYMD(sms.receivedAt), toYMD(new Date()))}, ${formatTime(sms.receivedAt)}` : 'Pasted';
-  return (
-    <Pressable
-      onPress={() => setOpen((o) => !o)}
-      accessibilityRole="button"
-      accessibilityLabel={`SMS from ${sms.sender ?? 'unknown sender'}: ${sms.body}`}
-      accessibilityHint={open ? 'Shows less' : 'Shows the whole message'}
-      style={{ marginTop: inset ? space(1) : 0, marginLeft: inset ? space(6.5) : 0, padding: space(1.25), borderRadius: 10, backgroundColor: colors.surfaceAlt, gap: 4 }}
-    >
-      <Row gap={0.75}>
-        <Txt variant="small" style={{ fontWeight: fonts.bold, flexShrink: 1 }} numberOfLines={1}>
-          {sms.sender ?? 'Sender unknown'}
-        </Txt>
-        <Txt variant="caption" tone="muted">
-          · {when}
-        </Txt>
-      </Row>
-      <Txt variant="small" tone="muted" numberOfLines={open ? undefined : 2}>
-        {sms.body}
-      </Txt>
-    </Pressable>
   );
 }
 

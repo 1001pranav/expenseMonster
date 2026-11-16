@@ -306,7 +306,11 @@ export async function saveScreenshot(read: ScreenshotRead, confirmed?: { amount:
   if (!sure) draft.confidence = Math.min(draft.confidence ?? 0, 0.6);
   else if (confirmed) draft.confidence = Math.min(0.95, (draft.confidence ?? 0) + 0.2);
   const { row, duplicate, duplicateOf } = await addCapture(draft);
-  if (row) summary.added++;
+  if (row) {
+    summary.added++;
+    // What was read, shown on the capture's form (also after "Approve & next"); this phone only.
+    await saveCaptureText({ txnId: row.id, sender: null, body: text, receivedAt: null }).catch((e) => logFailure('capture: could not keep the screenshot text for Review', e, 'warn'));
+  }
   else if (duplicate) summary.duplicates++;
   return { summary, transactionId: row?.id ?? null, duplicateOf: row ? null : duplicateOf, status: p.status, text };
 }
