@@ -111,7 +111,8 @@ export async function recoveryCode(): Promise<string | null> {
   return id ? formatRecoveryCode(id) : null;
 }
 
-async function householdNow(): Promise<VaultHousehold | undefined> {
+/** This phone's household as a backup stores it (key included: only ever written inside a sealed payload). */
+export async function householdNow(): Promise<VaultHousehold | undefined> {
   const { identity, settings } = getState();
   const key = await getHouseholdKey();
   return key ? { id: identity.householdId, name: identity.householdName, key: toBase64(key), selfMemberId: identity.selfMemberId, cloudSync: settings.cloudSync } : undefined;
@@ -159,18 +160,18 @@ async function upgradeSnapshot(id: string, key: Uint8Array, legacy: VaultContent
  * new QR scan. Skipped when this phone is already paired with other phones in another household;
  * moving it silently would cut it off from them.
  */
-async function adoptHousehold(h: VaultHousehold | undefined): Promise<string | null> {
+export async function adoptHousehold(h: VaultHousehold | undefined, source = 'cloud backup'): Promise<string | null> {
   if (!h) return null;
   const { identity } = getState();
   let joined: string | null = null;
   if (h.id !== identity.householdId) {
     if ((await listPeers()).length) {
-      logWarn('cloud backup: restored data, but kept this phone in its current household (it has paired phones)');
+      logWarn(`${source}: restored data, but kept this phone in its current household (it has paired phones)`);
     } else {
       await setHouseholdKey(fromBase64(h.key));
       await saveIdentity({ householdId: h.id, householdName: h.name });
       if (h.cloudSync && cloudConfigured) await saveSettings({ cloudSync: true });
-      logInfo('cloud backup: rejoined the household from the backup');
+      logInfo(`${source}: rejoined the household from the backup`);
       joined = h.name;
     }
   }

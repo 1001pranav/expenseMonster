@@ -1,9 +1,11 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { addMonths, monthEnd, monthStart, todayYMD } from '@/domain/dates';
-import { useStore } from '@/db/store';
-import { createBackup, exportCsv, restoreBackup } from '@/services/sync';
+import { saveIdentity } from '@/db/repo';
+import { getState, useStore } from '@/db/store';
+import { createBackup, restoreBackup } from '@/services/backupFile';
+import { exportCsv } from '@/services/sync';
 import { Button, Card, Chip, ListRow, Row, Section, Txt } from '@/ui/components/core';
 import { Sheet, toast } from '@/ui/components/feedback';
 import { TextField } from '@/ui/components/forms';
@@ -12,6 +14,8 @@ import { space } from '@/ui/theme';
 
 export default function Backup() {
   const vaultOn = useStore((s) => s.settings.vaultSync);
+  // Opened from the welcome screen of a new phone: only restoring makes sense there.
+  const welcome = useLocalSearchParams<{ restore?: string }>().restore === '1';
   const [mode, setMode] = useState<'backup' | 'restore' | null>(null);
   const [pass, setPass] = useState('');
   const [pass2, setPass2] = useState('');
@@ -28,13 +32,26 @@ export default function Backup() {
         toast('Backup created. Keep the passphrase safe; it cannot be recovered.', { tone: 'success' });
       } else if (file) {
         const r = await restoreBackup(file, pass);
-        toast(`Restored: ${r.inserted} new, ${r.updated} updated`, { tone: 'success' });
+        toast(`Restored: ${r.inserted} new, ${r.updated} updated${r.joined ? ` · back in ${r.joined}` : ''}`, { tone: 'success' });
+        const { identity } = getState();
+        if (!identity.onboarded) {
+          setMode(null);
+          setPass('');
+          // The backup says who "me" is: setup is done. Older files don't, so finish onboarding.
+          if (identity.selfMemberId) {
+            await saveIdentity({ onboarded: true });
+            // Drop the welcome screen underneath, so Back can't return to it (same end state as finishing onboarding).
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/');
+          } else router.back();
+          return;
+        }
       }
       setMode(null);
       setPass('');
       setPass2('');
     } catch (e) {
-      toast((e as Error).message.includes('Wrong household') ? 'Wrong passphrase or damaged file' : (e as Error).message, { tone: 'error' });
+      toast((e as Error).message, { tone: 'error' });
     } finally {
       setBusy(false);
     }
@@ -47,6 +64,39 @@ export default function Backup() {
     toast(`${n} transactions exported`);
   };
 
+  const pickFile = async () => {
+    const r = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, type: '*/*' });
+    if (!r.canceled && r.assets[0]) {
+      setFile(r.assets[0].uri);
+      setMode('restore');
+    }
+  };
+
+  const sheet = (
+    <Sheet visible={mode !== null} onClose={() => setMode(null)} title={mode === 'backup' ? 'Choose a passphrase' : 'Enter backup passphrase'}>
+      <TextField label="Passphrase" value={pass} onChangeText={setPass} secure hint="8+ characters" autoCapitalize="none" />
+      {mode === 'backup' ? <TextField label="Repeat passphrase" value={pass2} onChangeText={setPass2} secure autoCapitalize="none" /> : null}
+      <Button title={mode === 'backup' ? 'Encrypt & share' : 'Restore'} loading={busy} onPress={run} />
+      {mode === 'restore' && !welcome ? (
+        <Txt variant="small" tone="muted">
+          Restoring merges with what's on this phone. Newer edits win. This phone keeps its own settings.
+        </Txt>
+      ) : null}
+    </Sheet>
+  );
+
+  if (welcome) {
+    return (
+      <Screen title="Restore a backup file" back>
+        <Card style={{ gap: space(1.5) }}>
+          <Txt tone="muted">Pick the .emxbak file you saved from your old phone and enter its passphrase. Your entries, your family link and your settings come back. Photos attached to entries and the app lock PIN are not in the file.</Txt>
+          <Button title="Choose backup file" icon="folder-open-outline" onPress={pickFile} />
+        </Card>
+        {sheet}
+      </Screen>
+    );
+  }
+
   return (
     <Screen title="Backup" back>
       <Section title="Cloud backup">
@@ -56,22 +106,10 @@ export default function Backup() {
       </Section>
       <Section title="Backup file">
         <Card style={{ gap: space(1.5) }}>
-          <Txt tone="muted">One file with everything on this phone, including private entries, locked with your passphrase. Save it to Google Drive or a computer. Without the passphrase the file can't be opened, by us or anyone else.</Txt>
+          <Txt tone="muted">One file with every entry on this phone, private ones included, plus your family link and settings, locked with your passphrase. Save it to Google Drive or a computer. Photos attached to entries are not included. Without the passphrase the file can't be opened, by us or anyone else.</Txt>
           <Row gap={1}>
             <Button title="Create backup" icon="lock-closed" onPress={() => setMode('backup')} style={{ flex: 1 }} />
-            <Button
-              title="Restore"
-              icon="refresh"
-              variant="secondary"
-              style={{ flex: 1 }}
-              onPress={async () => {
-                const r = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, type: '*/*' });
-                if (!r.canceled && r.assets[0]) {
-                  setFile(r.assets[0].uri);
-                  setMode('restore');
-                }
-              }}
-            />
+            <Button title="Restore" icon="refresh" variant="secondary" style={{ flex: 1 }} onPress={pickFile} />
           </Row>
         </Card>
       </Section>
@@ -88,16 +126,7 @@ export default function Backup() {
           </Txt>
         </Card>
       </Section>
-      <Sheet visible={mode !== null} onClose={() => setMode(null)} title={mode === 'backup' ? 'Choose a passphrase' : 'Enter backup passphrase'}>
-        <TextField label="Passphrase" value={pass} onChangeText={setPass} secure hint="8+ characters" autoCapitalize="none" />
-        {mode === 'backup' ? <TextField label="Repeat passphrase" value={pass2} onChangeText={setPass2} secure autoCapitalize="none" /> : null}
-        <Button title={mode === 'backup' ? 'Encrypt & share' : 'Restore'} loading={busy} onPress={run} />
-        {mode === 'restore' ? (
-          <Txt variant="small" tone="muted">
-            Restoring merges with what's on this phone. Newer edits win.
-          </Txt>
-        ) : null}
-      </Sheet>
+      {sheet}
     </Screen>
   );
 }
