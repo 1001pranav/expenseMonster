@@ -4,7 +4,7 @@
  * write token). Each phone gets its own copy of the services and its own in-memory "database".
  */
 import { buildBundle, validateBundle } from '@/domain/sync/bundle';
-import { keyFromPassphrase, newKey, seal } from '@/domain/sync/crypto';
+import { keyFromPassphrase, newKey, seal, toBase64 } from '@/domain/sync/crypto';
 import { expandExtra, foldUnknown, replacesHeld } from '@/domain/sync/forward';
 import { newDeviceKeys, openGrant, type DeviceKeys } from '@/domain/sync/grant';
 import { householdSpace, recordKey, sealRecord } from '@/domain/sync/records';
@@ -222,6 +222,7 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
   let cloud!: typeof import('../cloud');
   let sync!: typeof import('../sync');
   let vault!: typeof import('../vault');
+  let backupFile!: typeof import('../backupFile');
   let holds!: typeof import('../holds');
   let rotation!: typeof import('../rotation');
   jest.isolateModules(() => {
@@ -245,6 +246,7 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     cloud = require('../cloud');
     sync = require('../sync');
     vault = require('../vault');
+    backupFile = require('../backupFile');
     holds = require('../holds');
     rotation = require('../rotation');
     const { getState } = require('@/db/store');
@@ -266,6 +268,7 @@ function makePhone(device: string, key: Uint8Array, policy: ConflictPolicy) {
     edit: (id: string, patch: Partial<Row>) => repo.update('transactions', id, patch),
     get: (id: string) => txns().get(id),
     vault,
+    backupFile,
     secrets,
     rows: () => [...txns().values()],
     conflicts: () => sync.loadConflicts(),
@@ -723,6 +726,48 @@ describe('personal backup, per entry, between one person\'s phones', () => {
     await expect(b.vault.restoreVault(code, PASSWORD)).rejects.toThrow('Wrong password');
     await b.vault.restoreVault(code, 'a brand new passphrase');
     await expect(b.vault.vaultSyncNow()).resolves.toBeTruthy();
+  });
+
+  it('a backup file alone puts a new phone back: entries, household key, who "me" is and preferences', async () => {
+    const a = makePhone('A', newKey(), 'ask');
+    const me = await a.raw('members', { id: 'me-a', name: 'Asha', upiId: null, phone: null, color: '#123456' });
+    const priv = a.add({ amount: 111, scope: 'personal' });
+    a.state().setIdentity({ householdId: 'house-a', householdName: 'Asha home', selfMemberId: me.id });
+    a.state().setSettings({ theme: 'dark', budgetPeriod: 'payday', payday: 7, biometric: false, vaultSync: true, smsImportedTo: 5 });
+    const file = await a.backupFile.sealBackup(PASSWORD);
+
+    // A phone that has not been set up: no member yet, default preferences.
+    const b = makePhone('B', newKey(), 'ask');
+    b.state().setIdentity({ onboarded: false, deviceName: 'My phone' });
+    b.state().setSettings({ cloudSync: false });
+    await expect(b.backupFile.openBackup(file, 'not the passphrase')).rejects.toThrow('Wrong passphrase');
+    const r = await b.backupFile.openBackup(file, PASSWORD);
+    expect(r.joined).toBe('Asha home');
+    expect(b.get(priv.id)?.amount).toBe(111);
+    expect(b.state().identity).toMatchObject({ householdId: 'house-a', householdName: 'Asha home', selfMemberId: me.id, deviceName: "Asha's phone" });
+    expect(b.secrets.household).toEqual(a.secrets.household);
+    expect(b.state().settings).toMatchObject({ theme: 'dark', budgetPeriod: 'payday', payday: 7, cloudSync: true });
+    // Tied to the old phone: its lock, its cloud backup keys, its SMS inbox.
+    expect(b.state().settings).toMatchObject({ biometric: true, vaultSync: false, smsImportedTo: null });
+
+    // A phone already in use takes the entries but keeps who it is and how it is set up.
+    const c = makePhone('C', newKey(), 'ask');
+    c.state().setIdentity({ selfMemberId: 'me-c' });
+    await c.backupFile.openBackup(file, PASSWORD);
+    expect(c.get(priv.id)?.amount).toBe(111);
+    expect(c.state().identity.selfMemberId).toBe('me-c');
+    expect(c.state().settings.theme).toBe('system');
+  });
+
+  it('restores a backup file made before it carried the household', async () => {
+    const salt = saltBytes(newSalt());
+    const bundle = buildBundle({ transactions: [txn({ id: 'old-1', amount: 1, scope: 'personal' })] }, { householdId: 'h', deviceId: 'old', deviceName: 'Old', since: null, kind: 'backup' });
+    const file = JSON.stringify({ t: 'emx-backup', v: 1, salt: toBase64(salt), data: seal(bundle, await keyFromPassphrase(PASSWORD, salt), 'emx-backup-v1') });
+    const b = makePhone('B', newKey(), 'ask');
+    b.state().setIdentity({ onboarded: false });
+    const r = await b.backupFile.openBackup(file, PASSWORD);
+    expect(r).toMatchObject({ inserted: 1, joined: null });
+    expect(b.state().identity).toMatchObject({ householdId: 'house', selfMemberId: '' });
   });
 
   it('upgrades a backup made as one snapshot', async () => {

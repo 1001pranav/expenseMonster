@@ -1,15 +1,14 @@
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system';
 import { syncedNowISO, syncedNowMs } from '@/domain/clock';
-import { randomBytes } from '@/domain/ids';
 import { buildBundle, bundleSize, validateBundle, type Bundle } from '@/domain/sync/bundle';
 import { isPlausibleTable, type HeldRecord } from '@/domain/sync/forward';
 import { isControlTable, screenIncoming, withControlRow } from '@/domain/sync/holds';
-import { fromBase64, keyFromPassphrase, open, seal, toBase64 } from '@/domain/sync/crypto';
+import { open, seal } from '@/domain/sync/crypto';
 import { planMerge, type ConflictPolicy } from '@/domain/sync/merge';
 import { openRecord, planRecord, type Space } from '@/domain/sync/records';
 import { SYNC_TABLES, type BaseRow, type Peer, type TableName } from '@/domain/types';
-import { allRows, applyRemote, dropLocal, getMeta, getSyncMarks, holdRecords, listPeers, setAside, loadTables, rowsByIds, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
+import { allRows, applyRemote, dropLocal, getMeta, getSyncMarks, holdRecords, listPeers, setAside, rowsByIds, saveIdentity, setMeta, setSyncMarks, update, upsertPeer } from '@/db/repo';
 import { getState } from '@/db/store';
 import { logFailure, logWarn } from './diagnostics';
 import { writeCacheFile } from './files';
@@ -22,12 +21,12 @@ export async function collectRows(): Promise<Partial<Record<TableName, BaseRow[]
   return out;
 }
 
-async function shareFile(file: File, title: string) {
+export async function shareFile(file: File, title: string) {
   if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device');
   await Sharing.shareAsync(file.uri, { mimeType: 'application/octet-stream', dialogTitle: title, UTI: 'public.data' });
 }
 
-const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+export const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
 
 /**
  * Encrypt household changes since the last send to `peer` (or everything shared, when
@@ -282,50 +281,6 @@ export async function joinHousehold(p: { householdId: string; householdName: str
   await dropLocal('household', HOUSEHOLD_ID);
   for (const h of await allRows('sync_holds')) await dropLocal('sync_holds', h.id);
   await upsertPeer({ deviceId: p.deviceId, name: p.deviceName });
-}
-
-// ── encrypted backups ────────────────────────────────────────────────────
-
-interface BackupEnvelope {
-  t: 'emx-backup';
-  v: 1;
-  salt: string;
-  data: string;
-}
-
-const BACKUP_AAD = 'emx-backup-v1';
-
-export async function createBackup(passphrase: string): Promise<void> {
-  if (passphrase.length < 8) throw new Error('Use at least 8 characters');
-  const { identity } = getState();
-  const salt = randomBytes(16);
-  const key = await keyFromPassphrase(passphrase, salt);
-  const bundle = buildBundle(await collectRows(), {
-    householdId: identity.householdId,
-    deviceId: identity.deviceId,
-    deviceName: identity.deviceName,
-    since: null,
-    kind: 'backup',
-  });
-  const envelope: BackupEnvelope = { t: 'emx-backup', v: 1, salt: toBase64(salt), data: seal(bundle, key, BACKUP_AAD) };
-  const file = writeCacheFile(`ExpenseMonster-backup-${stamp()}.emxbak`, JSON.stringify(envelope));
-  await shareFile(file, 'Save encrypted backup');
-}
-
-export async function restoreBackup(uri: string, passphrase: string): Promise<ImportResult> {
-  const text = await new File(uri).text();
-  let env: BackupEnvelope;
-  try {
-    env = JSON.parse(text);
-  } catch {
-    throw new Error('Not an ExpenseMonster backup');
-  }
-  if (env.t !== 'emx-backup') throw new Error('Not an ExpenseMonster backup');
-  const key = await keyFromPassphrase(passphrase, fromBase64(env.salt));
-  const bundle = validateBundle(open<Bundle>(env.data, key, BACKUP_AAD));
-  const result = await mergeBundle(bundle, 'newest');
-  getState().setAll(await loadTables(), getState().identity, getState().settings);
-  return { from: bundle.fromName, ...result, clockAheadMinutes: 0 };
 }
 
 /** CSV export of confirmed transactions for spreadsheets / CA. */

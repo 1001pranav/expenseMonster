@@ -13,8 +13,8 @@ import { useToday } from '@/data/hooks';
 import { vaultAvailable } from '@/services/vault';
 import { setPin } from '@/services/secure';
 import { BrandMark } from '@/ui/components/Aurora';
-import { Button, Chip, Row, Txt, type IconName } from '@/ui/components/core';
-import { toast } from '@/ui/components/feedback';
+import { Button, Card, Chip, ListRow, Row, Txt, type IconName } from '@/ui/components/core';
+import { Sheet, toast } from '@/ui/components/feedback';
 import { AmountField, Segmented, SwitchRow, TextField } from '@/ui/components/forms';
 import { DayGrid, ordinal } from '@/ui/components/PaydaySheet';
 import { Screen } from '@/ui/components/Screen';
@@ -46,6 +46,12 @@ export default function Onboarding() {
   const [pin, setPinValue] = useState('');
   const [bio, setBio] = useState(false);
   const [bioAvailable, setBioAvailable] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const restoreFrom = (pathname: '/backup' | '/settings/cloud-backup') => {
+    setRestoring(false);
+    router.push({ pathname, params: { restore: '1' } });
+  };
 
   useEffect(() => {
     Promise.all([LocalAuthentication.hasHardwareAsync(), LocalAuthentication.isEnrolledAsync()]).then(([h, e]) => {
@@ -118,8 +124,14 @@ export default function Onboarding() {
               setStep('name');
             }}
           />
-          {vaultAvailable ? <Button title="Restore from a backup" variant="ghost" onPress={() => router.push({ pathname: '/settings/cloud-backup', params: { restore: '1' } })} /> : null}
+          <Button title="Restore from a backup" variant="ghost" onPress={() => (vaultAvailable ? setRestoring(true) : restoreFrom('/backup'))} />
         </View>
+        <Sheet visible={restoring} onClose={() => setRestoring(false)} title="Restore from a backup">
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            <ListRow icon="cloud-download-outline" title="From cloud backup" subtitle="Needs your recovery code and password" chevron onPress={() => restoreFrom('/settings/cloud-backup')} />
+            <ListRow icon="document-lock-outline" title="From a backup file" subtitle="A .emxbak file you saved, and its passphrase" chevron onPress={() => restoreFrom('/backup')} />
+          </Card>
+        </Sheet>
       </Screen>
     );
   }
